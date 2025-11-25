@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AST · 实时语音转写 & AI 助手</title>
+
+    <!-- 高贵的字体 - Distinctive Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=JetBrains+Mono:wght@300;400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <!-- 主容器 -->
+    <div class="app-container">
+        <!-- 侧边栏：聊天列表 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title">聊天记录</h2>
+                <button id="new-chat-btn" class="new-chat-btn" title="新建对话">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span>新建对话</span>
+                </button>
+            </div>
+            <div id="chat-list" class="chat-list">
+                <!-- Chat items will be loaded here -->
+            </div>
+        </aside>
+
+        <!-- 可调节分隔条 - Sidebar Resizer -->
+        <div class="resizer sidebar-resizer" data-resizer="sidebar"></div>
+
+        <!-- 左侧面板：ASR 实时转写 -->
+        <section class="panel asr-panel" id="asr-panel">
+            <header class="panel-header">
+                <div class="header-left">
+                    <div class="panel-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z" fill="currentColor"/>
+                            <path d="M17 11C17 13.76 14.76 16 12 16C9.24 16 7 13.76 7 11H5C5 14.53 7.61 17.43 11 17.92V21H13V17.92C16.39 17.43 19 14.53 19 11H17Z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <h1 class="panel-title">实时语音转写</h1>
+                </div>
+                <div class="header-controls">
+                    <div id="asr-status" class="status connected">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Connected</span>
+                    </div>
+                    <button id="send-all-btn" class="control-btn" title="发送全部到AI">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M14 2L7 9M14 2L9 14L7 9M14 2L2 7L7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <button id="clear-asr-btn" class="control-btn" title="清空记录">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 4H14M6 4V2H10V4M3 4V14H13V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+            <div id="asr-window" class="chat-window">
+                <!-- ASR messages will appear here -->
+            </div>
+        </section>
+
+        <!-- 可调节分隔条 - Middle Resizer -->
+        <div class="resizer panel-resizer" data-resizer="asr"></div>
+
+        <!-- 右侧面板：LLM AI 对话 -->
+        <section class="panel llm-panel" id="llm-panel">
+            <header class="panel-header">
+                <div class="header-left">
+                    <div class="panel-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <h1 class="panel-title">AI 助手</h1>
+                </div>
+                <div class="header-controls">
+                    <div id="llm-status" class="status disconnected">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Disconnected</span>
+                    </div>
+                    <button id="settings-btn" class="control-btn" title="设置">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M13 8C13 8.34 12.97 8.67 12.91 9L14.22 10.03C14.35 10.13 14.39 10.31 14.31 10.46L13.06 12.54C12.98 12.69 12.8 12.75 12.64 12.69L11.06 12.11C10.72 12.37 10.35 12.59 9.94 12.76L9.68 14.42C9.65 14.59 9.5 14.71 9.33 14.71H6.83C6.66 14.71 6.51 14.59 6.48 14.42L6.22 12.76C5.81 12.59 5.44 12.37 5.1 12.11L3.52 12.69C3.36 12.75 3.18 12.69 3.1 12.54L1.85 10.46C1.77 10.31 1.81 10.13 1.94 10.03L3.25 9C3.19 8.67 3.16 8.34 3.16 8C3.16 7.66 3.19 7.33 3.25 7L1.94 5.97C1.81 5.87 1.77 5.69 1.85 5.54L3.1 3.46C3.18 3.31 3.36 3.25 3.52 3.31L5.1 3.89C5.44 3.63 5.81 3.41 6.22 3.24L6.48 1.58C6.51 1.41 6.66 1.29 6.83 1.29H9.33C9.5 1.29 9.65 1.41 9.68 1.58L9.94 3.24C10.35 3.41 10.72 3.63 11.06 3.89L12.64 3.31C12.8 3.25 12.98 3.31 13.06 3.46L14.31 5.54C14.39 5.69 14.35 5.87 14.22 5.97L12.91 7C12.97 7.33 13 7.66 13 8Z" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                    </button>
+                    <button id="clear-llm-btn" class="control-btn" title="清空对话">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 4H14M6 4V2H10V4M3 4V14H13V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+            <div id="llm-window" class="chat-window">
+                <div class="message system-message">
+                    <div class="message-content">
+                        你好！我是你的AI助手。你可以直接跟我对话，或者从左侧发送语音记录让我分析。选中任意文本也可以快速提问哦！
+                    </div>
+                </div>
+            </div>
+            <div class="input-area">
+                <textarea id="llm-input" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)" rows="1"></textarea>
+                <button id="llm-send-btn" class="send-btn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M18 2L9 11M18 2L12 18L9 11M18 2L2 9L9 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">配置设置</h2>
+                <button class="close-btn" aria-label="关闭">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>选择配置</label>
+                    <select id="config-select">
+                        <option value="new">+ 新建配置</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>配置名称</label>
+                    <input type="text" id="config-name" placeholder="例如: DeepSeek">
+                </div>
+
+                <div class="form-group">
+                    <label>API Base URL</label>
+                    <input type="text" id="api-base" placeholder="https://api.example.com/v1">
+                </div>
+
+                <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="api-key" placeholder="sk-...">
+                </div>
+
+                <div class="form-group">
+                    <label>Model Name</label>
+                    <input type="text" id="model-name" placeholder="gpt-3.5-turbo">
+                </div>
+
+                <div class="modal-actions">
+                    <button id="delete-config-btn" class="btn btn-danger" style="display: none;">删除</button>
+                    <button id="test-conn-btn" class="btn btn-secondary">测试连接</button>
+                    <button id="save-config-btn" class="btn btn-primary">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浮动按钮：文本选择分析 -->
+    <button id="float-send-btn" class="float-btn" style="display: none;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2L2 5L8 8L14 5L8 2Z" fill="currentColor"/>
+            <path d="M2 11L8 14L14 11" fill="currentColor" opacity="0.6"/>
+            <path d="M2 8L8 11L14 8" fill="currentColor" opacity="0.8"/>
+        </svg>
+        <span>AI 分析</span>
+    </button>
+
+    <!-- Toast 通知容器 -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

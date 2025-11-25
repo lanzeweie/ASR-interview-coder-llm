@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mcp-router__list_dir",
+      "mcp__mcp-router__activate_project",
+      "mcp__mcp-router__resolve-library-id",
+      "mcp__mcp-router__get-library-docs",
+      "Skill(frontend-design:frontend-design)",
+      "mcp__mcp-router__browser_navigate",
+      "mcp__mcp-router__browser_handle_dialog",
+      "mcp__mcp-router__browser_take_screenshot"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
