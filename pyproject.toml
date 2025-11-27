@@ -1,7 +1,7 @@
 [project]
 name = "ast"
 version = "0.1.0"
-description = "Add your description here"
+description = "AST语音识别与CAM++声纹+LLM实时分析调用对话"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []

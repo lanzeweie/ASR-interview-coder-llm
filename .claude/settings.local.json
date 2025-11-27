@@ -8,7 +8,11 @@
       "Skill(frontend-design:frontend-design)",
       "mcp__mcp-router__browser_navigate",
       "mcp__mcp-router__browser_handle_dialog",
-      "mcp__mcp-router__browser_take_screenshot"
+      "mcp__mcp-router__browser_take_screenshot",
+      "mcp__mcp-router__browser_run_code",
+      "mcp__mcp-router__browser_evaluate",
+      "mcp__mcp-router__browser_snapshot",
+      "mcp__mcp-router__project"
     ],
     "deny": [],
     "ask": []

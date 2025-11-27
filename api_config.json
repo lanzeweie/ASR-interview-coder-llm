@@ -1,11 +1,33 @@
 {
     "configs": [
         {
-            "name": "deepseek-v3.2-exp-250929",
-            "base_url": "https://api.zetatechs.com",
-            "api_key": "sk-bgUvfMyBoHaXL1WitstqXFEgVXMwhDuQDWiszXaVWX7dve2P",
-            "model": "deepseek-v3.2-exp-250929"
+            "name": "DeepSeek-V3",
+            "base_url": "https://api.deepseek.com/v1",
+            "api_key": "YOUR_API_KEY",
+            "model": "deepseek-chat",
+            "tags": [
+                "\u601d\u8003"
+            ],
+            "system_prompt": ""
+        },
+        {
+            "name": "Qwen-Agent",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "api_key": "YOUR_API_KEY",
+            "model": "qwen-turbo",
+            "tags": [
+                "\u667a\u80fd\u5206\u6790"
+            ],
+            "system_prompt": "",
+            "is_agent": true
         }
     ],
-    "current_config": "deepseek-v3.2-exp-250929"
+    "current_config": "Qwen-Agent",
+    "multi_llm_active_names": [
+        "DeepSeek-V3"
+    ],
+    "agent_config": {
+        "enabled": false,
+        "auto_trigger": true
+    }
 }

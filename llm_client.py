@@ -105,6 +105,24 @@ class LLMClient:
                 print(f"\n[严重错误] 请求过程中发生异常:")
                 traceback.print_exc()
                 yield f"请求错误: {str(e)}"
+
+    async def test_connection(self):
+        """
+        测试连接是否有效
+        """
+        if not self.client:
+            return False, "客户端未初始化"
+        
+        try:
+            # 尝试发送一个极简的请求
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=1
+            )
+            return True, "连接成功"
+        except Exception as e:
+            return False, f"连接失败: {str(e)}"
     def __repr__(self):
         status = "已连接" if self.client is not None else "未连接"
         return f"LLMClient(模型='{self.model}', 地址='{self.base_url}', 状态={status})"

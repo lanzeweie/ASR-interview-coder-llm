@@ -47,6 +47,34 @@ class RealTimeASR_SV:
             model_revision='v1.0.0'
         )
 
+        # --- 加载本地智能分析模型 ---
+        print("正在加载本地智能分析模型 (Qwen2.5-1.5B-Instruct)...")
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            import torch
+
+            # 加载本地模型（开发阶段可能需要 --no-asr 参数跳过 ASR）
+            model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+            self.local_model_name = model_name
+            self.local_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.local_model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16,
+                device_map="auto"
+            )
+            self.local_model.eval()
+            print("✅ 本地智能分析模型加载成功")
+        except ImportError:
+            print("⚠️ 未安装 transformers，本地模型功能不可用")
+            self.local_tokenizer = None
+            self.local_model = None
+            self.local_model_name = None
+        except Exception as e:
+            print(f"⚠️ 本地模型加载失败: {e}")
+            self.local_tokenizer = None
+            self.local_model = None
+            self.local_model_name = None
+
         # --- 加载声纹库 ---
         self.speakers = {} 
         self.load_voiceprints()
@@ -248,6 +276,106 @@ class RealTimeASR_SV:
         wf.setframerate(self.AUDIO_RATE)
         wf.writeframes(b''.join(frames))
         wf.close()
+
+    async def analyze_with_local_model(self, messages, speaker_name):
+        """
+        使用本地模型进行智能分析判定
+
+        Args:
+            messages: 对话消息列表
+            speaker_name: 主人公姓名
+
+        Returns:
+            dict: {'is': bool, 'reason': str, 'confidence': float}
+        """
+        if not self.local_model or not self.local_tokenizer:
+            return {
+                'is': False,
+                'confidence': 0.0,
+                'reason': '本地模型未加载',
+                'raw_response': ''
+            }
+
+        try:
+            # 构建分析 Prompt
+            message_texts = []
+            for msg in messages:
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')
+                speaker = msg.get('speaker', '')
+                message_texts.append(f"[{speaker}] {content}")
+
+            dialogue = "\n".join(message_texts)
+
+            prompt = f"""请你分析以下对话：
+
+{dialogue}
+
+注意：{speaker_name} 是主人公。
+
+请分析以下内容：
+1. 是否包含技术问题或专业讨论？
+2. 是否需要专业建议或解决方案？
+3. 是否涉及复杂决策或需要多方面思考？
+4. 排除问候语、家乡、姓名等日常对话
+
+请返回严格的 JSON 格式，不要包含任何其他内容：
+{{"is": true/false}}
+
+- true: 需要启动多模型共话，主人公可以从多个角度获得建议
+- false: 普通对话，无需 AI 介入"""
+
+            # 准备输入
+            inputs = self.local_tokenizer(prompt, return_tensors="pt").to(self.local_model.device)
+
+            # 生成响应
+            with torch.no_grad():
+                outputs = self.local_model.generate(
+                    **inputs,
+                    max_new_tokens=100,
+                    temperature=0.1,
+                    do_sample=False,
+                    pad_token_id=self.local_tokenizer.eos_token_id
+                )
+
+            response = self.local_tokenizer.decode(
+                outputs[0][inputs['input_ids'].shape[1]:],
+                skip_special_tokens=True
+            ).strip()
+
+            # 解析响应
+            import re
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                try:
+                    result = json.loads(json_match.group())
+                    if 'is' in result and isinstance(result['is'], bool):
+                        reason = "检测到技术讨论，建议启动多模型共话" if result['is'] else "普通对话，无需 AI 介入"
+                        return {
+                            'is': result['is'],
+                            'confidence': 0.95,
+                            'reason': reason,
+                            'raw_response': response
+                        }
+                except json.JSONDecodeError:
+                    pass
+
+            # 如果解析失败，返回默认值
+            return {
+                'is': False,
+                'confidence': 0.0,
+                'reason': '响应格式无效',
+                'raw_response': response
+            }
+
+        except Exception as e:
+            print(f"[本地模型分析] 出错: {e}")
+            return {
+                'is': False,
+                'confidence': 0.0,
+                'reason': f'分析失败: {str(e)}',
+                'raw_response': ''
+            }
 
 if __name__ == "__main__":
     app = RealTimeASR_SV()

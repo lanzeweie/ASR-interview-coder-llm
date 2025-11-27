@@ -19,6 +19,15 @@ from llm_client import LLMClient
 
 from chat_manager import ChatManager
 
+# Intelligent Agent imports
+try:
+    from intelligent_agent import agent_manager
+    from trigger_manager import trigger_manager
+    AGENT_AVAILABLE = True
+except ImportError:
+    AGENT_AVAILABLE = False
+    print("Warning: Intelligent Agent module not available.")
+
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='AST Real-time ASR and LLM Chat Server')
 parser.add_argument('--no-asr', '--no', action='store_true', help='Skip ASR model initialization (skip audio and ASR)')
@@ -101,6 +110,141 @@ def asr_callback(message):
 # We need a reference to the main event loop to schedule tasks from the ASR thread
 main_event_loop = None
 
+# --- 智能分析回调处理 ---
+async def agent_analysis_callback(result, messages, speaker_name):
+    """智能分析完成回调"""
+    try:
+        is_needed = result.get('is', False)
+
+        if is_needed:
+            print(f"[智能分析] 检测到需要多模型建议，主人公: {speaker_name}")
+
+            # 获取当前聊天 ID
+            current_chat_id = chat_manager.get_current_chat_id()
+
+            # 如果没有当前聊天，创建一个
+            if not current_chat_id:
+                new_chat = chat_manager.create_chat(f"智能分析 - {speaker_name}")
+                current_chat_id = new_chat['id']
+
+            # 准备消息上下文（最近的 10 条消息）
+            recent_messages = messages[-10:] if len(messages) > 10 else messages
+
+            # 添加系统提示
+            formatted_messages = [
+                {"role": "system", "content": f"你是AI助手，帮助{speaker_name}分析以下对话。{speaker_name}是主人公。"}
+            ]
+
+            # 添加对话历史
+            for msg in recent_messages:
+                role = 'user' if msg.get('speaker') else 'assistant'
+                formatted_messages.append({
+                    "role": role,
+                    "content": msg.get('content', '')
+                })
+
+            # 推送到所有 LLM WebSocket 客户端
+            await llm_manager.broadcast({
+                "type": "agent_triggered",
+                "reason": result.get('reason', '智能分析建议'),
+                "speaker": speaker_name,
+                "messages": formatted_messages,
+                "chat_id": current_chat_id,
+                "is_multi_llm": True
+            })
+
+            print(f"[智能分析] 多模型共话已触发")
+
+    except Exception as e:
+        print(f"[智能分析] 回调处理失败: {e}")
+
+# --- LLM 连接管理器 ---
+class LLMConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                print(f"LLM 广播失败: {e}")
+
+llm_manager = LLMConnectionManager()
+
+# --- 多模型请求处理函数 ---
+async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id: str):
+    """处理多模型共话请求"""
+    config_data = load_config()
+    active_names = config_data.get("multi_llm_active_names", [])
+    configs = config_data.get("configs", [])
+
+    active_configs = [c for c in configs if c["name"] in active_names]
+
+    if not active_configs:
+        await websocket.send_json({"type": "error", "content": "未选择任何模型加入集群 (请在设置中勾选)"})
+        return
+
+    # 发送触发通知
+    await websocket.send_json({
+        "type": "agent_notification",
+        "content": f"🤖 智能分析已启动，将同时调用 {len(active_configs)} 个模型为您提供建议"
+    })
+
+    # Prepare tasks
+    async def stream_one(conf):
+        name = conf["name"]
+        try:
+            client = LLMClient(conf["api_key"], conf["base_url"], conf["model"])
+
+            # Handle separate system prompt
+            current_messages = [m.copy() for m in messages]
+            config_prompt = conf.get("system_prompt", "")
+
+            if config_prompt:
+                # Replace or insert system prompt
+                sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
+                if sys_idx != -1:
+                    current_messages[sys_idx]["content"] = config_prompt
+                else:
+                    current_messages.insert(0, {"role": "system", "content": config_prompt})
+
+            full_resp = ""
+            async for chunk in client.chat_stream(current_messages):
+                await websocket.send_json({
+                    "type": "chunk",
+                    "model": name,
+                    "content": chunk
+                })
+                full_resp += chunk
+
+            await websocket.send_json({"type": "done_one", "model": name})
+            return name, full_resp
+        except Exception as e:
+            err_msg = f"Error: {str(e)}"
+            await websocket.send_json({"type": "error", "content": f"[{name}] {err_msg}"})
+            return name, f"[Error] {err_msg}"
+
+    # Run all concurrently
+    tasks = [stream_one(c) for c in active_configs]
+    results = await asyncio.gather(*tasks)
+
+    await websocket.send_json({"type": "done_all"})
+
+    # Save to history
+    if chat_id:
+        # Append all responses
+        for name, text in results:
+            messages.append({"role": "assistant", "content": f"**{name}**:\n{text}"})
+        chat_manager.update_chat_messages(chat_id, messages)
+
 @app.on_event("startup")
 async def startup_event():
     global asr_system, main_event_loop
@@ -112,8 +256,16 @@ async def startup_event():
         asr_system_initialized = False
 
         def thread_safe_callback(message):
+            # Send to WebSocket clients
             if main_event_loop and main_event_loop.is_running():
                 asyncio.run_coroutine_threadsafe(manager.broadcast(message), main_event_loop)
+
+            # Send to trigger manager
+            if AGENT_AVAILABLE:
+                try:
+                    trigger_manager.add_message(message)
+                except Exception as e:
+                    print(f"[触发机制] 处理消息失败: {e}")
 
         try:
             asr_system = RealTimeASR_SV(on_message_callback=thread_safe_callback)
@@ -130,6 +282,40 @@ async def startup_event():
             print("[配置] 已跳过 ASR 系统初始化 (--no-asr)")
         else:
             print("[配置] ASR 系统不可用")
+
+    # Initialize Intelligent Agent
+    if AGENT_AVAILABLE:
+        try:
+            # Load agent from config
+            config_data = load_config()
+            agent_config = config_data.get("agent_config", {})
+            agent_model_name = agent_config.get("model_name")
+
+            if agent_model_name:
+                # Find agent model config
+                model_config = next(
+                    (c for c in config_data.get("configs", []) if c["name"] == agent_model_name),
+                    None
+                )
+
+                if model_config:
+                    # Add model_type to config
+                    model_config['model_type'] = 'api'
+                    agent_manager.load_agent(agent_config, model_config)
+                    print(f"[成功] 智能 Agent 已加载: {agent_model_name}")
+                else:
+                    print(f"[警告] 未找到 Agent 模型配置: {agent_model_name}")
+            else:
+                print("[配置] 未配置智能 Agent 模型")
+
+            # 注册智能分析回调
+            trigger_manager.add_callback(agent_analysis_callback)
+            print("[成功] 智能分析回调已注册")
+
+        except Exception as e:
+            print(f"[错误] 智能 Agent 初始化失败: {e}")
+    else:
+        print("[配置] 智能 Agent 模块不可用")
 
 @app.get("/")
 async def get():
@@ -173,6 +359,22 @@ async def update_config(data: dict = Body(...)):
     
     return {"status": "success", "message": "Configuration updated"}
 
+@app.post("/api/test_connection")
+async def test_connection_endpoint(data: dict = Body(...)):
+    """
+    Test connection with provided config.
+    """
+    api_key = data.get("api_key")
+    base_url = data.get("base_url")
+    model = data.get("model")
+    
+    if not all([api_key, base_url, model]):
+        return {"success": False, "message": "Missing required fields"}
+        
+    client = LLMClient(api_key=api_key, base_url=base_url, model=model)
+    success, message = await client.test_connection()
+    return {"success": success, "message": message}
+
 # --- Chat Management Endpoints ---
 
 @app.get("/api/chats")
@@ -209,9 +411,117 @@ async def clear_chat(chat_id: str):
         raise HTTPException(status_code=404, detail="Chat not found")
     return {"status": "success"}
 
+# --- Intelligent Agent Endpoints ---
+
+@app.get("/api/agent/status")
+async def get_agent_status():
+    """获取智能 Agent 状态"""
+    if not AGENT_AVAILABLE:
+        return {"available": False, "message": "智能 Agent 模块不可用"}
+
+    config_data = load_config()
+    agent_config = config_data.get("agent_config", {})
+
+    return {
+        "available": True,
+        "enabled": agent_manager.enabled,
+        "auto_trigger": agent_manager.auto_trigger,
+        "status": trigger_manager.get_status(),
+        "config": agent_config
+    }
+
+@app.post("/api/agent/enable")
+async def enable_agent(data: dict = Body(...)):
+    """启用/禁用智能 Agent"""
+    if not AGENT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="智能 Agent 模块不可用")
+
+    enabled = data.get("enabled", True)
+    auto_trigger = data.get("auto_trigger", True)
+
+    agent_manager.enabled = enabled
+    agent_manager.auto_trigger = auto_trigger
+    trigger_manager.set_enabled(enabled)
+
+    # Update config
+    config_data = load_config()
+    agent_config = config_data.get("agent_config", {})
+    agent_config["enabled"] = enabled
+    agent_config["auto_trigger"] = auto_trigger
+    config_data["agent_config"] = agent_config
+    save_config(config_data)
+
+    return {
+        "status": "success",
+        "enabled": enabled,
+        "auto_trigger": auto_trigger
+    }
+
+@app.post("/api/agent/config")
+async def update_agent_config(data: dict = Body(...)):
+    """更新智能 Agent 配置"""
+    if not AGENT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="智能 Agent 模块不可用")
+
+    min_characters = data.get("min_characters", 10)
+    silence_threshold = data.get("silence_threshold", 2)
+    model_name = data.get("model_name")
+
+    # Update thresholds
+    trigger_manager.set_thresholds(min_characters, silence_threshold)
+
+    # Update config file
+    config_data = load_config()
+    agent_config = config_data.get("agent_config", {})
+    agent_config.update({
+        "min_characters": min_characters,
+        "silence_threshold": silence_threshold,
+        "model_name": model_name
+    })
+    config_data["agent_config"] = agent_config
+    save_config(config_data)
+
+    # Reload agent if model changed
+    if model_name and AGENT_AVAILABLE:
+        model_config = next(
+            (c for c in config_data.get("configs", []) if c["name"] == model_name),
+            None
+        )
+        if model_config:
+            model_config['model_type'] = 'api'
+            agent_manager.load_agent(agent_config, model_config)
+
+    return {"status": "success", "config": agent_config}
+
+@app.post("/api/agent/analyze")
+async def manual_analyze(data: dict = Body(...)):
+    """手动触发智能分析"""
+    if not AGENT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="智能 Agent 模块不可用")
+
+    messages = data.get("messages", [])
+    speaker_name = data.get("speaker_name", "用户")
+
+    result = await agent_manager.analyze_conversation(messages, speaker_name)
+    return result
+
+@app.post("/api/agent/trigger")
+async def trigger_multi_llm(data: dict = Body(...)):
+    """手动触发多模型共话"""
+    messages = data.get("messages", [])
+    chat_id = data.get("chat_id")
+
+    # This will be handled by the WebSocket endpoint
+    return {
+        "status": "triggered",
+        "message": "多模型共话已触发",
+        "messages": messages,
+        "chat_id": chat_id
+    }
+
 @app.websocket("/ws/llm")
 async def llm_websocket(websocket: WebSocket):
-    await websocket.accept()
+    await llm_manager.connect(websocket)
 
     # Reload config on connection to ensure we have the latest
     current_data = load_config()
@@ -228,45 +538,117 @@ async def llm_websocket(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-            # data format: { "messages": [...], "chat_id": "..." }
+
+            # 处理智能分析触发消息
+            if data.get("type") == "agent_triggered":
+                print(f"[智能分析] WebSocket 收到触发消息")
+                messages = data.get("messages", [])
+                chat_id = data.get("chat_id")
+                is_multi_llm = True
+
+                # 直接处理多模型模式
+                await handle_multi_llm_request(websocket, messages, chat_id)
+                continue
+
+            # data format: { "messages": [...], "chat_id": "...", "is_multi_llm": bool }
             messages = data.get("messages", [])
             chat_id = data.get("chat_id")
+            is_multi_llm = data.get("is_multi_llm", False)
 
             # Add system prompt if not present or just ensure it's there
             if not messages or messages[0].get("role") != "system":
                  messages.insert(0, {"role": "system", "content": "你是一个Ai助手帮助用户，并且分析聊天记录"})
 
-            # Stream response
-            response_text = ""
-            try:
-                # Check if client is ready
-                if not llm_client.client:
-                     await websocket.send_json({"type": "error", "content": "LLM Client not initialized. Please check settings."})
+            if is_multi_llm:
+                # --- Multi-LLM Mode ---
+                config_data = load_config()
+                active_names = config_data.get("multi_llm_active_names", [])
+                configs = config_data.get("configs", [])
+                
+                active_configs = [c for c in configs if c["name"] in active_names]
+                
+                if not active_configs:
+                     await websocket.send_json({"type": "error", "content": "未选择任何模型加入集群 (请在设置中勾选)"})
                      continue
+                
+                # Prepare tasks
+                async def stream_one(conf):
+                    name = conf["name"]
+                    try:
+                        client = LLMClient(conf["api_key"], conf["base_url"], conf["model"])
+                        
+                        # Handle separate system prompt
+                        current_messages = [m.copy() for m in messages] # Deep copyish
+                        config_prompt = conf.get("system_prompt", "")
+                        
+                        if config_prompt:
+                            # Replace or insert system prompt
+                            sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
+                            if sys_idx != -1:
+                                current_messages[sys_idx]["content"] = config_prompt
+                            else:
+                                current_messages.insert(0, {"role": "system", "content": config_prompt})
+                        
+                        full_resp = ""
+                        async for chunk in client.chat_stream(current_messages):
+                            await websocket.send_json({
+                                "type": "chunk",
+                                "model": name,
+                                "content": chunk
+                            })
+                            full_resp += chunk
+                        
+                        await websocket.send_json({"type": "done_one", "model": name})
+                        return name, full_resp
+                    except Exception as e:
+                        err_msg = f"Error: {str(e)}"
+                        await websocket.send_json({"type": "error", "content": f"[{name}] {err_msg}"})
+                        return name, f"[Error] {err_msg}"
 
-                async for chunk in llm_client.chat_stream(messages):
-                    await websocket.send_json({"type": "chunk", "content": chunk})
-                    response_text += chunk
-
-                await websocket.send_json({"type": "done", "full_text": response_text})
-
-                # Save to chat history if chat_id is provided
+                # Run all concurrently
+                tasks = [stream_one(c) for c in active_configs]
+                results = await asyncio.gather(*tasks)
+                
+                await websocket.send_json({"type": "done_all"})
+                
+                # Save to history
                 if chat_id:
-                    # We need to append the assistant's response to the messages list
-                    # Note: 'messages' here already includes the user's latest message
-                    # But we need to be careful not to duplicate the system prompt if we are saving full history
-                    # Actually, the frontend sends the full history. So we just append the new response.
-                    messages.append({"role": "assistant", "content": response_text})
+                    # Append all responses
+                    for name, text in results:
+                        messages.append({"role": "assistant", "content": f"**{name}**:\n{text}"})
                     chat_manager.update_chat_messages(chat_id, messages)
 
-            except Exception as e:
-                print(f"LLM Stream Error: {e}")
-                await websocket.send_json({"type": "error", "content": f"Stream Error: {str(e)}"})
+            else:
+                # --- Single LLM Mode (Original Logic) ---
+                response_text = ""
+                try:
+                    # Check if client is ready
+                    if not llm_client.client:
+                         await websocket.send_json({"type": "error", "content": "LLM Client not initialized. Please check settings."})
+                         continue
+    
+                    async for chunk in llm_client.chat_stream(messages):
+                        await websocket.send_json({"type": "chunk", "content": chunk})
+                        response_text += chunk
+    
+                    await websocket.send_json({"type": "done", "full_text": response_text})
+    
+                    # Save to chat history if chat_id is provided
+                    if chat_id:
+                        messages.append({"role": "assistant", "content": response_text})
+                        chat_manager.update_chat_messages(chat_id, messages)
+    
+                except Exception as e:
+                    print(f"LLM Stream Error: {e}")
+                    await websocket.send_json({"type": "error", "content": f"Stream Error: {str(e)}"})
 
     except WebSocketDisconnect:
         print("LLM WebSocket disconnected")
+        llm_manager.disconnect(websocket)
     except Exception as e:
         print(f"LLM WebSocket Fatal Error: {e}")
+        traceback.print_exc()
+        llm_manager.disconnect(websocket)
 
 if __name__ == "__main__":
     import uvicorn

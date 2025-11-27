@@ -85,11 +85,24 @@
                         </svg>
                     </div>
                     <h1 class="panel-title">AI 助手</h1>
+                    <!-- 当前模型显示 -->
+                    <div class="current-model-display" id="current-model-display">
+                        <div class="model-indicator active">
+                            <div class="model-dot"></div>
+                        </div>
+                        <span class="model-name-display">DeepSeek-V3.2</span>
+                        <button class="model-switch-btn" title="切换模型">
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="header-controls">
-                    <div id="llm-status" class="status disconnected">
-                        <span class="status-dot"></span>
-                        <span class="status-text">Disconnected</span>
+                    <!-- 智能分析状态指示器 -->
+                    <div id="agent-status-indicator" class="agent-status-indicator">
+                        <div class="agent-status-dot"></div>
+                        <span class="agent-status-text">智能分析</span>
                     </div>
                     <button id="settings-btn" class="control-btn" title="设置">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -112,12 +125,50 @@
                 </div>
             </div>
             <div class="input-area">
-                <textarea id="llm-input" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)" rows="1"></textarea>
-                <button id="llm-send-btn" class="send-btn">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M18 2L9 11M18 2L12 18L9 11M18 2L2 9L9 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
+                <!-- 快捷键提示 -->
+                <div class="input-hint">
+                    <span class="hint-key">Ctrl</span> + <span class="hint-key">R</span> 新话题
+                </div>
+
+                <!-- 统一输入栏：整合输入框、功能按钮和发送 -->
+                <div class="unified-input-bar">
+                    <!-- 左侧功能区 -->
+                    <div class="input-left-controls">
+                        <!-- 智能分析开关 -->
+                        <button id="agent-toggle" class="icon-control-btn" title="智能分析">
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                <path d="M9 3C7.34 3 6 4.34 6 6V7H4C3.45 7 3 7.45 3 8V11C3 11.55 3.45 12 4 12H5V13C5 14.66 6.34 16 8 16H9C10.66 16 12 14.66 12 13V12H13C13.55 12 14 11.55 14 11V8C14 7.45 13.55 7 13 7H12V6C12 4.34 10.66 3 9 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            </svg>
+                            <span class="tooltip-text">智能分析</span>
+                        </button>
+
+                        <!-- 多模型会话开关 -->
+                        <button id="multi-llm-toggle" class="icon-control-btn" title="多模型会话">
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                <circle cx="4" cy="9" r="3" stroke="currentColor" stroke-width="1.5"/>
+                                <circle cx="9" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/>
+                                <circle cx="14" cy="9" r="3" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M6.5 7L8 6.5M12 6.5L13.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            <span class="tooltip-text">多模型会议</span>
+                        </button>
+                    </div>
+
+                    <!-- 中间输入区 -->
+                    <div class="input-center">
+                        <textarea id="llm-input" placeholder="在这里输入你的问题..." rows="1" class="main-input"></textarea>
+                    </div>
+
+                    <!-- 右侧发送区 -->
+                    <div class="input-right-controls">
+                        <!-- 发送按钮 -->
+                        <button id="llm-send-btn" class="send-btn" title="发送消息">
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                <path d="M16 2L9 9M16 2L11 16L9 9M16 2L2 7L9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
     </div>
@@ -136,37 +187,172 @@
             </div>
 
             <div class="modal-body">
-                <div class="form-group">
-                    <label>选择配置</label>
-                    <select id="config-select">
-                        <option value="new">+ 新建配置</option>
-                    </select>
+                <!-- 配置说明区域 -->
+                <div class="config-help-section">
+                    <div class="help-icon">💡</div>
+                    <div class="help-content">
+                        <strong>配置说明：</strong>
+                        <ul>
+                            <li><strong>单击</strong>左侧模型查看配置详情</li>
+                            <li><strong>双击模型或点击"设为当前"</strong>切换当前生效模型</li>
+                            <li>右侧有<strong>两个标签页</strong>：常规配置 + 多模型集群配置</li>
+                            <li>当前生效模型有<strong>绿色标识</strong></li>
+                        </ul>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>配置名称</label>
-                    <input type="text" id="config-name" placeholder="例如: DeepSeek">
+                <!-- 多模型状态条 -->
+                <div class="multi-llm-status">
+                    <span class="status-label">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 2L2 5L8 8L14 5L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <path d="M2 11L8 14L14 11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                        </svg>
+                        多模型集群:
+                    </span>
+                    <span id="multi-llm-count" class="status-value">未启用</span>
                 </div>
 
-                <div class="form-group">
-                    <label>API Base URL</label>
-                    <input type="text" id="api-base" placeholder="https://api.example.com/v1">
-                </div>
+                <div class="settings-layout">
+                    <!-- 左侧：配置列表 -->
+                    <div class="settings-sidebar">
+                        <div class="list-header">
+                            <span>模型列表</span>
+                            <button id="add-config-btn" class="icon-btn" title="添加模型">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            </button>
+                        </div>
+                        <div id="config-list" class="config-list">
+                            <!-- Config items will be injected here -->
+                        </div>
+                    </div>
 
-                <div class="form-group">
-                    <label>API Key</label>
-                    <input type="password" id="api-key" placeholder="sk-...">
-                </div>
+                    <!-- 右侧：详细配置 -->
+                    <div class="settings-content"><div class="settings-content">
+    <div class="settings-tabs">
+        <button class="tab-button active" data-tab="config">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M3 4.5L9 2L15 4.5V13.5L9 16L3 13.5V4.5Z" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M9 2V16" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            常规配置
+        </button>
+        <button class="tab-button" data-tab="multi">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="3" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="9" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="15" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M5.5 7.5L7.5 6.5M12.5 6.5L14.5 7.5" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            多模型集群
+        </button>
+        <button class="tab-button" data-tab="agent">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M9 3C7.34 3 6 4.34 6 6V7H4C3.45 7 3 7.45 3 8V11C3 11.55 3.45 12 4 12H5V13C5 14.66 6.34 16 8 16H9C10.66 16 12 14.66 12 13V12H13C13.55 12 14 11.55 14 11V8C14 7.45 13.55 7 13 7H12V6C12 4.34 10.66 3 9 3Z" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            智能分析
+        </button>
+    </div>
 
-                <div class="form-group">
-                    <label>Model Name</label>
-                    <input type="text" id="model-name" placeholder="gpt-3.5-turbo">
+    <div id="tab-config" class="tab-content active">
+        <div class="form-group">
+            <label>配置名称</label>
+            <input type="text" id="config-name" placeholder="例如: DeepSeek">
+        </div>
+        <div class="form-group">
+            <label>标签快速选择</label>
+            <div class="tags-quick-select">
+                <div class="tag-option">
+                    <input type="radio" name="model-tag" id="tag-thinking" value="思考">
+                    <label for="tag-thinking" class="tag-label">思考</label>
                 </div>
+                <div class="tag-option">
+                    <input type="radio" name="model-tag" id="tag-fast" value="快速">
+                    <label for="tag-fast" class="tag-label">快速</label>
+                </div>
+            </div>
+        </div>
+        <input type="hidden" id="config-tags">
+        <div class="form-group">
+            <label>API Base URL</label>
+            <input type="text" id="api-base" placeholder="https://api.example.com/v1">
+        </div>
+        <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="api-key" placeholder="sk-...">
+        </div>
+        <div class="form-group">
+            <label>Model Name</label>
+            <input type="text" id="model-name" placeholder="gpt-3.5-turbo">
+        </div>
+        <div class="form-group">
+            <label>System Prompt (可选)</label>
+            <textarea id="system-prompt" rows="3" placeholder="为此模型设置专属的 System Prompt..."></textarea>
+        </div>
+    </div>
+    
+    <div id="tab-multi" class="tab-content">
+        <div class="multi-model-cluster">
+            <div class="cluster-description">
+                <strong>🎯 多模型集群配置</strong><br>
+                选择要同时调用的AI模型，多个模型会同时生成回答，<br>
+                适合需要对比不同模型回答或增强回答质量场景。
+            </div>
+            <div id="multi-model-list" class="multi-model-options">
+                </div>
+        </div>
+    </div>
+    
+    <div id="tab-agent" class="tab-content">
+        <div class="agent-config-section">
+            <div class="agent-description">
+                <strong>🧠 智能分析配置</strong><br>
+                基于底层小模型智能判定是否需要启动多模型共话，<br>
+                在语音讨论场景下自动辅助主人公进行分析回答。
+            </div>
 
-                <div class="modal-actions">
-                    <button id="delete-config-btn" class="btn btn-danger" style="display: none;">删除</button>
-                    <button id="test-conn-btn" class="btn btn-secondary">测试连接</button>
-                    <button id="save-config-btn" class="btn btn-primary">保存</button>
+            <div class="form-group">
+                <label>模型类型</label>
+                <select id="agent-model-type-select" class="form-select" onchange="handleModelTypeChange(this)">
+                    <option value="local">本地模型</option>
+                    <option value="api">API 模型</option>
+                </select>
+                <div class="form-hint">选择使用本地模型或使用配置的API模型</div>
+            </div>
+
+            <div class="form-group" id="api-model-select-group">
+                <label>API 模型选择</label>
+                <select id="agent-model-select" class="form-select">
+                    <option value="">-- 请选择 --</option>
+                </select>
+                <div class="form-hint">选择用于智能判定的小模型（建议使用轻量级模型）</div>
+            </div>
+
+            <div class="form-group">
+                <label>字数阈值</label>
+                <div class="input-group">
+                    <input type="number" id="agent-min-chars" min="5" max="50" value="10" class="form-input">
+                    <span class="input-suffix">字</span>
+                </div>
+                <div class="form-hint">累积到多少字后触发智能分析判定（默认10字）</div>
+            </div>
+
+            <div class="form-group">
+                <label>静音检测时长</label>
+                <div class="input-group">
+                    <input type="number" id="agent-silence-threshold" min="1" max="10" step="0.5" value="2" class="form-input">
+                    <span class="input-suffix">秒</span>
+                </div>
+                <div class="form-hint">检测到多少秒没有新语音时触发分析（默认2秒）</div>
+            </div>
+        </div>
+    </div> <div class="modal-actions">
+        <button id="delete-config-btn" class="btn btn-danger" style="display: none;">删除</button>
+        <div class="spacer"></div>
+        <button id="test-conn-btn" class="btn btn-secondary">测试连接</button>
+        <button id="save-config-btn" class="btn btn-primary">保存</button>
+    </div>
+</div>
                 </div>
             </div>
         </div>
