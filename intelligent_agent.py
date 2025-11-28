@@ -11,13 +11,20 @@ import re
 from typing import List, Dict, Optional, Tuple
 from llm_client import LLMClient
 
-# 尝试导入主模块以使用本地模型
+import json
+import asyncio
+import re
+from typing import List, Dict, Optional, Tuple
+from llm_client import LLMClient
+
+# 尝试导入 transformers 和 torch
 try:
-    from main import RealTimeASR_SV
-    MAIN_MODULE_AVAILABLE = True
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    import torch
+    TRANSFORMERS_AVAILABLE = True
 except ImportError:
-    MAIN_MODULE_AVAILABLE = False
-    print("[智能分析] 主模块不可用，本地模型功能不可用")
+    TRANSFORMERS_AVAILABLE = False
+    print("[智能分析] 未安装 transformers/torch，本地模型功能不可用")
 
 
 class IntelligentAgent:
@@ -41,27 +48,46 @@ class IntelligentAgent:
         self.threshold = config.get('threshold', 10)
         self.silence_seconds = config.get('silence_seconds', 2)
         self.client = None
+        self.local_model = None
+        self.local_tokenizer = None
 
-        # 初始化客户端
-        if config.get('model_type') == 'api':
+        model_type = config.get('model_type', 'api')
+
+        # 初始化客户端或本地模型
+        if model_type == 'api':
             self.client = LLMClient(
                 api_key=config.get('api_key', ''),
                 base_url=config.get('base_url', ''),
                 model=config.get('model', '')
             )
+        elif model_type == 'local':
+            if TRANSFORMERS_AVAILABLE:
+                self._load_local_model(config.get('model_name', 'Qwen3-0.6B'))
+            else:
+                print("[智能分析] 缺少依赖，无法加载本地模型")
 
         print(f"[智能分析] Agent 已初始化，阈值: {self.threshold} 字，静音: {self.silence_seconds}秒")
+
+    def _load_local_model(self, model_name: str):
+        """加载本地模型"""
+        print(f"[智能分析] 正在加载本地模型: {model_name}")
+        try:
+            self.local_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.local_model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                dtype=torch.float16,
+                device_map="auto"
+            )
+            self.local_model.eval()
+            print(f"[智能分析] ✅ 本地模型加载成功: {model_name}")
+        except Exception as e:
+            print(f"[智能分析] ⚠️ 本地模型加载失败: {e}")
+            self.local_model = None
+            self.local_tokenizer = None
 
     def build_analysis_prompt(self, messages: List[Dict], speaker_name: str) -> str:
         """
         构建分析 Prompt
-
-        Args:
-            messages: 对话消息列表
-            speaker_name: 主人公姓名
-
-        Returns:
-            格式化后的分析 Prompt
         """
         # 格式化对话内容
         message_texts = []
@@ -85,49 +111,63 @@ class IntelligentAgent:
 3. 是否涉及复杂决策或需要多方面思考？
 4. 排除问候语、家乡、姓名等日常对话
 
-请返回严格的 JSON 格式，不要包含任何其他内容：
-{{"is": true/false}}
+请返回严格的 JSON 格式，不要包含任何其他内容，也不要使用 markdown 格式：
+{{"is": true}} 或 {{"is": false}}
 
-- true: 需要启动多模型共话，主人公可以从多个角度获得建议
-- false: 普通对话，无需 AI 介入"""
+- true: 需要启动多模型共话
+- false: 普通对话"""
 
         return prompt
 
     def validate_response(self, response: str) -> Tuple[bool, Optional[dict]]:
-        """
-        验证响应格式
-
-        Args:
-            response: 小模型返回的原始响应
-
-        Returns:
-            (is_valid, parsed_json)
-        """
+        """验证响应格式"""
         try:
-            # 尝试解析 JSON
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                result = json.loads(json_str)
+            # 1. 优先尝试正则匹配 (最快且最准确)
+            # 匹配 {"is": true} 或 {"is": false}，允许各种引号和空白
+            # 同时也兼容 {"is": "true"} 这种字符串形式
+            match = re.search(r'\{[\s"\']*is[\s"\']*:\s*[\"\']?(true|false)[\"\']?\s*\}', response, re.IGNORECASE)
+            if match:
+                is_true = match.group(1).lower() == 'true'
+                return True, {'is': is_true}
 
-                # 检查是否包含 is 字段
-                if 'is' in result and isinstance(result['is'], bool):
-                    return True, result
+            # 2. 尝试解析所有可能的 JSON 对象
+            # 使用 raw_decode 循环解析，可以处理包含多个 JSON 或混合文本的情况
+            decoder = json.JSONDecoder()
+            pos = 0
+            while pos < len(response):
+                # 查找下一个可能的 JSON 起始点
+                start = response.find('{', pos)
+                if start == -1:
+                    break
+                
+                try:
+                    obj, end = decoder.raw_decode(response, idx=start)
+                    # 检查是否是我们需要的对象
+                    if isinstance(obj, dict) and 'is' in obj:
+                        val = obj['is']
+                        # 处理字符串类型的 "true"/"false"
+                        if isinstance(val, str):
+                            if val.lower() == 'true':
+                                return True, {'is': True}
+                            elif val.lower() == 'false':
+                                return True, {'is': False}
+                        elif isinstance(val, bool):
+                            return True, {'is': val}
+                    
+                    # 继续搜索下一个
+                    pos = end
+                except json.JSONDecodeError:
+                    # 当前位置解析失败，尝试下一个字符
+                    pos = start + 1
+            
         except Exception as e:
-            print(f"[智能分析] JSON 解析失败: {e}")
+            print(f"[智能分析] 响应解析出错: {e}")
 
         return False, None
 
     async def analyze(self, messages: List[Dict], speaker_name: str) -> Dict:
         """
         分析对话并判定是否需要启动多模型共话
-
-        Args:
-            messages: 对话消息列表
-            speaker_name: 主人公姓名
-
-        Returns:
-            分析结果 {'is': bool, 'confidence': float, 'reason': str}
         """
         try:
             # 构建 Prompt
@@ -147,16 +187,12 @@ class IntelligentAgent:
                     response_text += chunk
 
                 print(f"[智能分析] 小模型响应: {response_text[:100]}...")
-
-                # 验证响应
                 is_valid, result = self.validate_response(response_text)
-
+                
                 if is_valid and result:
                     is_needed = result['is']
                     reason = "检测到技术讨论，建议启动多模型共话" if is_needed else "普通对话，无需 AI 介入"
-
                     print(f"[智能分析] 判定结果: {is_needed}")
-
                     return {
                         'is': is_needed,
                         'confidence': 0.95,
@@ -164,34 +200,46 @@ class IntelligentAgent:
                         'raw_response': response_text
                     }
 
-            elif model_type == 'local' and MAIN_MODULE_AVAILABLE:
-                # 本地模式 - 使用main模块的本地模型
+            elif model_type == 'local' and self.local_model:
+                # 本地模式
                 try:
-                    # 创建ASR实例（不启动录音，仅使用本地模型）
-                    asr_instance = RealTimeASR_SV()
+                    # 准备输入
+                    inputs = self.local_tokenizer(prompt, return_tensors="pt").to(self.local_model.device)
 
-                    # 检查本地模型是否可用
-                    if not asr_instance.local_model or not asr_instance.local_tokenizer:
-                        print("[智能分析] 本地模型未加载")
+                    # 生成响应
+                    with torch.no_grad():
+                        outputs = self.local_model.generate(
+                            **inputs,
+                            max_new_tokens=100,
+                            temperature=0.1,
+                            do_sample=False,
+                            pad_token_id=self.local_tokenizer.eos_token_id
+                        )
+
+                    response_text = self.local_tokenizer.decode(
+                        outputs[0][inputs['input_ids'].shape[1]:],
+                        skip_special_tokens=True
+                    ).strip()
+
+                    print(f"[智能分析] 本地模型响应: {response_text[:100]}...")
+                    is_valid, result = self.validate_response(response_text)
+
+                    if is_valid and result:
+                        is_needed = result['is']
+                        reason = "检测到技术讨论，建议启动多模型共话" if is_needed else "普通对话，无需 AI 介入"
+                        print(f"[智能分析] 本地模型判定结果: {is_needed}")
                         return {
-                            'is': False,
-                            'confidence': 0.0,
-                            'reason': '本地模型未加载，请检查Qwen2.5-1.5B-Instruct是否正确安装',
-                            'raw_response': ''
+                            'is': is_needed,
+                            'confidence': 0.95,
+                            'reason': reason,
+                            'raw_response': response_text
                         }
-
-                    # 调用本地模型进行分析
-                    result = await asr_instance.analyze_with_local_model(messages, speaker_name)
-                    print(f"[智能分析] 本地模型判定结果: {result.get('is')}")
-
-                    return result
-
                 except Exception as e:
-                    print(f"[智能分析] 本地模型调用失败: {e}")
+                    print(f"[智能分析] 本地模型推理失败: {e}")
                     return {
                         'is': False,
                         'confidence': 0.0,
-                        'reason': f'本地模型调用失败: {str(e)}',
+                        'reason': f'本地模型推理失败: {str(e)}',
                         'raw_response': ''
                     }
 

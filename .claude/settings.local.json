@@ -12,7 +12,9 @@
       "mcp__mcp-router__browser_run_code",
       "mcp__mcp-router__browser_evaluate",
       "mcp__mcp-router__browser_snapshot",
-      "mcp__mcp-router__project"
+      "mcp__mcp-router__project",
+      "mcp__mcp-router__browser_click",
+      "mcp__mcp-router__list_directory"
     ],
     "deny": [],
     "ask": []

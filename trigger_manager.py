@@ -31,6 +31,8 @@ class TriggerManager:
         self.min_characters = 10
         self.silence_threshold = 2.0  # 秒
         self.max_history = 50  # 最大历史记录数
+        self.event_loop = None  # 保存主event loop引用
+        self.protagonist = None  # 主人公姓名
         print("[触发机制] 管理器已初始化")
 
     def set_thresholds(self, min_chars: int, silence_secs: float):
@@ -38,6 +40,16 @@ class TriggerManager:
         self.min_characters = min_chars
         self.silence_threshold = silence_secs
         print(f"[触发机制] 阈值已更新: {min_chars}字, {silence_secs}秒静音")
+
+    def set_event_loop(self, loop):
+        """设置主event loop引用"""
+        self.event_loop = loop
+        print("[触发机制] 已设置event loop引用")
+
+    def set_protagonist(self, name: str):
+        """设置主人公姓名"""
+        self.protagonist = name
+        print(f"[触发机制] 主人公已设置: {name}")
 
     def add_message(self, message: Dict) -> bool:
         """
@@ -54,7 +66,7 @@ class TriggerManager:
         speaker = message.get('speaker', '未知用户')
 
         # 过滤空消息和过短消息
-        if not text or len(text) < 4:
+        if not text or len(text) < 3:
             return False
 
         print(f"[触发机制] 收到消息: {speaker[:20]} - {text[:30]}...")
@@ -130,35 +142,64 @@ class TriggerManager:
         self.state.pending_analysis = True
         self.state.silence_start_time = None
 
-        # 准备分析上下文
+        # 准备分析上下文 - 取最近10条消息
         messages = self.conversation_history[-10:]  # 取最近10条消息
         if messages:
-            last_message = messages[-1]
-            speaker_name = last_message.get('speaker', '').split(' (')[0]  # 提取说话人姓名
-
-            # 异步执行分析
-            asyncio.create_task(self._run_analysis(messages, speaker_name))
+            # 使用配置的主人公，如果没有配置则从消息中提取
+            if self.protagonist:
+                speaker_name = self.protagonist
+                print(f"[触发机制] 📤 使用配置的主人公: {speaker_name}, 消息数={len(messages)}/总{len(self.conversation_history)}")
+            else:
+                last_message = messages[-1]
+                speaker_name = last_message.get('speaker', '').split(' (')[0]  # 提取说话人姓名
+                print(f"[触发机制] 📤 未配置主人公，使用最后说话人: {speaker_name}, 消息数={len(messages)}/总{len(self.conversation_history)}")
+            
+            # 异步执行分析 - 使用保存的event loop
+            if self.event_loop and self.event_loop.is_running():
+                asyncio.run_coroutine_threadsafe(self._run_analysis(messages, speaker_name), self.event_loop)
+                print("[触发机制] ✅ 分析任务已提交到主event loop")
+            else:
+                print("[触发机制] ⚠️ Event loop未设置或未运行，分析任务未启动")
+                print("[触发机制] 💡 提示: 请在server启动时调用trigger_manager.set_event_loop(loop)")
+                self.state.pending_analysis = False
 
     async def _run_analysis(self, messages: List[Dict], speaker_name: str):
         """运行智能分析"""
         try:
+            print(f"[触发机制] 🤖 开始调用本地模型分析...")
             result = await agent_manager.analyze_conversation(messages, speaker_name)
 
-            print(f"[触发机制] 智能分析完成: {result.get('is')}")
+            is_needed = result.get('is', False)
+            reason = result.get('reason', '')
+            confidence = result.get('confidence', 0.0)
+            
+            if is_needed:
+                print(f"[触发机制] ✅ 智能分析结果: 需要启动多模型共话 (置信度: {confidence:.0%})")
+                print(f"[触发机制] 📋 原因: {reason}")
+            else:
+                print(f"[触发机制] ❌ 智能分析结果: 普通对话，无需AI介入")
+                print(f"[触发机制] 📋 原因: {reason}")
 
             # 触发回调
-            for callback in self.callbacks:
-                try:
-                    await callback(result, messages, speaker_name)
-                except Exception as e:
-                    print(f"[触发机制] 回调执行失败: {e}")
+            if self.callbacks:
+                print(f"[触发机制] 📢 触发{len(self.callbacks)}个回调函数...")
+                for callback in self.callbacks:
+                    try:
+                        await callback(result, messages, speaker_name)
+                    except Exception as e:
+                        print(f"[触发机制] ❌ 回调执行失败: {e}")
+            else:
+                print(f"[触发机制] ⚠️ 没有注册回调函数")
 
         except Exception as e:
-            print(f"[触发机制] 分析过程出错: {e}")
+            print(f"[触发机制] ❌ 分析过程出错: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             # 重置累积文本
             self.state.accumulated_text = ""
             self.state.pending_analysis = False
+            print(f"[触发机制] 🔄 已重置触发状态")
 
     def add_callback(self, callback: Callable):
         """添加分析完成回调"""

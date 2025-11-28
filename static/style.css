@@ -1225,10 +1225,12 @@ body {
     z-index: 1000;
     align-items: center;
     justify-content: center;
+    pointer-events: none;
 }
 
 .modal.active {
     display: flex;
+    pointer-events: auto;
 }
 
 .modal-overlay {
@@ -1237,6 +1239,7 @@ body {
     background: rgba(31, 41, 55, 0.4);
     backdrop-filter: blur(8px);
     animation: fadeIn 0.3s ease;
+    pointer-events: auto;
 }
 
 .modal-content {
@@ -1252,6 +1255,8 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    pointer-events: auto;
+    z-index: 1;
 }
 
 @keyframes fadeIn {
@@ -2719,5 +2724,478 @@ input:checked+.slider:before {
     .agent-status-dot {
         width: 6px;
         height: 6px;
+    }
+}
+
+/* ========================================
+   声纹管理样式 - Voiceprint Management
+   ======================================== */
+
+/* 声纹管理容器 */
+.voiceprint-config-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-lg);
+}
+
+.voiceprint-description {
+    padding: var(--gap-md);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+/* 录音区域 */
+.voiceprint-recorder {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.voiceprint-recording-controls {
+    display: flex;
+    gap: var(--gap-sm);
+    flex-wrap: wrap;
+}
+
+/* 录音状态 */
+.recording-status {
+    background: var(--bg-tertiary);
+    padding: var(--gap-md);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+.recording-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--color-error);
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+}
+
+.recording-text {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.recording-timer {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 32px;
+    font-weight: 300;
+    color: var(--accent-primary);
+    letter-spacing: 2px;
+}
+
+.recording-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary));
+    transition: width 0.1s linear;
+    border-radius: 4px;
+}
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+}
+
+/* 音频预览 */
+.audio-preview {
+    padding: var(--gap-md);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+}
+
+.audio-preview label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* 朗读提示 */
+.recording-prompt {
+    padding: var(--gap-md);
+    text-align: center;
+    display: none;
+}
+
+.recording-prompt .prompt-content {
+    font-size: 16px;
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+/* "请清晰朗读以下内容：" 标题左对齐 */
+.recording-prompt .prompt-content strong {
+    display: block;
+    text-align: left;
+    margin-bottom: var(--gap-sm);
+}
+
+.audio-preview audio {
+    width: 100%;
+    border-radius: 4px;
+}
+
+/* 声纹列表区域 */
+.voiceprint-list-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: var(--gap-sm);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.list-header span {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 300;
+    color: var(--text-primary);
+}
+
+.icon-btn {
+    padding: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.icon-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.icon-btn svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+    transition: color 0.15s ease;
+}
+
+.icon-btn:hover svg {
+    color: var(--accent-primary);
+}
+
+/* 声纹列表 */
+.voiceprint-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+    max-height: 400px;
+    overflow-y: auto;
+    padding: var(--gap-sm) 0;
+}
+
+.voiceprint-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--gap-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    transition: all 0.15s ease;
+    gap: var(--gap-md);
+}
+
+.voiceprint-item:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-2px);
+}
+
+.voiceprint-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.voiceprint-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+}
+
+.voiceprint-meta {
+    display: flex;
+    gap: var(--gap-md);
+    flex-wrap: wrap;
+}
+
+.meta-item {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+}
+
+.voiceprint-date {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+.voiceprint-actions {
+    display: flex;
+    gap: var(--gap-sm);
+}
+
+.play-btn,
+.delete-btn {
+    padding: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.play-btn:hover {
+    background: var(--color-success);
+    border-color: var(--color-success);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.delete-btn:hover {
+    background: var(--color-error);
+    border-color: var(--color-error);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.play-btn svg,
+.delete-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 空状态 */
+.empty-message {
+    padding: var(--gap-lg);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    font-style: italic;
+}
+
+/* 按钮样式 */
+.btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    text-transform: uppercase;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+    color: white;
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #34d399, var(--color-success));
+    color: white;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #f87171, var(--color-error));
+    color: white;
+}
+
+.btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 表单输入框 */
+.form-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: all 0.15s ease;
+    font-family: var(--font-sans);
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+/* ========================================
+   主人公相关样式
+   ======================================== */
+
+/* 主人公按钮 */
+.protagonist-btn {
+    padding: 6px;
+    background: transparent;
+    border: 1px solid var(--border-normal);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.protagonist-btn:hover {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1));
+    border-color: #f59e0b;
+    color: #f59e0b;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+
+.protagonist-btn svg {
+    transition: transform 0.3s ease;
+}
+
+.protagonist-btn:hover svg {
+    transform: scale(1.1) rotate(-10deg);
+}
+
+/* 主人公声纹项样式 */
+.voiceprint-item.is-protagonist {
+    position: relative;
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), rgba(251, 191, 36, 0.02));
+    box-shadow: 0 2px 12px rgba(245, 158, 11, 0.15), inset 0 0 20px rgba(245, 158, 11, 0.05);
+}
+
+.voiceprint-item.is-protagonist::before {
+    content: "";
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 20px;
+    z-index: 1;
+    animation: protagonist-glow 2s ease-in-out infinite;
+}
+
+.voiceprint-item.is-protagonist::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: linear-gradient(180deg, #f59e0b, #fbbf24);
+    border-radius: 4px 0 0 4px;
+}
+
+.voiceprint-item.is-protagonist .voiceprint-name {
+    color: #d97706;
+    font-weight: 600;
+}
+
+.voiceprint-item.is-protagonist .protagonist-btn {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(251, 191, 36, 0.15));
+    border-color: #f59e0b;
+    color: #d97706;
+}
+
+@keyframes protagonist-glow {
+    0%, 100% {
+        opacity: 1;
+        text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        text-shadow: 0 0 20px rgba(245, 158, 11, 0.8);
+        transform: scale(1.05);
     }
 }

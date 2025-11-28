@@ -25,4 +25,5 @@ openai==1.3.7
 # 其他
 pydantic==2.5.0
 python-dateutil==2.8.2
+soundfile
 

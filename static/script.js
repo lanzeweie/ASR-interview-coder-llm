@@ -12,7 +12,6 @@ const llmSendBtn = document.getElementById('llm-send-btn');
 const sendAllBtn = document.getElementById('send-all-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
-const closeModalBtn = document.querySelector('.close-btn');
 const saveConfigBtn = document.getElementById('save-config-btn');
 const deleteConfigBtn = document.getElementById('delete-config-btn');
 const testConnBtn = document.getElementById('test-conn-btn');
@@ -26,6 +25,10 @@ const apiBaseInput = document.getElementById('api-base');
 const apiKeyInput = document.getElementById('api-key');
 const modelNameInput = document.getElementById('model-name');
 const systemPromptInput = document.getElementById('system-prompt');
+
+// Close modal buttons
+const closeSettingsModalBtn = document.getElementById('close-settings-btn');
+const closeVoiceprintModalBtn = document.getElementById('close-voiceprint-btn');
 
 const floatSendBtn = document.getElementById('float-send-btn');
 const multiLLMToggle = document.getElementById('multi-llm-toggle');
@@ -41,6 +44,24 @@ const clearAsrBtn = document.getElementById('clear-asr-btn');
 
 // Toast 容器
 const toastContainer = document.getElementById('toast-container');
+
+// 声纹管理 DOM 元素
+const voiceprintModal = document.getElementById('voiceprint-modal');
+const voiceprintSettingsBtn = document.getElementById('voiceprint-settings-btn');
+const voiceprintCloseBtn = document.getElementById('voiceprint-close-btn');
+// 已移除 voiceprintNameInput，改用 prompt 弹窗输入姓名
+const startRecordBtn = document.getElementById('start-record-btn');
+const stopRecordBtn = document.getElementById('stop-record-btn');
+const saveRecordBtn = document.getElementById('save-record-btn');
+const discardRecordBtn = document.getElementById('discard-record-btn');
+const recordingStatus = document.getElementById('recording-status');
+const recordingDuration = document.getElementById('recording-duration');
+const progressFill = document.getElementById('progress-fill');
+const audioPreview = document.getElementById('audio-preview');
+const audioPlayer = document.getElementById('audio-player');
+const voiceprintList = document.getElementById('voiceprint-list');
+const rebuildVoiceprintsBtn = document.getElementById('rebuild-voiceprints-btn');
+const closeVoiceprintBtn = document.getElementById('close-voiceprint-btn');
 
 // ===== 全局状态 =====
 let asrSocket;
@@ -83,17 +104,68 @@ function showToast(message, type = 'info') {
 }
 
 // ===== WebSocket: ASR 连接与处理 =====
+function updateASRStatus(asrInitialized) {
+    if (!asrStatusDiv) return;
+    const dot = asrStatusDiv.querySelector('.status-dot');
+    const text = asrStatusDiv.querySelector('.status-text');
+
+    // ASR 系统是否真正初始化
+    if (asrInitialized) {
+        asrStatusDiv.className = 'status connected';
+        if (text) text.textContent = '已连接';
+        console.log('[ASR] 实时语音转写功能已启用');
+    } else {
+        asrStatusDiv.className = 'status disconnected';
+        if (text) text.textContent = 'ASR 未初始化';
+        console.log('[ASR] 请使用正常模式启动服务器以启用实时语音转写功能');
+    }
+}
+
 function connectASR() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     asrSocket = new WebSocket(wsUrl);
-    asrSocket.onopen = () => { updateStatus(asrStatusDiv, true); showToast('ASR 服务已连接', 'success'); };
-    asrSocket.onmessage = (event) => { try { addASRMessage(JSON.parse(event.data)); } catch (e) { console.error(e); } };
-    asrSocket.onclose = () => { updateStatus(asrStatusDiv, false); setTimeout(connectASR, 3000); };
-    asrSocket.onerror = () => { updateStatus(asrStatusDiv, false); };
+
+    // 连接成功时显示"未连接"状态，等待后端确认
+    asrSocket.onopen = () => {
+        console.log('[ASR] WebSocket 连接已建立，等待服务器响应...');
+        // 先设置为未连接状态
+        updateASRStatus(false);
+    };
+
+    asrSocket.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+
+            // 如果是初始状态消息，更新UI
+            if (data.asr_status) {
+                const asrInitialized = data.asr_status.initialized;
+                updateASRStatus(asrInitialized);
+            } else {
+                // 正常的ASR消息
+                addASRMessage(data);
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    asrSocket.onclose = () => {
+        console.log('[ASR] WebSocket 连接已断开');
+        updateASRStatus(false);
+        setTimeout(connectASR, 3000);
+    };
+
+    asrSocket.onerror = () => {
+        console.log('[ASR] WebSocket 连接错误');
+        updateASRStatus(false);
+    };
 }
 
 function addASRMessage(data) {
+    // 跳过初始状态消息（包含 asr_status）
+    if (data.asr_status) {
+        return;
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message';
     messageDiv.innerHTML = `
@@ -126,9 +198,9 @@ function getOrCreateResponseDiv(modelName) {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message ai';
-    
+
     // Header with Model Tag
-    const headerHtml = modelName 
+    const headerHtml = modelName
         ? `<div class="message-header"><span class="speaker-name">AI 助手</span><span class="model-tag">${modelName}</span></div>`
         : `<div class="message-header"><span class="speaker-name">AI 助手</span></div>`;
 
@@ -136,7 +208,7 @@ function getOrCreateResponseDiv(modelName) {
         ${headerHtml}
         <div class="content"></div>
     `;
-    
+
     llmWindow.appendChild(msgDiv);
     activeResponseDivs[modelName || 'default'] = msgDiv;
     return msgDiv;
@@ -148,13 +220,13 @@ function handleLLMMessage(data) {
         const div = getOrCreateResponseDiv(model);
         const contentDiv = div.querySelector('.content');
         contentDiv.textContent += data.content;
-        
+
         // Update buffer
         if (!activeResponseBuffers[model]) activeResponseBuffers[model] = "";
         activeResponseBuffers[model] += data.content;
-        
+
         llmWindow.scrollTop = llmWindow.scrollHeight;
-    } 
+    }
     else if (data.type === 'done_one') {
         // One model finished
         const model = data.model;
@@ -173,7 +245,7 @@ function handleLLMMessage(data) {
                 }
             }
         }
-        
+
         // Reset state
         activeResponseDivs = {};
         activeResponseBuffers = {};
@@ -297,11 +369,11 @@ async function loadChatMessages(chatId) {
                     modelName = match[1];
                     content = match[2];
                 }
-                
-                const headerHtml = modelName 
+
+                const headerHtml = modelName
                     ? `<div class="message-header"><span class="speaker-name">AI 助手</span><span class="model-tag">${modelName}</span></div>`
                     : `<div class="message-header"><span class="speaker-name">AI 助手</span></div>`;
-                
+
                 msgDiv.innerHTML = `${headerHtml}<div class="message-content">${content}</div>`;
             } else {
                 msgDiv.innerHTML = `<div class="message-content">${msg.content}</div>`;
@@ -571,17 +643,84 @@ function initTabs() {
 
 // ===== Event Listeners =====
 function initEventListeners() {
-    settingsBtn.addEventListener('click', () => { loadConfigs(); settingsModal.classList.add('active'); });
-    closeModalBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
-    settingsModal.querySelector('.modal-overlay').addEventListener('click', () => settingsModal.classList.remove('active'));
+    // 设置按钮事件
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 只阻止按钮级别的冒泡
+        loadConfigs();
+        settingsModal.classList.add('active');
+    });
+
+    // 设置模态框关闭按钮 - 使用ID选择器
+    const settingsCloseBtn = document.getElementById('settings-close-btn');
+    if (settingsCloseBtn) {
+        settingsCloseBtn.onclick = () => {
+            settingsModal.classList.remove('active');
+        };
+    }
+
+    // 设置模态框遮罩层 - 使用ID选择器
+    if (settingsModal) {
+        const settingsOverlay = settingsModal.querySelector('.modal-overlay');
+        if (settingsOverlay) {
+            settingsOverlay.onclick = () => {
+                settingsModal.classList.remove('active');
+            };
+        }
+    }
 
     // 模型选择器点击事件（标题栏）
     const modelSelector = document.querySelector('.current-model-display');
     if (modelSelector) {
-        modelSelector.addEventListener('click', () => {
+        modelSelector.addEventListener('click', (e) => {
+            e.stopPropagation();
             loadConfigs();
             settingsModal.classList.add('active');
         });
+    }
+
+    // 声纹管理按钮事件
+    if (voiceprintSettingsBtn) {
+        voiceprintSettingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 只阻止按钮级别的冒泡
+            openVoiceprintModal();
+        });
+    }
+
+    // 声纹模态框关闭按钮 - 使用正确的ID选择器
+    const voiceprintCloseBtn = document.getElementById('voiceprint-close-btn');
+    if (voiceprintCloseBtn) {
+        voiceprintCloseBtn.onclick = () => {
+            closeVoiceprintModal();
+        };
+    }
+
+    // 声纹模态框遮罩层 - 使用正确的选择器
+    if (voiceprintModal) {
+        const voiceprintOverlay = voiceprintModal.querySelector('.modal-overlay');
+        if (voiceprintOverlay) {
+            voiceprintOverlay.onclick = () => {
+                closeVoiceprintModal();
+            };
+        }
+    }
+
+    // 录音按钮事件
+    if (startRecordBtn) {
+        startRecordBtn.addEventListener('click', startRecording);
+    }
+    if (stopRecordBtn) {
+        stopRecordBtn.addEventListener('click', stopRecording);
+    }
+    if (saveRecordBtn) {
+        saveRecordBtn.addEventListener('click', saveVoiceprint);
+    }
+    if (discardRecordBtn) {
+        discardRecordBtn.addEventListener('click', discardRecording);
+    }
+
+    // 重建声纹按钮事件
+    if (rebuildVoiceprintsBtn) {
+        rebuildVoiceprintsBtn.addEventListener('click', rebuildVoiceprints);
     }
 
     addConfigBtn.addEventListener('click', clearConfigForm);
@@ -654,12 +793,12 @@ function initEventListeners() {
     deleteConfigBtn.addEventListener('click', async () => {
         const name = configNameInput.value.trim();
         if (!name || !confirm(`确定删除配置 "${name}" 吗?`)) return;
-        
+
         configs = configs.filter(c => c.name !== name);
         multiLLMActiveNames.delete(name);
-        
+
         if (currentConfigName === name) currentConfigName = configs.length > 0 ? configs[0].name : "";
-        
+
         try {
             await fetch('/api/config', {
                 method: 'POST',
@@ -678,7 +817,7 @@ function initEventListeners() {
             model: modelNameInput.value.trim()
         };
         if (!data.api_key || !data.base_url || !data.model) return showToast("请填写完整配置信息", 'error');
-        
+
         showToast("正在测试连接...", 'info');
         try {
             const res = await fetch('/api/test_connection', {
@@ -847,6 +986,523 @@ function initMultiLLMToggle() {
     // 默认状态为关闭
     multiLLMToggle.classList.remove('active');
     multiLLMToggle.title = '多模型会话已关闭，点击开启';
+}
+
+// ===== 声纹管理功能 =====
+
+// 录音状态
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStartTime = 0;
+let recordingTimer = null;
+let currentRecordingBlob = null;
+
+// 打开声纹管理模态框
+function openVoiceprintModal() {
+    voiceprintModal.classList.add('active');
+    loadVoiceprintList();
+    resetRecordingState();
+}
+
+// 关闭声纹管理模态框
+function closeVoiceprintModal() {
+    voiceprintModal.classList.remove('active');
+    stopRecording();
+    // 朗读提示会在 resetRecordingState 中隐藏
+    resetRecordingState();
+}
+
+// 重置录音状态
+function resetRecordingState() {
+    startRecordBtn.style.display = 'inline-flex';
+    stopRecordBtn.style.display = 'none';
+    saveRecordBtn.style.display = 'none';
+    discardRecordBtn.style.display = 'none';
+    recordingStatus.style.display = 'none';
+    audioPreview.style.display = 'none';
+    progressFill.style.width = '0%';
+    currentRecordingBlob = null;
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+    // 隐藏朗读提示
+    const promptEl = document.getElementById('recording-prompt');
+    if (promptEl) {
+        promptEl.style.display = 'none';
+    }
+}
+
+// 开始录音
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                sampleRate: 16000
+            }
+        });
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm;codecs=opus'
+        });
+
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                recordedChunks.push(event.data);
+            }
+        };
+
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+            currentRecordingBlob = blob;
+
+            // 显示音频预览
+            const audioUrl = URL.createObjectURL(blob);
+            audioPlayer.src = audioUrl;
+            audioPreview.style.display = 'block';
+
+            // 隐藏朗读提示（录音完成后）
+            const promptEl = document.getElementById('recording-prompt');
+            if (promptEl) {
+                promptEl.style.display = 'none';
+            }
+
+            showToast('录音完成，请检查预览后保存', 'success');
+        };
+
+        mediaRecorder.start();
+        recordingStartTime = Date.now();
+        recordingStatus.style.display = 'block';
+        startRecordBtn.style.display = 'none';
+        stopRecordBtn.style.display = 'inline-flex';
+        saveRecordBtn.style.display = 'none';  // 不自动显示保存按钮
+        discardRecordBtn.style.display = 'inline-flex';
+
+        // 显示朗读提示（集成在recording-status中）
+        const promptEl = document.getElementById('recording-prompt');
+        if (promptEl) {
+            promptEl.style.display = 'flex';
+        }
+
+        // 启动计时器
+        recordingTimer = setInterval(updateRecordingTimer, 100);
+
+        showToast('开始录音，请清晰说话', 'info');
+
+    } catch (error) {
+        console.error('录音失败:', error);
+        showToast('无法访问麦克风，请检查权限设置', 'error');
+    }
+}
+
+// 停止录音
+function stopRecording() {
+    // 清除计时器（优先执行）
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+
+        // 停止所有音频轨道
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+
+    stopRecordBtn.style.display = 'none';
+
+    // 检查时长，如果 >= 10秒才显示保存按钮
+    const elapsed = (Date.now() - recordingStartTime) / 1000;
+    if (elapsed >= 10) {
+        saveRecordBtn.style.display = 'inline-flex';
+        discardRecordBtn.style.display = 'inline-flex';
+        showToast(`录音完成，时长：${elapsed.toFixed(1)}秒`, 'success');
+    } else {
+        // 时间太短，丢弃录音
+        showToast(`录制时长太短（${elapsed.toFixed(1)}秒），至少需要 10 秒`, 'error');
+        discardRecording();
+    }
+}
+
+// 更新录音计时器
+function updateRecordingTimer() {
+    const elapsed = (Date.now() - recordingStartTime) / 1000;
+    recordingDuration.textContent = elapsed.toFixed(1);
+
+    // 更新进度条 (0-40秒)
+    const maxDuration = 40;
+    const progress = Math.min((elapsed / maxDuration) * 100, 100);
+    progressFill.style.width = `${progress}%`;
+
+    // 40秒后自动停止
+    if (elapsed >= maxDuration) {
+        // 强制停止录音，但 **不** 显示保存按钮
+        if (recordingTimer) {
+            clearInterval(recordingTimer);
+            recordingTimer = null;
+        }
+
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+
+        // 只隐藏停止按钮，不显示保存按钮
+        stopRecordBtn.style.display = 'none';
+
+        showToast('已达到最大录制时长（40秒），请手动停止录音', 'warning');
+    }
+}
+
+// 保存声纹
+async function saveVoiceprint() {
+    if (!currentRecordingBlob) {
+        showToast('没有录音数据，请先录音', 'error');
+        return;
+    }
+
+    // 检查录制时长
+    const elapsed = (Date.now() - recordingStartTime) / 1000;
+    if (elapsed < 10) {
+        showToast(`录制时长不足（${elapsed.toFixed(1)}秒），至少需要 10 秒`, 'error');
+        return;
+    }
+
+    if (elapsed > 40) {
+        showToast(`录制时长超过限制（${elapsed.toFixed(1)}秒），最多 40 秒`, 'error');
+        return;
+    }
+
+    // 通过弹窗提示用户输入姓名
+    const speakerName = prompt('请输入说话人姓名：');
+    if (!speakerName || !speakerName.trim()) {
+        showToast('未输入姓名，声纹保存已取消', 'info');
+        return;
+    }
+
+    try {
+        // 转换为 WAV 格式
+        const wavBlob = await convertToWav(currentRecordingBlob);
+
+        // 转换为 base64
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64Audio = reader.result;
+
+            try {
+                const response = await fetch('/api/voiceprints', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: speakerName,
+                        audio_data: base64Audio
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast(`声纹保存成功: ${speakerName}`, 'success');
+                    loadVoiceprintList();
+                    resetRecordingState();
+                } else {
+                    showToast(`保存失败: ${result.detail}`, 'error');
+                }
+            } catch (error) {
+                console.error('保存声纹失败:', error);
+                showToast('保存声纹失败，请重试', 'error');
+            }
+        };
+        reader.readAsDataURL(wavBlob);
+
+    } catch (error) {
+        console.error('转换音频失败:', error);
+        showToast('音频转换失败', 'error');
+    }
+}
+
+// 转换音频为 WAV 格式
+async function convertToWav(blob) {
+    return new Promise((resolve, reject) => {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        const fileReader = new FileReader();
+        fileReader.onload = async () => {
+            try {
+                const arrayBuffer = fileReader.result;
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                const wavBuffer = audioBufferToWav(audioBuffer);
+                resolve(new Blob([wavBuffer], { type: 'audio/wav' }));
+            } catch (error) {
+                reject(error);
+            }
+        };
+        fileReader.onerror = reject;
+        fileReader.readAsArrayBuffer(blob);
+    });
+}
+
+// 将 AudioBuffer 转换为 WAV 格式
+function audioBufferToWav(buffer) {
+    const length = buffer.length;
+    const arrayBuffer = new ArrayBuffer(44 + length * 2);
+    const view = new DataView(arrayBuffer);
+
+    // WAV 文件头
+    const writeString = (offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, buffer.sampleRate, true);
+    view.setUint32(28, buffer.sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, length * 2, true);
+
+    // 写入音频数据
+    const channelData = buffer.getChannelData(0);
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+        const sample = Math.max(-1, Math.min(1, channelData[i]));
+        view.setInt16(offset, sample * 0x7FFF, true);
+        offset += 2;
+    }
+
+    return arrayBuffer;
+}
+
+// 丢弃录音
+function discardRecording() {
+    resetRecordingState();
+    showToast('录音已丢弃', 'info');
+}
+
+// ===== 主人公管理 =====
+
+// 获取当前主人公
+async function loadProtagonist() {
+    try {
+        const response = await fetch('/api/protagonist');
+        if (response.ok) {
+            const data = await response.json();
+            return data.protagonist || '';
+        }
+    } catch (error) {
+        console.error('获取主人公失败:', error);
+    }
+    return '';
+}
+
+// 设置主人公
+async function setProtagonist(name) {
+    try {
+        const response = await fetch('/api/protagonist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ protagonist: name })
+        });
+
+        if (response.ok) {
+            showToast(`已设置主人公: ${name}`, 'success');
+            await loadVoiceprintList(); // 刷新列表以更新高亮
+        } else {
+            showToast('设置失败', 'error');
+        }
+    } catch (error) {
+        console.error('设置主人公失败:', error);
+        showToast('设置失败', 'error');
+    }
+}
+
+// 加载声纹列表
+async function loadVoiceprintList() {
+    try {
+        const response = await fetch('/api/voiceprints');
+        const data = await response.json();
+        renderVoiceprintList(data.voiceprints || []);
+    } catch (error) {
+        console.error('加载声纹列表失败:', error);
+        showToast('加载声纹列表失败', 'error');
+    }
+}
+
+// 更新播放按钮图标
+function updatePlayButton(btn, isPlaying) {
+    if (!btn) return;
+    if (isPlaying) {
+        // 显示暂停图标
+        btn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M4 3H6V13H4V3ZM10 3H12V13H10V3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        `;
+        btn.title = "暂停";
+    } else {
+        // 显示播放图标
+        btn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 2L13 8L3 14V2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+        `;
+        btn.title = "播放";
+    }
+}
+
+// 重置所有播放按钮
+function resetAllPlayButtons() {
+    const btns = document.querySelectorAll('.play-btn');
+    btns.forEach(btn => updatePlayButton(btn, false));
+}
+
+// 渲染声纹列表
+async function renderVoiceprintList(voiceprints) {
+    voiceprintList.innerHTML = '';
+
+    if (voiceprints.length === 0) {
+        voiceprintList.innerHTML = '<div class="empty-message">暂无声纹数据</div>';
+        return;
+    }
+
+    // 获取当前主人公
+    const currentProtagonist = await loadProtagonist();
+
+    voiceprints.forEach(vp => {
+        const item = document.createElement('div');
+        item.className = 'voiceprint-item';
+
+        // 如果是主人公，添加特殊class
+        if (vp.name === currentProtagonist) {
+            item.classList.add('is-protagonist');
+        }
+
+        const duration = vp.duration ? `${vp.duration}秒` : '未知';
+        const createdDate = new Date(vp.created_time * 1000).toLocaleString();
+
+        item.innerHTML = `
+            <div class="voiceprint-info">
+                <div class="voiceprint-name">${vp.name}</div>
+                <div class="voiceprint-meta">
+                    <span class="meta-item">时长: ${duration}</span>
+                    <span class="meta-item">嵌入: ${vp.has_embedding ? '✓' : '✗'}</span>
+                    <span class="meta-item">大小: ${(vp.wav_size / 1024).toFixed(1)}KB</span>
+                </div>
+                <div class="voiceprint-date">${createdDate}</div>
+            </div>
+            <div class="voiceprint-actions">
+                <button class="protagonist-btn" title="设为主人公">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 2L10 6L14 6.5L11 10L12 14L8 12L4 14L5 10L2 6.5L6 6L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button class="play-btn" title="播放" data-name="${vp.name}">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 2L13 8L3 14V2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button class="delete-btn" title="删除">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M4 4H12M6 4V2H10V4M3 4V14H13V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        // 绑定设为主人公事件
+        const protagonistBtn = item.querySelector('.protagonist-btn');
+        protagonistBtn.onclick = async () => {
+            await setProtagonist(vp.name);
+        };
+
+        // 绑定播放事件
+        const playBtn = item.querySelector('.play-btn');
+        playBtn.onclick = () => {
+            const audioUrl = `/api/voiceprint/audio/${vp.name}`;
+
+            // 检查是否是当前正在播放的音频
+            if (audioPlayer.src.includes(encodeURIComponent(vp.name)) || audioPlayer.src.endsWith(audioUrl)) {
+                if (audioPlayer.paused) {
+                    audioPlayer.play();
+                    updatePlayButton(playBtn, true);
+                } else {
+                    audioPlayer.pause();
+                    updatePlayButton(playBtn, false);
+                }
+            } else {
+                // 播放新的音频
+                resetAllPlayButtons();
+                audioPlayer.src = audioUrl;
+                audioPlayer.play();
+                updatePlayButton(playBtn, true);
+            }
+        };
+
+        // 绑定删除事件
+        const deleteBtn = item.querySelector('.delete-btn');
+        deleteBtn.onclick = async () => {
+            if (confirm(`确定删除声纹 "${vp.name}" 吗？`)) {
+                await deleteVoiceprint(vp.name);
+            }
+        };
+
+        voiceprintList.appendChild(item);
+    });
+}
+
+// 删除声纹
+async function deleteVoiceprint(name) {
+    try {
+        const response = await fetch(`/api/voiceprints/${encodeURIComponent(name)}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showToast(`声纹已删除: ${name}`, 'success');
+            loadVoiceprintList();
+        } else {
+            showToast(`删除失败: ${result.detail}`, 'error');
+        }
+    } catch (error) {
+        console.error('删除声纹失败:', error);
+        showToast('删除声纹失败，请重试', 'error');
+    }
+}
+
+// 重建声纹嵌入
+async function rebuildVoiceprints() {
+    try {
+        const response = await fetch('/api/voiceprints/rebuild', {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showToast(result.message, 'success');
+            loadVoiceprintList();
+        } else {
+            showToast(`重建失败: ${result.detail}`, 'error');
+        }
+    } catch (error) {
+        console.error('重建声纹失败:', error);
+        showToast('重建声纹失败，请重试', 'error');
+    }
 }
 
 // ===== 智能分析功能 =====
@@ -1043,5 +1699,44 @@ function handleModelTypeChange(select) {
         hintText.textContent = '选择用于智能判定的小模型（建议使用轻量级模型）';
     }
 }
+
+// 初始化音频播放器事件监听
+document.addEventListener('DOMContentLoaded', () => {
+    if (audioPlayer) {
+        // 监听音频播放结束
+        audioPlayer.addEventListener('ended', () => {
+            resetAllPlayButtons();
+        });
+
+        // 监听音频暂停
+        audioPlayer.addEventListener('pause', () => {
+            const currentSrc = audioPlayer.src;
+            if (currentSrc) {
+                const btns = document.querySelectorAll('.play-btn');
+                btns.forEach(btn => {
+                    const name = btn.getAttribute('data-name');
+                    // 检查 URL 是否匹配（处理编码问题）
+                    if (name && (currentSrc.includes(encodeURIComponent(name)) || currentSrc.endsWith(name))) {
+                        updatePlayButton(btn, false);
+                    }
+                });
+            }
+        });
+
+        // 监听音频播放
+        audioPlayer.addEventListener('play', () => {
+            const currentSrc = audioPlayer.src;
+            if (currentSrc) {
+                const btns = document.querySelectorAll('.play-btn');
+                btns.forEach(btn => {
+                    const name = btn.getAttribute('data-name');
+                    if (name && (currentSrc.includes(encodeURIComponent(name)) || currentSrc.endsWith(name))) {
+                        updatePlayButton(btn, true);
+                    }
+                });
+            }
+        });
+    }
+});
 
 

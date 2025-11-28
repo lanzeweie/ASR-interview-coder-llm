@@ -9,7 +9,9 @@
     <!-- 高贵的字体 - Distinctive Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=JetBrains+Mono:wght@300;400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=JetBrains+Mono:wght@300;400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
 
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -23,7 +25,7 @@
                 <h2 class="sidebar-title">聊天记录</h2>
                 <button id="new-chat-btn" class="new-chat-btn" title="新建对话">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                     </svg>
                     <span>新建对话</span>
                 </button>
@@ -42,25 +44,39 @@
                 <div class="header-left">
                     <div class="panel-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <path d="M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z" fill="currentColor"/>
-                            <path d="M17 11C17 13.76 14.76 16 12 16C9.24 16 7 13.76 7 11H5C5 14.53 7.61 17.43 11 17.92V21H13V17.92C16.39 17.43 19 14.53 19 11H17Z" fill="currentColor"/>
+                            <path
+                                d="M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z"
+                                fill="currentColor" />
+                            <path
+                                d="M17 11C17 13.76 14.76 16 12 16C9.24 16 7 13.76 7 11H5C5 14.53 7.61 17.43 11 17.92V21H13V17.92C16.39 17.43 19 14.53 19 11H17Z"
+                                fill="currentColor" />
                         </svg>
                     </div>
                     <h1 class="panel-title">实时语音转写</h1>
                 </div>
                 <div class="header-controls">
-                    <div id="asr-status" class="status connected">
+                    <div id="asr-status" class="status disconnected">
                         <span class="status-dot"></span>
-                        <span class="status-text">Connected</span>
+                        <span class="status-text">未连接</span>
                     </div>
+                    <button id="voiceprint-settings-btn" class="control-btn" title="声纹管理">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path
+                                d="M9 2C11.76 2 14 4.24 14 7C14 8.5 13.42 9.82 12.41 10.77L12.77 11.88C12.87 12.08 12.85 12.31 12.73 12.5C11.92 14.16 10.55 15.5 9 15.5C7.45 15.5 6.08 14.16 5.27 12.5C5.15 12.31 5.13 12.08 5.23 11.88L5.59 10.77C4.58 9.82 4 8.5 4 7C4 4.24 6.24 2 9 2Z"
+                                stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                            <circle cx="9" cy="7" r="2.5" stroke="currentColor" stroke-width="1.5" />
+                        </svg>
+                    </button>
                     <button id="send-all-btn" class="control-btn" title="发送全部到AI">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M14 2L7 9M14 2L9 14L7 9M14 2L2 7L7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M14 2L7 9M14 2L9 14L7 9M14 2L2 7L7 9" stroke="currentColor" stroke-width="1.5"
+                                stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                     </button>
                     <button id="clear-asr-btn" class="control-btn" title="清空记录">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M2 4H14M6 4V2H10V4M3 4V14H13V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <path d="M2 4H14M6 4V2H10V4M3 4V14H13V4" stroke="currentColor" stroke-width="1.5"
+                                stroke-linecap="round" />
                         </svg>
                     </button>
                 </div>
@@ -79,9 +95,12 @@
                 <div class="header-left">
                     <div class="panel-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.5"
+                                stroke-linejoin="round" />
+                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.5"
+                                stroke-linejoin="round" />
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.5"
+                                stroke-linejoin="round" />
                         </svg>
                     </div>
                     <h1 class="panel-title">AI 助手</h1>
@@ -93,7 +112,8 @@
                         <span class="model-name-display">DeepSeek-V3.2</span>
                         <button class="model-switch-btn" title="切换模型">
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5"
+                                    stroke-linecap="round" stroke-linejoin="round" />
                             </svg>
                         </button>
                     </div>
@@ -106,13 +126,18 @@
                     </div>
                     <button id="settings-btn" class="control-btn" title="设置">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5"/>
-                            <path d="M13 8C13 8.34 12.97 8.67 12.91 9L14.22 10.03C14.35 10.13 14.39 10.31 14.31 10.46L13.06 12.54C12.98 12.69 12.8 12.75 12.64 12.69L11.06 12.11C10.72 12.37 10.35 12.59 9.94 12.76L9.68 14.42C9.65 14.59 9.5 14.71 9.33 14.71H6.83C6.66 14.71 6.51 14.59 6.48 14.42L6.22 12.76C5.81 12.59 5.44 12.37 5.1 12.11L3.52 12.69C3.36 12.75 3.18 12.69 3.1 12.54L1.85 10.46C1.77 10.31 1.81 10.13 1.94 10.03L3.25 9C3.19 8.67 3.16 8.34 3.16 8C3.16 7.66 3.19 7.33 3.25 7L1.94 5.97C1.81 5.87 1.77 5.69 1.85 5.54L3.1 3.46C3.18 3.31 3.36 3.25 3.52 3.31L5.1 3.89C5.44 3.63 5.81 3.41 6.22 3.24L6.48 1.58C6.51 1.41 6.66 1.29 6.83 1.29H9.33C9.5 1.29 9.65 1.41 9.68 1.58L9.94 3.24C10.35 3.41 10.72 3.63 11.06 3.89L12.64 3.31C12.8 3.25 12.98 3.31 13.06 3.46L14.31 5.54C14.39 5.69 14.35 5.87 14.22 5.97L12.91 7C12.97 7.33 13 7.66 13 8Z" stroke="currentColor" stroke-width="1.5"/>
+                            <path
+                                d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z"
+                                stroke="currentColor" stroke-width="1.5" />
+                            <path
+                                d="M13 8C13 8.34 12.97 8.67 12.91 9L14.22 10.03C14.35 10.13 14.39 10.31 14.31 10.46L13.06 12.54C12.98 12.69 12.8 12.75 12.64 12.69L11.06 12.11C10.72 12.37 10.35 12.59 9.94 12.76L9.68 14.42C9.65 14.59 9.5 14.71 9.33 14.71H6.83C6.66 14.71 6.51 14.59 6.48 14.42L6.22 12.76C5.81 12.59 5.44 12.37 5.1 12.11L3.52 12.69C3.36 12.75 3.18 12.69 3.1 12.54L1.85 10.46C1.77 10.31 1.81 10.13 1.94 10.03L3.25 9C3.19 8.67 3.16 8.34 3.16 8C3.16 7.66 3.19 7.33 3.25 7L1.94 5.97C1.81 5.87 1.77 5.69 1.85 5.54L3.1 3.46C3.18 3.31 3.36 3.25 3.52 3.31L5.1 3.89C5.44 3.63 5.81 3.41 6.22 3.24L6.48 1.58C6.51 1.41 6.66 1.29 6.83 1.29H9.33C9.5 1.29 9.65 1.41 9.68 1.58L9.94 3.24C10.35 3.41 10.72 3.63 11.06 3.89L12.64 3.31C12.8 3.25 12.98 3.31 13.06 3.46L14.31 5.54C14.39 5.69 14.35 5.87 14.22 5.97L12.91 7C12.97 7.33 13 7.66 13 8Z"
+                                stroke="currentColor" stroke-width="1.5" />
                         </svg>
                     </button>
                     <button id="clear-llm-btn" class="control-btn" title="清空对话">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M2 4H14M6 4V2H10V4M3 4V14H13V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <path d="M2 4H14M6 4V2H10V4M3 4V14H13V4" stroke="currentColor" stroke-width="1.5"
+                                stroke-linecap="round" />
                         </svg>
                     </button>
                 </div>
@@ -137,7 +162,9 @@
                         <!-- 智能分析开关 -->
                         <button id="agent-toggle" class="icon-control-btn" title="智能分析">
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                                <path d="M9 3C7.34 3 6 4.34 6 6V7H4C3.45 7 3 7.45 3 8V11C3 11.55 3.45 12 4 12H5V13C5 14.66 6.34 16 8 16H9C10.66 16 12 14.66 12 13V12H13C13.55 12 14 11.55 14 11V8C14 7.45 13.55 7 13 7H12V6C12 4.34 10.66 3 9 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                <path
+                                    d="M9 3C7.34 3 6 4.34 6 6V7H4C3.45 7 3 7.45 3 8V11C3 11.55 3.45 12 4 12H5V13C5 14.66 6.34 16 8 16H9C10.66 16 12 14.66 12 13V12H13C13.55 12 14 11.55 14 11V8C14 7.45 13.55 7 13 7H12V6C12 4.34 10.66 3 9 3Z"
+                                    stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
                             </svg>
                             <span class="tooltip-text">智能分析</span>
                         </button>
@@ -145,10 +172,11 @@
                         <!-- 多模型会话开关 -->
                         <button id="multi-llm-toggle" class="icon-control-btn" title="多模型会话">
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                                <circle cx="4" cy="9" r="3" stroke="currentColor" stroke-width="1.5"/>
-                                <circle cx="9" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/>
-                                <circle cx="14" cy="9" r="3" stroke="currentColor" stroke-width="1.5"/>
-                                <path d="M6.5 7L8 6.5M12 6.5L13.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                <circle cx="4" cy="9" r="3" stroke="currentColor" stroke-width="1.5" />
+                                <circle cx="9" cy="5" r="3" stroke="currentColor" stroke-width="1.5" />
+                                <circle cx="14" cy="9" r="3" stroke="currentColor" stroke-width="1.5" />
+                                <path d="M6.5 7L8 6.5M12 6.5L13.5 7" stroke="currentColor" stroke-width="1.5"
+                                    stroke-linecap="round" />
                             </svg>
                             <span class="tooltip-text">多模型会议</span>
                         </button>
@@ -164,7 +192,8 @@
                         <!-- 发送按钮 -->
                         <button id="llm-send-btn" class="send-btn" title="发送消息">
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                                <path d="M16 2L9 9M16 2L11 16L9 9M16 2L2 7L9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M16 2L9 9M16 2L11 16L9 9M16 2L2 7L9 9" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" />
                             </svg>
                         </button>
                     </div>
@@ -179,9 +208,9 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title">配置设置</h2>
-                <button class="close-btn" aria-label="关闭">
+                <button class="close-btn" aria-label="关闭" id="settings-close-btn">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                     </svg>
                 </button>
             </div>
@@ -195,7 +224,7 @@
                         <ul>
                             <li><strong>单击</strong>左侧模型查看配置详情</li>
                             <li><strong>双击模型或点击"设为当前"</strong>切换当前生效模型</li>
-                            <li>右侧有<strong>两个标签页</strong>：常规配置 + 多模型集群配置</li>
+                            <li>右侧有<strong>三个标签页</strong>：常规配置 + 多模型集群配置 + 智能分析</li>
                             <li>当前生效模型有<strong>绿色标识</strong></li>
                         </ul>
                     </div>
@@ -205,8 +234,10 @@
                 <div class="multi-llm-status">
                     <span class="status-label">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M8 2L2 5L8 8L14 5L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                            <path d="M2 11L8 14L14 11" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <path d="M8 2L2 5L8 8L14 5L8 2Z" stroke="currentColor" stroke-width="1.5"
+                                stroke-linejoin="round" />
+                            <path d="M2 11L8 14L14 11" stroke="currentColor" stroke-width="1.5"
+                                stroke-linejoin="round" />
                         </svg>
                         多模型集群:
                     </span>
@@ -219,7 +250,10 @@
                         <div class="list-header">
                             <span>模型列表</span>
                             <button id="add-config-btn" class="icon-btn" title="添加模型">
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" />
+                                </svg>
                             </button>
                         </div>
                         <div id="config-list" class="config-list">
@@ -228,132 +262,141 @@
                     </div>
 
                     <!-- 右侧：详细配置 -->
-                    <div class="settings-content"><div class="settings-content">
-    <div class="settings-tabs">
-        <button class="tab-button active" data-tab="config">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M3 4.5L9 2L15 4.5V13.5L9 16L3 13.5V4.5Z" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M9 2V16" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-            常规配置
-        </button>
-        <button class="tab-button" data-tab="multi">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <circle cx="3" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
-                <circle cx="9" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/>
-                <circle cx="15" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M5.5 7.5L7.5 6.5M12.5 6.5L14.5 7.5" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-            多模型集群
-        </button>
-        <button class="tab-button" data-tab="agent">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M9 3C7.34 3 6 4.34 6 6V7H4C3.45 7 3 7.45 3 8V11C3 11.55 3.45 12 4 12H5V13C5 14.66 6.34 16 8 16H9C10.66 16 12 14.66 12 13V12H13C13.55 12 14 11.55 14 11V8C14 7.45 13.55 7 13 7H12V6C12 4.34 10.66 3 9 3Z" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-            智能分析
-        </button>
-    </div>
+                    <div class="settings-content">
+                        <div class="settings-tabs">
+                            <button class="tab-button active" data-tab="config">
+                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                    <path d="M3 4.5L9 2L15 4.5V13.5L9 16L3 13.5V4.5Z" stroke="currentColor"
+                                        stroke-width="1.5" />
+                                    <path d="M9 2V16" stroke="currentColor" stroke-width="1.5" />
+                                </svg>
+                                常规配置
+                            </button>
+                            <button class="tab-button" data-tab="multi">
+                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                    <circle cx="3" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5" />
+                                    <circle cx="9" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5" />
+                                    <circle cx="15" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5" />
+                                    <path d="M5.5 7.5L7.5 6.5M12.5 6.5L14.5 7.5" stroke="currentColor"
+                                        stroke-width="1.5" />
+                                </svg>
+                                多模型集群
+                            </button>
+                            <button class="tab-button" data-tab="agent">
+                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                    <path
+                                        d="M9 3C7.34 3 6 4.34 6 6V7H4C3.45 7 3 7.45 3 8V11C3 11.55 3.45 12 4 12H5V13C5 14.66 6.34 16 8 16H9C10.66 16 12 14.66 12 13V12H13C13.55 12 14 11.55 14 11V8C14 7.45 13.55 7 13 7H12V6C12 4.34 10.66 3 9 3Z"
+                                        stroke="currentColor" stroke-width="1.5" />
+                                </svg>
+                                智能分析
+                            </button>
+                        </div>
 
-    <div id="tab-config" class="tab-content active">
-        <div class="form-group">
-            <label>配置名称</label>
-            <input type="text" id="config-name" placeholder="例如: DeepSeek">
-        </div>
-        <div class="form-group">
-            <label>标签快速选择</label>
-            <div class="tags-quick-select">
-                <div class="tag-option">
-                    <input type="radio" name="model-tag" id="tag-thinking" value="思考">
-                    <label for="tag-thinking" class="tag-label">思考</label>
+                        <div id="tab-config" class="tab-content active">
+                            <div class="form-group">
+                                <label>配置名称</label>
+                                <input type="text" id="config-name" placeholder="例如: DeepSeek">
+                            </div>
+                            <div class="form-group">
+                                <label>标签快速选择</label>
+                                <div class="tags-quick-select">
+                                    <div class="tag-option">
+                                        <input type="radio" name="model-tag" id="tag-thinking" value="思考">
+                                        <label for="tag-thinking" class="tag-label">思考</label>
+                                    </div>
+                                    <div class="tag-option">
+                                        <input type="radio" name="model-tag" id="tag-fast" value="快速">
+                                        <label for="tag-fast" class="tag-label">快速</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="config-tags">
+                            <div class="form-group">
+                                <label>API Base URL</label>
+                                <input type="text" id="api-base" placeholder="https://api.example.com/v1">
+                            </div>
+                            <div class="form-group">
+                                <label>API Key</label>
+                                <input type="password" id="api-key" placeholder="sk-...">
+                            </div>
+                            <div class="form-group">
+                                <label>Model Name</label>
+                                <input type="text" id="model-name" placeholder="gpt-3.5-turbo">
+                            </div>
+                            <div class="form-group">
+                                <label>System Prompt (可选)</label>
+                                <textarea id="system-prompt" rows="3"
+                                    placeholder="为此模型设置专属的 System Prompt..."></textarea>
+                            </div>
+                        </div>
+
+                        <div id="tab-multi" class="tab-content">
+                            <div class="multi-model-cluster">
+                                <div class="cluster-description">
+                                    <strong>🎯 多模型集群配置</strong><br>
+                                    选择要同时调用的AI模型，多个模型会同时生成回答，<br>
+                                    适合需要对比不同模型回答或增强回答质量场景。
+                                </div>
+                                <div id="multi-model-list" class="multi-model-options"></div>
+                            </div>
+                        </div>
+
+                        <div id="tab-agent" class="tab-content">
+                            <div class="multi-model-cluster">
+                                <div class="cluster-description">
+                                    <strong>🧠 智能分析配置</strong><br>
+                                    基于底层小模型智能判定是否需要启动多模型共话，<br>
+                                    在语音讨论场景下自动辅助主人公进行分析回答。
+                                </div>
+
+                                <div class="form-group">
+                                    <label>模型类型</label>
+                                    <select id="agent-model-type-select" class="form-select"
+                                        onchange="handleModelTypeChange(this)">
+                                        <option value="local">本地模型</option>
+                                        <option value="api">API 模型</option>
+                                    </select>
+                                    <div class="form-hint">选择使用本地模型或使用配置的API模型</div>
+                                </div>
+
+                                <div class="form-group" id="api-model-select-group">
+                                    <label>API 模型选择</label>
+                                    <select id="agent-model-select" class="form-select">
+                                        <option value="">-- 请选择 --</option>
+                                    </select>
+                                    <div class="form-hint">选择用于智能判定的小模型（建议使用轻量级模型）</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>字数阈值</label>
+                                    <div class="input-group">
+                                        <input type="number" id="agent-min-chars" min="5" max="50" value="10"
+                                            class="form-input">
+                                        <span class="input-suffix">字</span>
+                                    </div>
+                                    <div class="form-hint">累积到多少字后触发智能分析判定（默认10字）</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>静音检测时长</label>
+                                    <div class="input-group">
+                                        <input type="number" id="agent-silence-threshold" min="1" max="10" step="0.5"
+                                            value="2" class="form-input">
+                                        <span class="input-suffix">秒</span>
+                                    </div>
+                                    <div class="form-hint">检测到多少秒没有新语音时触发分析（默认2秒）</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="tag-option">
-                    <input type="radio" name="model-tag" id="tag-fast" value="快速">
-                    <label for="tag-fast" class="tag-label">快速</label>
-                </div>
-            </div>
-        </div>
-        <input type="hidden" id="config-tags">
-        <div class="form-group">
-            <label>API Base URL</label>
-            <input type="text" id="api-base" placeholder="https://api.example.com/v1">
-        </div>
-        <div class="form-group">
-            <label>API Key</label>
-            <input type="password" id="api-key" placeholder="sk-...">
-        </div>
-        <div class="form-group">
-            <label>Model Name</label>
-            <input type="text" id="model-name" placeholder="gpt-3.5-turbo">
-        </div>
-        <div class="form-group">
-            <label>System Prompt (可选)</label>
-            <textarea id="system-prompt" rows="3" placeholder="为此模型设置专属的 System Prompt..."></textarea>
-        </div>
-    </div>
-    
-    <div id="tab-multi" class="tab-content">
-        <div class="multi-model-cluster">
-            <div class="cluster-description">
-                <strong>🎯 多模型集群配置</strong><br>
-                选择要同时调用的AI模型，多个模型会同时生成回答，<br>
-                适合需要对比不同模型回答或增强回答质量场景。
-            </div>
-            <div id="multi-model-list" class="multi-model-options">
-                </div>
-        </div>
-    </div>
-    
-    <div id="tab-agent" class="tab-content">
-        <div class="agent-config-section">
-            <div class="agent-description">
-                <strong>🧠 智能分析配置</strong><br>
-                基于底层小模型智能判定是否需要启动多模型共话，<br>
-                在语音讨论场景下自动辅助主人公进行分析回答。
             </div>
 
-            <div class="form-group">
-                <label>模型类型</label>
-                <select id="agent-model-type-select" class="form-select" onchange="handleModelTypeChange(this)">
-                    <option value="local">本地模型</option>
-                    <option value="api">API 模型</option>
-                </select>
-                <div class="form-hint">选择使用本地模型或使用配置的API模型</div>
-            </div>
-
-            <div class="form-group" id="api-model-select-group">
-                <label>API 模型选择</label>
-                <select id="agent-model-select" class="form-select">
-                    <option value="">-- 请选择 --</option>
-                </select>
-                <div class="form-hint">选择用于智能判定的小模型（建议使用轻量级模型）</div>
-            </div>
-
-            <div class="form-group">
-                <label>字数阈值</label>
-                <div class="input-group">
-                    <input type="number" id="agent-min-chars" min="5" max="50" value="10" class="form-input">
-                    <span class="input-suffix">字</span>
-                </div>
-                <div class="form-hint">累积到多少字后触发智能分析判定（默认10字）</div>
-            </div>
-
-            <div class="form-group">
-                <label>静音检测时长</label>
-                <div class="input-group">
-                    <input type="number" id="agent-silence-threshold" min="1" max="10" step="0.5" value="2" class="form-input">
-                    <span class="input-suffix">秒</span>
-                </div>
-                <div class="form-hint">检测到多少秒没有新语音时触发分析（默认2秒）</div>
-            </div>
-        </div>
-    </div> <div class="modal-actions">
-        <button id="delete-config-btn" class="btn btn-danger" style="display: none;">删除</button>
-        <div class="spacer"></div>
-        <button id="test-conn-btn" class="btn btn-secondary">测试连接</button>
-        <button id="save-config-btn" class="btn btn-primary">保存</button>
-    </div>
-</div>
-                </div>
+            <div class="modal-actions">
+                <button id="delete-config-btn" class="btn btn-danger" style="display: none;">删除</button>
+                <div class="spacer"></div>
+                <button id="test-conn-btn" class="btn btn-secondary">测试连接</button>
+                <button id="save-config-btn" class="btn btn-primary">保存</button>
             </div>
         </div>
     </div>
@@ -361,15 +404,133 @@
     <!-- 浮动按钮：文本选择分析 -->
     <button id="float-send-btn" class="float-btn" style="display: none;">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 2L2 5L8 8L14 5L8 2Z" fill="currentColor"/>
-            <path d="M2 11L8 14L14 11" fill="currentColor" opacity="0.6"/>
-            <path d="M2 8L8 11L14 8" fill="currentColor" opacity="0.8"/>
+            <path d="M8 2L2 5L8 8L14 5L8 2Z" fill="currentColor" />
+            <path d="M2 11L8 14L14 11" fill="currentColor" opacity="0.6" />
+            <path d="M2 8L8 11L14 8" fill="currentColor" opacity="0.8" />
         </svg>
         <span>AI 分析</span>
     </button>
 
     <!-- Toast 通知容器 -->
     <div class="toast-container" id="toast-container"></div>
+
+    <!-- 声纹管理模态框 - 独立设置框 -->
+    <div id="voiceprint-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">
+                    <svg width="24" height="24" viewBox="0 0 18 18" fill="none" style="margin-right: 8px;">
+                        <path
+                            d="M9 2C11.76 2 14 4.24 14 7C14 8.5 13.42 9.82 12.41 10.77L12.77 11.88C12.87 12.08 12.85 12.31 12.73 12.5C11.92 14.16 10.55 15.5 9 15.5C7.45 15.5 6.08 14.16 5.27 12.5C5.15 12.31 5.13 12.08 5.23 11.88L5.59 10.77C4.58 9.82 4 8.5 4 7C4 4.24 6.24 2 9 2Z"
+                            stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                        <circle cx="9" cy="7" r="2.5" stroke="currentColor" stroke-width="1.5" />
+                    </svg>
+                    声纹管理
+                </h2>
+                <button class="close-btn" aria-label="关闭" id="voiceprint-close-btn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="voiceprint-config-section">
+                    <div class="voiceprint-description">
+                        <strong>🎙️ 声纹管理</strong><br>
+                        录入和管理说话人声纹库，用于实时语音转写中的说话人识别。<br>
+                        录制时长要求：10-40 秒，请清晰说话。
+                    </div>
+
+                    <div class="voiceprint-recorder">
+
+                        <div class="voiceprint-recording-controls">
+                            <button id="start-record-btn" class="btn btn-primary">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor"
+                                        stroke-width="1.5" />
+                                    <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5" />
+                                </svg>
+                                添加声纹
+                            </button>
+
+                            <button id="stop-record-btn" class="btn btn-secondary" style="display: none;">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor" />
+                                </svg>
+                                停止录制
+                            </button>
+
+                            <button id="save-record-btn" class="btn btn-success" style="display: none;">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M3 3H13V13H3V3Z" stroke="currentColor" stroke-width="1.5" />
+                                    <path d="M7 3V2C7 1.45 7.45 1 8 1H9C9.55 1 10 1.45 10 2V3" stroke="currentColor"
+                                        stroke-width="1.5" />
+                                </svg>
+                                保存声纹
+                            </button>
+
+                            <button id="discard-record-btn" class="btn btn-secondary" style="display: none;">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M3 4H13M5 4V2H11V4" stroke="currentColor" stroke-width="1.5"
+                                        stroke-linecap="round" />
+                                    <path d="M6 7V12M8 7V12M10 7V12" stroke="currentColor" stroke-width="1.5"
+                                        stroke-linecap="round" />
+                                </svg>
+                                丢弃
+                            </button>
+                        </div>
+
+                        <div id="recording-status" class="recording-status" style="display: none;">
+                            <!-- 朗读提示文字 -->
+                            <div id="recording-prompt" class="recording-prompt" style="display: none;">
+                                <div class="prompt-content"><strong>请清晰朗读以下内容：</strong><br>大家好，我是张三，来自北京。我的爱好是听音乐和看书。希望大家多多关照！</div>
+                            </div>
+
+                            <div class="recording-indicator">
+                                <span class="recording-dot"></span>
+                                <span class="recording-text">录制中...</span>
+                            </div>
+                            <div class="recording-timer">
+                                <span id="recording-duration">0.0</span> 秒
+                            </div>
+                            <div class="recording-progress">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="progress-fill"></div>
+                                </div>
+                                <div class="progress-label">
+                                    <span>10秒</span>
+                                    <span>40秒</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="audio-preview" class="audio-preview" style="display: none;">
+                            <label>录音预览</label>
+                            <audio id="audio-player" controls></audio>
+                        </div>
+                    </div>
+
+                    <div class="voiceprint-list-section">
+                        <div class="list-header">
+                            <span>已录入声纹</span>
+                            <button id="rebuild-voiceprints-btn" class="icon-btn" title="重新计算所有声纹嵌入">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M8 2V5M8 11V14M3.5 3.5L5.5 5.5M10.5 10.5L12.5 12.5M2 8H5M11 8H14"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                                </svg>
+                                重建嵌入
+                            </button>
+                        </div>
+                        <div id="voiceprint-list" class="voiceprint-list">
+                            <!-- 声纹列表将在这里显示 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/script.js"></script>
 </body>

@@ -3,7 +3,9 @@ import asyncio
 import json
 import os
 import argparse
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
+import wave
+import base64
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -292,25 +294,55 @@ async def startup_event():
             agent_model_name = agent_config.get("model_name")
 
             if agent_model_name:
-                # Find agent model config
-                model_config = next(
-                    (c for c in config_data.get("configs", []) if c["name"] == agent_model_name),
-                    None
-                )
-
-                if model_config:
-                    # Add model_type to config
-                    model_config['model_type'] = 'api'
+                # 检查是否显式指定了模型类型
+                model_type = agent_config.get('model_type', None)
+                
+                if model_type == 'local':
+                    # 显式指定为本地模型
+                    print(f"[配置] 使用本地模型: {agent_model_name}")
+                    model_config = {
+                        'model_type': 'local',
+                        'model': agent_model_name
+                    }
                     agent_manager.load_agent(agent_config, model_config)
-                    print(f"[成功] 智能 Agent 已加载: {agent_model_name}")
+                    print(f"[成功] 智能 Agent 已加载（本地模型）: {agent_model_name}")
                 else:
-                    print(f"[警告] 未找到 Agent 模型配置: {agent_model_name}")
+                    # 未显式指定或指定为API，先尝试从configs中查找
+                    model_config = next(
+                        (c for c in config_data.get("configs", []) if c["name"] == agent_model_name),
+                        None
+                    )
+
+                    if model_config:
+                        # 在API配置中找到了，使用API模式
+                        model_config['model_type'] = 'api'
+                        agent_manager.load_agent(agent_config, model_config)
+                        print(f"[成功] 智能 Agent 已加载（API模型）: {agent_model_name}")
+                    else:
+                        # API配置中没找到，作为本地模型处理
+                        print(f"[配置] 在API配置中未找到 '{agent_model_name}'，作为本地模型加载")
+                        model_config = {
+                            'model_type': 'local',
+                            'model': agent_model_name
+                        }
+                        agent_manager.load_agent(agent_config, model_config)
+                        print(f"[成功] 智能 Agent 已加载（本地模型）: {agent_model_name}")
             else:
                 print("[配置] 未配置智能 Agent 模型")
 
             # 注册智能分析回调
             trigger_manager.add_callback(agent_analysis_callback)
             print("[成功] 智能分析回调已注册")
+
+            # 设置trigger manager的event loop引用
+            trigger_manager.set_event_loop(main_event_loop)
+            print("[成功] Trigger Manager event loop已设置")
+
+            # 加载主人公配置
+            protagonist = config_data.get("protagonist", "")
+            if protagonist:
+                trigger_manager.set_protagonist(protagonist)
+                print(f"[成功] 主人公已加载: {protagonist}")
 
         except Exception as e:
             print(f"[错误] 智能 Agent 初始化失败: {e}")
@@ -325,6 +357,18 @@ async def get():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+
+    # 立即发送 ASR 系统状态给前端
+    await websocket.send_json({
+        "time": "00:00:00",
+        "speaker": "系统",
+        "text": "ASR 系统未初始化" if not asr_system else "ASR 系统已就绪",
+        "asr_status": {
+            "initialized": asr_system is not None,
+            "message": "请使用正常模式启动服务器以启用实时语音转写功能" if not asr_system else "实时语音转写功能已启用"
+        }
+    })
+
     try:
         while True:
             # Keep the connection alive
@@ -505,6 +549,31 @@ async def manual_analyze(data: dict = Body(...)):
     result = await agent_manager.analyze_conversation(messages, speaker_name)
     return result
 
+@app.get("/api/protagonist")
+async def get_protagonist():
+    """获取当前主人公配置"""
+    config_data = load_config()
+    protagonist = config_data.get("protagonist", "")
+    return {"protagonist": protagonist}
+
+@app.post("/api/protagonist")
+async def set_protagonist_endpoint(data: dict = Body(...)):
+    """设置主人公"""
+    if not AGENT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="智能 Agent 模块不可用")
+    
+    protagonist = data.get("protagonist", "").strip()
+    
+    # 更新trigger manager
+    trigger_manager.set_protagonist(protagonist)
+    
+    # 保存到配置文件
+    config_data = load_config()
+    config_data["protagonist"] = protagonist
+    save_config(config_data)
+    
+    return {"status": "success", "protagonist": protagonist}
+
 @app.post("/api/agent/trigger")
 async def trigger_multi_llm(data: dict = Body(...)):
     """手动触发多模型共话"""
@@ -518,6 +587,236 @@ async def trigger_multi_llm(data: dict = Body(...)):
         "messages": messages,
         "chat_id": chat_id
     }
+
+# --- 声纹管理 API ---
+
+@app.get("/api/voiceprints")
+async def get_voiceprints():
+    """获取声纹库列表"""
+    # 即使ASR系统未初始化，也能查看声纹列表
+    voiceprint_dir = asr_system.VOICEPRINT_DIR if asr_system else "voiceprints"
+
+    if not os.path.exists(voiceprint_dir):
+        return {"voiceprints": []}
+
+    voiceprints = []
+    for filename in os.listdir(voiceprint_dir):
+        if filename.lower().endswith('.wav'):
+            name = os.path.splitext(filename)[0]
+            wav_path = os.path.join(voiceprint_dir, filename)
+            npy_path = os.path.join(voiceprint_dir, f"{name}.npy")
+
+            # 获取文件大小
+            wav_size = os.path.getsize(wav_path)
+            has_embedding = os.path.exists(npy_path)
+            embedding_size = os.path.getsize(npy_path) if has_embedding else 0
+
+            # 获取音频时长（简单估算）
+            try:
+                import soundfile as sf
+                info = sf.info(wav_path)
+                duration = round(info.duration, 2)
+            except:
+                duration = None
+
+            voiceprints.append({
+                "name": name,
+                "wav_file": filename,
+                "wav_size": wav_size,
+                "has_embedding": has_embedding,
+                "embedding_size": embedding_size,
+                "duration": duration,
+                "created_time": os.path.getctime(wav_path)
+            })
+
+    return {"voiceprints": voiceprints}
+
+@app.post("/api/voiceprints")
+async def create_voiceprint(data: dict = Body(...)):
+    """录制并保存新的声纹"""
+    name = data.get("name", "").strip()
+    audio_data = data.get("audio_data", "")
+
+    if not name:
+        raise HTTPException(status_code=400, detail="请输入说话人姓名")
+
+    if not audio_data:
+        raise HTTPException(status_code=400, detail="缺少音频数据")
+
+    # 检查姓名是否已存在
+    voiceprint_dir = asr_system.VOICEPRINT_DIR if asr_system else "voiceprints"
+    wav_path = os.path.join(voiceprint_dir, f"{name}.wav")
+    npy_path = os.path.join(voiceprint_dir, f"{name}.npy")
+
+    if os.path.exists(wav_path):
+        raise HTTPException(status_code=400, detail=f"说话人 '{name}' 已存在")
+
+    try:
+        # 解码 base64 音频数据
+        # 前端发送的格式: "data:audio/wav;base64,<base64_data>"
+        if ',' in audio_data:
+            header, audio_base64 = audio_data.split(',', 1)
+        else:
+            audio_base64 = audio_data
+
+        audio_bytes = base64.b64decode(audio_base64)
+
+        # 保存为临时 WAV 文件
+        temp_path = os.path.join(voiceprint_dir, f"temp_{name}.wav")
+        with open(temp_path, 'wb') as f:
+            f.write(audio_bytes)
+
+        # 检查音频时长
+        duration = None
+        try:
+            import soundfile as sf
+            info = sf.info(temp_path)
+            duration = info.duration
+
+            if duration < 10:
+                os.remove(temp_path)
+                raise HTTPException(status_code=400, detail=f"录制时长太短 ({duration:.1f}秒)，至少需要 10 秒")
+
+            if duration > 40:
+                os.remove(temp_path)
+                raise HTTPException(status_code=400, detail=f"录制时长太长 ({duration:.1f}秒)，最多 40 秒")
+        except Exception as e:
+            os.remove(temp_path)
+            raise HTTPException(status_code=400, detail=f"音频验证失败: {str(e)}")
+
+        # 如果 ASR 系统已初始化，使用完整流程
+        if asr_system:
+            # 转换并保存为标准格式
+            asr_system.check_and_convert_audio(temp_path)
+            # 重命名为最终文件名
+            os.rename(temp_path, wav_path)
+
+            # 计算并保存嵌入
+            print(f"正在为 {name} 计算声纹嵌入...")
+            embedding = asr_system.extract_embedding(wav_path)
+            if embedding is not None:
+                import numpy as np
+                np.save(npy_path, embedding)
+                print(f"✅ 声纹嵌入已保存: {name}")
+
+                # 重新加载声纹库
+                asr_system.load_voiceprints()
+
+                return {
+                    "status": "success",
+                    "message": f"声纹已保存: {name}",
+                    "name": name,
+                    "duration": duration,
+                    "embedding_saved": True
+                }
+            else:
+                os.remove(wav_path)
+                if os.path.exists(npy_path):
+                    os.remove(npy_path)
+                raise HTTPException(status_code=500, detail="声纹嵌入计算失败")
+        else:
+            # ASR 系统未初始化，只保存 WAV 文件
+            # 后续 main.py 启动时会自动转换
+            os.rename(temp_path, wav_path)
+            print(f"⚠️  ASR 系统未初始化，已保存 WAV 文件: {name}")
+            print(f"💡 提示：使用正常模式启动服务器时会自动计算声纹嵌入")
+
+            return {
+                "status": "success",
+                "message": f"声纹已保存: {name}（仅音频文件，嵌入将在下次正常启动时计算）",
+                "name": name,
+                "duration": duration,
+                "embedding_saved": False
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # 清理临时文件
+        temp_path = os.path.join(voiceprint_dir, f"temp_{name}.wav")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+
+@app.delete("/api/voiceprints/{name}")
+async def delete_voiceprint(name: str):
+    """删除声纹"""
+    # 即使ASR系统未初始化，也能删除声纹文件
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="请提供说话人姓名")
+
+    voiceprint_dir = asr_system.VOICEPRINT_DIR if asr_system else "voiceprints"
+    wav_path = os.path.join(voiceprint_dir, f"{name}.wav")
+    npy_path = os.path.join(voiceprint_dir, f"{name}.npy")
+
+    deleted_files = []
+
+    # 删除 WAV 文件
+    if os.path.exists(wav_path):
+        os.remove(wav_path)
+        deleted_files.append(f"{name}.wav")
+
+    # 删除 NPY 文件
+    if os.path.exists(npy_path):
+        os.remove(npy_path)
+        deleted_files.append(f"{name}.npy")
+
+    if not deleted_files:
+        raise HTTPException(status_code=404, detail=f"未找到说话人 '{name}' 的声纹")
+
+    # 只有在ASR系统初始化时才重新加载声纹库
+    if asr_system:
+        asr_system.load_voiceprints()
+
+    return {
+        "status": "success",
+        "message": f"已删除声纹: {name}",
+        "deleted_files": deleted_files
+    }
+
+@app.post("/api/voiceprints/rebuild")
+async def rebuild_voiceprints():
+    """重新计算所有声纹嵌入"""
+    if not asr_system:
+        return {
+            "status": "error",
+            "detail": "ASR 系统未初始化，无法重新计算嵌入。",
+            "message": "请使用正常模式启动服务器（不使用 --no 参数）"
+        }
+
+    try:
+        asr_system.load_voiceprints()
+        return {
+            "status": "success",
+            "message": "声纹嵌入重新计算完成",
+            "count": len(asr_system.speakers)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"重新计算失败: {str(e)}")
+
+@app.get("/api/voiceprint/audio/{name}")
+async def get_voiceprint_audio(name: str):
+    """获取声纹音频文件"""
+    # 即使ASR系统未初始化，也能提供音频文件
+    # 解码URL编码的名字
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="请提供说话人姓名")
+
+    voiceprint_dir = asr_system.VOICEPRINT_DIR if asr_system else "voiceprints"
+    wav_path = os.path.join(voiceprint_dir, f"{name}.wav")
+
+    if not os.path.exists(wav_path):
+        raise HTTPException(status_code=404, detail=f"未找到声纹文件: {name}")
+
+    # 返回音频文件
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        wav_path,
+        media_type='audio/wav',
+        filename=f"{name}.wav"
+    )
 
 @app.websocket("/ws/llm")
 async def llm_websocket(websocket: WebSocket):
