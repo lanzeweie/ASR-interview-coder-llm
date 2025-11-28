@@ -2877,6 +2877,44 @@ input:checked+.slider:before {
     margin-bottom: var(--gap-sm);
 }
 
+/* 主人公提示区域 */
+.protagonist-prompt {
+    padding: var(--gap-md);
+    background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-md);
+    margin-bottom: var(--gap-md);
+}
+
+.protagonist-prompt .prompt-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.protagonist-prompt .prompt-text {
+    flex: 1;
+}
+
+.protagonist-prompt .prompt-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #d97706;
+    margin-bottom: var(--gap-xs);
+}
+
+.protagonist-prompt .prompt-content {
+    font-size: 14px;
+    color: #92400e;
+    line-height: 1.5;
+}
+
+.protagonist-prompt .btn.small {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
 .audio-preview audio {
     width: 100%;
     border-radius: 4px;

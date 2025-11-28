@@ -1335,9 +1335,42 @@ async function loadVoiceprintList() {
         const response = await fetch('/api/voiceprints');
         const data = await response.json();
         renderVoiceprintList(data.voiceprints || []);
+        checkProtagonistPrompt(data.voiceprints || []);
     } catch (error) {
         console.error('加载声纹列表失败:', error);
         showToast('加载声纹列表失败', 'error');
+    }
+}
+
+// 检查是否需要显示主人公提示
+async function checkProtagonistPrompt(voiceprints) {
+    const promptEl = document.getElementById('protagonist-prompt');
+    const setBtn = document.getElementById('set-protagonist-btn');
+
+    if (!promptEl) return;
+
+    // 如果有声纹数据
+    if (voiceprints.length > 0) {
+        // 获取当前主人公
+        const protagonist = await loadProtagonist();
+
+        // 如果没有设置主人公，显示提示
+        if (!protagonist) {
+            promptEl.style.display = 'flex';
+            // 点击设置按钮时，选择第一个声纹设为主人公
+            if (setBtn) {
+                setBtn.onclick = async () => {
+                    if (voiceprints.length > 0) {
+                        await setProtagonist(voiceprints[0].name);
+                        promptEl.style.display = 'none';
+                    }
+                };
+            }
+        } else {
+            promptEl.style.display = 'none';
+        }
+    } else {
+        promptEl.style.display = 'none';
     }
 }
 
@@ -1559,6 +1592,24 @@ function updateAgentStatusIndicator() {
 async function toggleAgent() {
     try {
         const newEnabled = !agentEnabled;
+
+        // 如果要开启智能分析，先检查是否设置了主人公
+        if (newEnabled) {
+            const protagonist = await loadProtagonist();
+            if (!protagonist) {
+                // 检查是否有声纹数据
+                const voiceRes = await fetch('/api/voiceprints');
+                const voiceData = await voiceRes.json();
+                const voiceprints = voiceData.voiceprints || [];
+
+                if (voiceprints.length === 0) {
+                    showToast('建议在声纹中设置主人公后再开启智能分析', 'warning');
+                } else {
+                    showToast('建议设置一个声纹为主人公后再开启智能分析', 'warning');
+                }
+            }
+        }
+
         const response = await fetch('/api/agent/enable', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
