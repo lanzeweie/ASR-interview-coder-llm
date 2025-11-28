@@ -11,3 +11,4 @@ wheels/
 .history
 SenseVoiceSmall
 speech_campplus_sv_zh-cn_16k-common
+api_config.json

@@ -199,10 +199,11 @@ function getOrCreateResponseDiv(modelName) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message ai';
 
-    // Header with Model Tag
+    // Header with Model Tag - 使用当前模型配置名称
+    const speakerName = currentConfigName || 'AI 助手';
     const headerHtml = modelName
-        ? `<div class="message-header"><span class="speaker-name">AI 助手</span><span class="model-tag">${modelName}</span></div>`
-        : `<div class="message-header"><span class="speaker-name">AI 助手</span></div>`;
+        ? `<div class="message-header"><span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span></div>`
+        : `<div class="message-header"><span class="speaker-name">${speakerName}</span></div>`;
 
     msgDiv.innerHTML = `
         ${headerHtml}
@@ -321,6 +322,7 @@ function renderChatList(chats) {
                 currentChatId = chat.id;
                 loadChatMessages(chat.id);
                 loadChatList();
+                saveUIState(); // 保存当前聊天ID
             }
         };
         item.querySelector('.delete-chat-btn').onclick = async (e) => {
@@ -340,6 +342,7 @@ async function createNewChat() {
         llmWindow.innerHTML = '';
         addSystemWelcome();
         loadChatList();
+        saveUIState(); // 保存新聊天ID
     } catch (e) { showToast("创建对话失败", 'error'); }
 }
 
@@ -370,9 +373,12 @@ async function loadChatMessages(chatId) {
                     content = match[2];
                 }
 
+                // 使用当前模型配置名称显示
+                // 多模型共话时使用modelName，单模型时使用currentConfigName
+                const speakerName = modelName || currentConfigName || 'AI 助手';
                 const headerHtml = modelName
-                    ? `<div class="message-header"><span class="speaker-name">AI 助手</span><span class="model-tag">${modelName}</span></div>`
-                    : `<div class="message-header"><span class="speaker-name">AI 助手</span></div>`;
+                    ? `<div class="message-header"><span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span></div>`
+                    : `<div class="message-header"><span class="speaker-name">${speakerName}</span></div>`;
 
                 msgDiv.innerHTML = `${headerHtml}<div class="message-content">${content}</div>`;
             } else {
@@ -380,14 +386,45 @@ async function loadChatMessages(chatId) {
             }
             llmWindow.appendChild(msgDiv);
         });
-    } else {
-        addSystemWelcome();
     }
+    // 无论是否有历史消息，都添加欢迎语以反映当前功能状态
+    addSystemWelcome();
     llmWindow.scrollTop = llmWindow.scrollHeight;
 }
 
 function addSystemWelcome() {
-    llmWindow.innerHTML += `<div class="message system-message"><div class="message-content">你好！我是你的AI助手。你可以直接跟我对话，或者从左侧发送语音记录让我分析。选中任意文本也可以快速提问哦！</div></div>`;
+    // 构建动态欢迎消息
+    let welcomeText = '你好！';
+    welcomeText += '你可以直接跟我对话，或者从左侧发送语音记录让我分析。';
+
+    // 检查多模型会议状态
+    const isMultiMode = multiLLMToggle.classList.contains('active');
+    if (isMultiMode) {
+        const activeCount = multiLLMActiveNames.size;
+        welcomeText += ` 多模型会议已开启，现在你的消息会有${activeCount}个模型帮你同时分析呢。`;
+    }
+
+    // 检查智能分析状态（使用UI状态，更可靠）
+    const isAgentActive = agentToggleBtn.classList.contains('active');
+    if (isAgentActive) {
+        welcomeText += ' 智能分析已启动，我会跟语音情况来分析问题哦，记得设置主人公哦，一切回答以主人公的有利形势展开。';
+    }
+
+    welcomeText += ' 选中任意文本也可以快速提问哦！';
+
+    llmWindow.innerHTML += `<div class="message system-message"><div class="message-content">${welcomeText}</div></div>`;
+}
+
+// 更新欢迎语（当功能状态改变时调用）
+function updateWelcomeMessage() {
+    // 查找当前的欢迎消息
+    const welcomeMsgs = llmWindow.querySelectorAll('.message.system-message');
+    welcomeMsgs.forEach(msg => {
+        // 删除所有旧的欢迎语
+        msg.remove();
+    });
+    // 重新添加欢迎语
+    addSystemWelcome();
 }
 
 async function clearCurrentChat() {
@@ -864,6 +901,8 @@ function initEventListeners() {
         multiLLMToggle.title = isMulti ? '多模型会话已开启，点击关闭' : '多模型会话已关闭，点击开启';
         showToast(`多模型会话模式已${isMulti ? '开启' : '关闭'}`, 'info');
         updateModelDisplay(isMulti);
+        updateWelcomeMessage(); // 更新欢迎语
+        saveUIState(); // 保存状态
     });
 
     document.addEventListener('mouseup', handleTextSelection);
@@ -900,6 +939,75 @@ function loadSavedWidths() {
     const asrWidth = localStorage.getItem('ast_asr_width');
     const asrPanel = document.getElementById('asr-panel');
     if (asrWidth && asrPanel) asrPanel.style.width = `${asrWidth}px`;
+}
+
+// ===== UI State Persistence =====
+function saveUIState() {
+    const uiState = {
+        multiLLMActive: multiLLMToggle.classList.contains('active'),
+        agentToggleActive: agentToggleBtn.classList.contains('active'), // UI状态，不是后端状态
+        currentChatId: currentChatId,
+        timestamp: Date.now()
+    };
+    localStorage.setItem('ast_ui_state', JSON.stringify(uiState));
+    console.log('💾 UI状态已保存:', uiState);
+}
+
+function loadUIState() {
+    try {
+        const savedState = localStorage.getItem('ast_ui_state');
+        if (!savedState) return;
+
+        const uiState = JSON.parse(savedState);
+        const age = Date.now() - (uiState.timestamp || 0);
+        // 状态超过7天则忽略，恢复默认
+        if (age > 7 * 24 * 60 * 60 * 1000) {
+            console.log('保存的UI状态已过期，使用默认状态');
+            return;
+        }
+
+        // 恢复多模型会话开关状态
+        if (typeof uiState.multiLLMActive === 'boolean') {
+            if (uiState.multiLLMActive && !multiLLMToggle.classList.contains('active')) {
+                multiLLMToggle.classList.add('active');
+                updateModelDisplay(true);
+            } else if (!uiState.multiLLMActive && multiLLMToggle.classList.contains('active')) {
+                multiLLMToggle.classList.remove('active');
+                updateModelDisplay(false);
+            }
+        }
+
+        // 恢复智能分析UI状态（注意：这只是UI状态，实际状态以后端API为准）
+        if (typeof uiState.agentToggleActive === 'boolean') {
+            if (uiState.agentToggleActive && !agentToggleBtn.classList.contains('active')) {
+                agentToggleBtn.classList.add('active');
+            } else if (!uiState.agentToggleActive && agentToggleBtn.classList.contains('active')) {
+                agentToggleBtn.classList.remove('active');
+            }
+        }
+
+        // 恢复当前聊天ID（需要检查是否存在）
+        if (uiState.currentChatId) {
+            // 延迟到聊天列表加载完成后恢复
+            setTimeout(async () => {
+                try {
+                    const response = await fetch(`/api/chats/${uiState.currentChatId}`);
+                    if (response.ok) {
+                        const chatData = await response.json();
+                        currentChatId = uiState.currentChatId;
+                        loadChatMessages(currentChatId);
+                        console.log('已恢复上次查看的聊天:', chatData.title);
+                    }
+                } catch (error) {
+                    console.log('恢复聊天失败，聊天可能已删除:', error);
+                }
+            }, 100);
+        }
+
+        console.log('UI状态已恢复:', uiState);
+    } catch (error) {
+        console.error('恢复UI状态失败:', error);
+    }
 }
 
 function initResizers() {
@@ -1031,7 +1139,7 @@ function updateModelDisplay(isMultiMode = false) {
 }
 
 // ===== 初始化 =====
-function init() {
+async function init() {
     console.log('🎤 AST Frontend 初始化中...');
     loadSavedWidths();
     initResizers();
@@ -1039,10 +1147,15 @@ function init() {
     autoResizeTextarea();
     connectASR();
     connectLLM();
-    loadChatList();
+    loadUIState(); // 恢复保存的UI状态（需要在加载配置之前）
+    await loadConfigs(); // 加载配置并更新模型显示
     initMultiLLMToggle(); // 初始化多模型共话开关
-    initAgentStatus();
-    updateModelDisplay(false); // 初始化模型显示
+    initAgentStatus(); // 初始化智能分析状态
+    await loadChatList(); // 最后加载聊天列表，此时所有状态都已就绪
+    // 在所有状态加载完成后，更新欢迎语以反映当前功能状态
+    setTimeout(() => {
+        updateWelcomeMessage();
+    }, 100);
     console.log('✨ AST Frontend 初始化完成');
 }
 
@@ -1051,9 +1164,11 @@ else init();
 
 // ===== 多模型会话开关初始化 =====
 function initMultiLLMToggle() {
-    // 默认状态为关闭
-    multiLLMToggle.classList.remove('active');
-    multiLLMToggle.title = '多模型会话已关闭，点击开启';
+    // 如果没有保存的状态，则设置为默认关闭状态
+    if (!localStorage.getItem('ast_ui_state')) {
+        multiLLMToggle.classList.remove('active');
+        multiLLMToggle.title = '多模型会话已关闭，点击开启';
+    }
 }
 
 // ===== 声纹管理功能 =====
@@ -1732,11 +1847,21 @@ async function initAgentStatus() {
         const data = await response.json();
 
         if (data.available) {
-            agentEnabled = data.enabled || false;
-            agentStatus = data.status;
-            updateAgentToggleUI();
-            updateAgentStatusIndicator();
-            agentToggleBtn.title = agentEnabled ? '智能分析已开启，点击关闭' : '智能分析已关闭，点击开启';
+            // 检查是否有保存的UI状态
+            const savedState = localStorage.getItem('ast_ui_state');
+            const hasSavedUIState = savedState && JSON.parse(savedState).agentToggleActive !== undefined;
+
+            // 如果没有保存的UI状态，则使用API状态
+            if (!hasSavedUIState) {
+                agentEnabled = data.enabled || false;
+                updateAgentToggleUI();
+                updateAgentStatusIndicator();
+                agentToggleBtn.title = agentEnabled ? '智能分析已开启，点击关闭' : '智能分析已关闭，点击开启';
+            } else {
+                // 有保存的UI状态，使用API状态更新后端状态，但保持UI显示
+                agentEnabled = data.enabled || false;
+                console.log('智能分析状态：API=' + agentEnabled + ', UI已恢复=' + (JSON.parse(savedState).agentToggleActive ? '开启' : '关闭'));
+            }
         } else {
             agentToggleBtn.style.display = 'none';
             const indicator = document.getElementById('agent-status-indicator');
@@ -1808,6 +1933,14 @@ async function toggleAgent() {
             agentEnabled = newEnabled;
             updateAgentToggleUI();
             updateAgentStatusIndicator();
+            // 保存UI状态（开关按钮的状态）
+            if (newEnabled) {
+                agentToggleBtn.classList.add('active');
+            } else {
+                agentToggleBtn.classList.remove('active');
+            }
+            updateWelcomeMessage(); // 更新欢迎语
+            saveUIState();
             showToast(`智能分析已${newEnabled ? '开启' : '关闭'}`, 'success');
         } else {
             showToast('操作失败', 'error');
