@@ -906,7 +906,7 @@ function initResizers() {
     const sidebarResizer = document.querySelector('.sidebar-resizer');
     const asrResizer = document.querySelector('.panel-resizer');
     if (sidebarResizer) initResizer(sidebarResizer, 'sidebar');
-    if (asrResizer) initResizer(asrResizer, 'asr');
+    if (asrResizer) initPanelResizer(asrResizer);
 }
 
 function initResizer(resizer, target) {
@@ -927,10 +927,14 @@ function initResizer(resizer, target) {
     function handleMouseMove(e) {
         if (!state.isResizing) return;
         const diff = e.clientX - state.startX;
-        let newWidth = state.startWidth + (target === 'sidebar' ? diff : -diff);
+        // 修复：所有面板都使用 + diff，方向才会正确
+        let newWidth = state.startWidth + diff;
         newWidth = Math.max(state.minWidth, Math.min(state.maxWidth, newWidth));
-        if (target === 'sidebar') document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
-        else targetElement.style.width = `${newWidth}px`;
+        if (target === 'sidebar') {
+            document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
+        } else {
+            targetElement.style.width = `${newWidth}px`;
+        }
     }
     function handleMouseUp() {
         state.isResizing = false;
@@ -938,6 +942,70 @@ function initResizer(resizer, target) {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         localStorage.setItem(`ast_${target}_width`, targetElement.offsetWidth);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+    }
+}
+
+// 专门处理 ASR 面板和 LLM 面板之间的 resizer
+function initPanelResizer(resizer) {
+    const asrPanel = document.getElementById('asr-panel');
+    const llmPanel = document.getElementById('llm-panel');
+    if (!asrPanel || !llmPanel) return;
+
+    const state = {
+        isResizing: false,
+        startX: 0,
+        asrStartWidth: 0,
+        llmStartWidth: 0
+    };
+
+    resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        state.isResizing = true;
+        state.startX = e.clientX;
+        state.asrStartWidth = asrPanel.offsetWidth;
+        state.llmStartWidth = llmPanel.offsetWidth;
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    });
+
+    function handleMouseMove(e) {
+        if (!state.isResizing) return;
+        const diff = e.clientX - state.startX;
+
+        // 计算新宽度：ASR面板 + diff，LLM面板 - diff
+        let newAsrWidth = state.asrStartWidth + diff;
+        let newLlmWidth = state.llmStartWidth - diff;
+
+        // 最小宽度限制
+        const minAsrWidth = 250;
+        const minLlmWidth = 300;
+
+        // 确保两个面板都不小于最小宽度
+        if (newAsrWidth < minAsrWidth) {
+            newAsrWidth = minAsrWidth;
+            newLlmWidth = state.asrStartWidth + state.llmStartWidth - newAsrWidth;
+        }
+        if (newLlmWidth < minLlmWidth) {
+            newLlmWidth = minLlmWidth;
+            newAsrWidth = state.asrStartWidth + state.llmStartWidth - newLlmWidth;
+        }
+
+        asrPanel.style.width = `${newAsrWidth}px`;
+        llmPanel.style.width = `${newLlmWidth}px`;
+    }
+
+    function handleMouseUp() {
+        state.isResizing = false;
+        resizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        // 保存 ASR 面板宽度（LLM 面板宽度会自适应）
+        localStorage.setItem(`ast_asr_width`, asrPanel.offsetWidth);
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
     }
@@ -1064,11 +1132,12 @@ async function startRecording() {
             audioPlayer.src = audioUrl;
             audioPreview.style.display = 'block';
 
-            // 隐藏朗读提示（录音完成后）
+            // 隐藏朗读提示和音量波浪（录音完成后）
             const promptEl = document.getElementById('recording-prompt');
             if (promptEl) {
                 promptEl.style.display = 'none';
             }
+            stopAudioVisualization();
 
             showToast('录音完成，请检查预览后保存', 'success');
         };
@@ -1086,6 +1155,9 @@ async function startRecording() {
         if (promptEl) {
             promptEl.style.display = 'flex';
         }
+
+        // 启动音量波浪显示
+        startAudioVisualization(stream);
 
         // 启动计时器
         recordingTimer = setInterval(updateRecordingTimer, 100);
@@ -1114,6 +1186,9 @@ function stopRecording() {
     }
 
     stopRecordBtn.style.display = 'none';
+
+    // 暂停音量波浪显示（保持显示但不更新）
+    pauseAudioVisualization();
 
     // 检查时长，如果 >= 10秒才显示保存按钮
     const elapsed = (Date.now() - recordingStartTime) / 1000;
@@ -1288,8 +1363,118 @@ function audioBufferToWav(buffer) {
 
 // 丢弃录音
 function discardRecording() {
+    stopAudioVisualization();
     resetRecordingState();
     showToast('录音已丢弃', 'info');
+}
+
+// ===== 音量波浪显示功能 =====
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let visualizerTimer = null;
+
+// 启动音量波浪显示
+function startAudioVisualization(stream) {
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const visualizer = document.getElementById('recording-pulse');
+        if (visualizer) {
+            visualizer.classList.add('active');
+            visualizer.classList.remove('paused');
+        }
+
+        animateBars();
+    } catch (error) {
+        console.error('音量波浪启动失败:', error);
+    }
+}
+
+// 停止音量波浪显示
+function stopAudioVisualization() {
+    if (visualizerTimer) {
+        clearInterval(visualizerTimer);
+        visualizerTimer = null;
+    }
+
+    if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+    }
+
+    analyser = null;
+    dataArray = null;
+
+    const visualizer = document.getElementById('recording-pulse');
+    if (visualizer) {
+        visualizer.classList.remove('active');
+        visualizer.classList.add('paused');
+    }
+}
+
+// 暂停音量波浪显示（用于停止录音但未保存时）
+function pauseAudioVisualization() {
+    const visualizer = document.getElementById('recording-pulse');
+    if (visualizer) {
+        visualizer.classList.add('paused');
+    }
+}
+
+// 动画循环 - 更新音量条并添加流动效果
+function animateBars() {
+    if (!analyser || !dataArray) return;
+
+    analyser.getByteFrequencyData(dataArray);
+    const bars = document.querySelectorAll('.audio-level-bar');
+    const visualizer = document.getElementById('recording-pulse');
+
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+    }
+    const average = sum / dataArray.length;
+
+    const maxHeight = 20;  /* 减小高度，更优雅 */
+    const minHeight = 3;   /* 减小最小高度 */
+
+    const barCount = bars.length;
+    for (let i = 0; i < barCount; i++) {
+        const bar = bars[i];
+        const index = Math.floor((i / barCount) * dataArray.length);
+        const barVolume = (dataArray[index] / 255) * (maxHeight - minHeight) + minHeight;
+        const height = Math.min(barVolume, maxHeight);
+
+        bar.style.height = `${height}px`;
+
+        // 使用与进度条一致的颜色主题
+        const intensity = height / maxHeight;
+        if (intensity > 0.7) {
+            bar.style.backgroundColor = '#0d6efd'; /* 高音量 - 深蓝色（主色调） */
+            bar.style.boxShadow = '0 0 4px rgba(13, 110, 253, 0.6)'; /* 添加发光效果 */
+        } else if (intensity > 0.4) {
+            bar.style.backgroundColor = '#6c757d'; /* 中音量 - 灰色 */
+            bar.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.1)';
+        } else {
+            bar.style.backgroundColor = 'var(--accent-secondary)'; /* 低音量 - 默认次要色 */
+            bar.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.1)';
+        }
+
+        // 添加流动效果 - 每个条有微妙的延迟动画
+        bar.style.animation = `wave-flow 2s ease-in-out ${i * 0.05}s infinite alternate`;
+    }
+
+    // 只有在激活状态时才继续动画
+    if (visualizer && visualizer.classList.contains('active')) {
+        visualizerTimer = requestAnimationFrame(animateBars);
+    }
 }
 
 // ===== 主人公管理 =====

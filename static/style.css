@@ -2877,6 +2877,68 @@ input:checked+.slider:before {
     margin-bottom: var(--gap-sm);
 }
 
+/* 音量波形可视化 - 流畅融合版 */
+.recording-pulse {
+    display: none;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    margin-top: var(--gap-sm);
+    padding: 4px 8px;
+    /* 移除边框，自然融入背景 */
+    /* background: transparent; */
+    height: 24px;
+}
+
+.recording-pulse.active {
+    display: flex;
+}
+
+.audio-level-bar {
+    width: 3px;
+    height: 8px;
+    background: var(--accent-secondary);
+    border-radius: 1px;
+    transition: height 0.1s ease, background-color 0.1s ease;
+    /* 添加轻微的阴影效果，使其"悬浮" */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.recording-indicator .recording-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--color-error);
+    border-radius: 50%;
+    animation: recording-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+}
+
+/* 波形流动动画 */
+@keyframes wave-flow {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-10px);
+    }
+}
+
+/* 静止状态的线条 */
+.recording-pulse.paused .audio-level-bar {
+    height: 12px;
+    background: rgba(108, 117, 125, 0.3);
+}
+
 /* 主人公提示区域 */
 .protagonist-prompt {
     padding: var(--gap-md);
