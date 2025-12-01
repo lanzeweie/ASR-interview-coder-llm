@@ -1,0 +1,1392 @@
+/* ========================================
+   配置弹窗核心布局 - Settings Layout
+   ======================================== */
+
+/* 左右分栏布局容器 - Master-Detail Pattern */
+.settings-layout {
+    display: flex;
+    gap: var(--gap-lg);
+    height: 500px;
+    min-height: 0;
+}
+
+/* 左侧边栏：模型列表 */
+.settings-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* 右侧内容：详细配置 */
+.settings-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* ========================================
+   标签页导航 - Tabs Navigation
+   ======================================== */
+
+.settings-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0 var(--gap-md);
+    flex-shrink: 0;
+}
+
+.tab-button {
+    padding: 14px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    position: relative;
+    white-space: nowrap;
+}
+
+.tab-button svg {
+    width: 18px;
+    height: 18px;
+    color: currentColor;
+    transition: transform 0.2s ease;
+}
+
+.tab-button:hover {
+    color: var(--text-primary);
+    background: rgba(79, 70, 229, 0.05);
+}
+
+.tab-button:hover svg {
+    transform: scale(1.1);
+}
+
+.tab-button.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+    background: var(--bg-secondary);
+    font-weight: 600;
+}
+
+.tab-button.active svg {
+    color: var(--accent-primary);
+}
+
+/* 标签页内容区域 */
+.tab-content {
+    display: none;
+    padding: var(--gap-lg);
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* ========================================
+   配置列表 - Config List
+   ======================================== */
+
+.config-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--gap-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+}
+
+/* 配置项 */
+.config-item {
+    position: relative;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    overflow: hidden;
+}
+
+.config-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    transform: translateX(2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.config-item.active {
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(99, 102, 241, 0.05));
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+}
+
+/* 当前生效模型绿色标识 */
+.config-item.is-current {
+    border-left: 3px solid var(--color-success);
+    padding-left: 11px;
+}
+
+.config-item.is-current::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--color-success), rgba(16, 185, 129, 0.3));
+    border-radius: 4px 0 0 4px;
+}
+
+.current-indicator {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    background: var(--color-success);
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* 配置项名称 */
+.config-item-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.config-item.is-current .config-item-name {
+    color: var(--color-success);
+    font-weight: 600;
+}
+
+/* 配置项操作区域 */
+.config-item-actions {
+    display: flex;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.config-item:hover .config-item-actions,
+.config-item.active .config-item-actions {
+    opacity: 1;
+}
+
+/* "设为当前"按钮 */
+.set-current-btn {
+    padding: 4px 10px;
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.set-current-btn:hover {
+    background: var(--accent-secondary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+/* ========================================
+   表单组增强 - Enhanced Form Group
+   ======================================== */
+
+.form-group input[type="text"],
+.form-group input[type="password"],
+.form-group input[type="number"] {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    background: var(--bg-elevated);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.form-group input::placeholder {
+    color: var(--text-muted);
+}
+
+/* 标签快速选择 */
+.tags-quick-select {
+    display: flex;
+    gap: var(--gap-sm);
+    flex-wrap: wrap;
+}
+
+.tag-option {
+    flex: 1;
+    min-width: 0;
+}
+
+.tag-option input[type="radio"] {
+    display: none;
+}
+
+.tag-label {
+    display: block;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.tag-option input[type="radio"]:checked+.tag-label {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+.tag-label:hover {
+    border-color: var(--accent-primary);
+    background: rgba(79, 70, 229, 0.05);
+}
+
+/* 配置区域标题 */
+.config-section-title {
+    margin-top: var(--gap-lg);
+    margin-bottom: var(--gap-md);
+    padding-top: var(--gap-md);
+    border-top: 1px solid var(--border-subtle);
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 300;
+    color: var(--text-secondary);
+}
+
+.config-section-title strong {
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+/* 复选框组 */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: var(--gap-sm);
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+}
+
+.checkbox-group label {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+/* ========================================
+   多模型集群配置 - Multi-Model Cluster
+   ======================================== */
+
+.multi-model-cluster {
+    display: flex;
+    flex-direction: column;
+}
+
+.cluster-header {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 300;
+    color: var(--accent-primary);
+    margin-bottom: var(--gap-md);
+    padding-bottom: var(--gap-sm);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.multi-model-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+}
+
+/* 多模型选项 */
+.multi-model-option {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    margin-bottom: var(--gap-sm);
+}
+
+.multi-model-option:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-hover);
+    transform: translateX(2px);
+}
+
+.multi-model-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+.multi-model-option label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.model-tag-small {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-weight: 400;
+}
+
+/* 无配置提示 */
+.no-config-message {
+    padding: var(--gap-xl);
+    background: var(--bg-tertiary);
+    border: 2px dashed var(--border-normal);
+    border-radius: 12px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--gap-md);
+}
+
+.no-config-icon {
+    font-size: 48px;
+    opacity: 0.5;
+}
+
+.no-config-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.no-config-hint {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+}
+
+/* ========================================
+   智能分析配置样式 - Agent Config
+   ======================================== */
+
+.agent-config-section {
+    padding: var(--gap-lg);
+}
+
+.agent-description {
+    padding: var(--gap-md);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    margin-bottom: var(--gap-lg);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.agent-description strong {
+    color: var(--accent-primary);
+    font-size: 15px;
+}
+
+/* 状态预览 */
+.agent-status-preview {
+    margin-top: var(--gap-lg);
+    padding: var(--gap-md);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    border: 1px solid var(--border-normal);
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.status-item:not(:last-child) {
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.status-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.status-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-weight: 600;
+}
+
+.status-value.enabled {
+    color: var(--color-success);
+}
+
+.status-value.disabled {
+    color: var(--text-tertiary);
+}
+
+/* 操作按钮 */
+.agent-actions {
+    margin-top: var(--gap-lg);
+    padding-top: var(--gap-md);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.agent-actions .btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* 复选框样式 */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.checkmark {
+    position: relative;
+}
+
+.llm-mode-btn {
+    padding: 8px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.llm-mode-btn:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
+/* 激活状态 */
+.llm-mode-btn.active {
+    background: linear-gradient(45deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+.llm-mode-btn.active .icon {
+    transform: rotate(360deg);
+    transition: transform 0.5s ease;
+}
+
+.llm-mode-btn .icon {
+    font-size: 16px;
+    transition: transform 0.5s ease;
+}
+
+/* 调整输入控制容器以适应新按钮 */
+.input-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+}
+
+.input-row {
+    display: flex;
+    gap: var(--gap-sm);
+    align-items: flex-end;
+    width: 100%;
+}
+
+/* ========================================
+   配置说明区域 - Config Help Section
+   ======================================== */
+.config-help-section {
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.05), rgba(99, 102, 241, 0.02));
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: var(--gap-md);
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.help-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.help-content {
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.help-content strong {
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+.help-content ul {
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+}
+
+.help-content li {
+    margin: 4px 0;
+}
+
+/* ========================================
+   多模型状态条 - Multi-LLM Status Bar
+   ======================================== */
+.multi-llm-status {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: var(--gap-md);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.multi-llm-status .status-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.multi-llm-status .status-label svg {
+    color: var(--accent-primary);
+}
+
+.multi-llm-status .status-value {
+    color: var(--accent-primary);
+    font-weight: 600;
+    background: rgba(79, 70, 229, 0.1);
+    padding: 3px 10px;
+    border-radius: 12px;
+}
+
+/* 配置列表项优化 */
+
+.voiceprint-config-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-lg);
+}
+
+.voiceprint-description {
+    padding: var(--gap-md);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+/* 录音区域 */
+.voiceprint-recorder {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.voiceprint-recording-controls {
+    display: flex;
+    gap: var(--gap-sm);
+    flex-wrap: wrap;
+}
+
+/* 录音状态 */
+.recording-status {
+    background: var(--bg-tertiary);
+    padding: var(--gap-md);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+.recording-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--color-error);
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.recording-text {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.recording-timer {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 32px;
+    font-weight: 300;
+    color: var(--accent-primary);
+    letter-spacing: 2px;
+}
+
+.recording-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary));
+    transition: width 0.1s linear;
+    border-radius: 4px;
+}
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+}
+
+/* 音频预览 */
+.audio-preview {
+    padding: var(--gap-md);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+}
+
+.audio-preview label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* 朗读提示 */
+.recording-prompt {
+    padding: var(--gap-md);
+    text-align: center;
+    display: none;
+}
+
+.recording-prompt .prompt-content {
+    font-size: 16px;
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+/* "请清晰朗读以下内容：" 标题左对齐 */
+.recording-prompt .prompt-content strong {
+    display: block;
+    text-align: left;
+    margin-bottom: var(--gap-sm);
+}
+
+/* 音量波形可视化 - 流畅融合版 */
+.recording-pulse {
+    display: none;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    margin-top: var(--gap-sm);
+    padding: 4px 8px;
+    /* 移除边框，自然融入背景 */
+    /* background: transparent; */
+    height: 24px;
+}
+
+.recording-pulse.active {
+    display: flex;
+}
+
+.audio-level-bar {
+    width: 3px;
+    height: 8px;
+    background: var(--accent-secondary);
+    border-radius: 1px;
+    transition: height 0.1s ease, background-color 0.1s ease;
+    /* 添加轻微的阴影效果，使其"悬浮" */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.recording-indicator .recording-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--color-error);
+    border-radius: 50%;
+    animation: recording-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+}
+
+/* 波形流动动画 */
+@keyframes wave-flow {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-10px);
+    }
+}
+
+/* 静止状态的线条 */
+.recording-pulse.paused .audio-level-bar {
+    height: 12px;
+    background: rgba(108, 117, 125, 0.3);
+}
+
+/* 主人公提示区域 */
+.protagonist-prompt {
+    padding: var(--gap-md);
+    background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-md);
+    margin-bottom: var(--gap-md);
+}
+
+.protagonist-prompt .prompt-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.protagonist-prompt .prompt-text {
+    flex: 1;
+}
+
+.protagonist-prompt .prompt-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #d97706;
+    margin-bottom: var(--gap-xs);
+}
+
+.protagonist-prompt .prompt-content {
+    font-size: 14px;
+    color: #92400e;
+    line-height: 1.5;
+}
+
+.protagonist-prompt .btn.small {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+.audio-preview audio {
+    width: 100%;
+    border-radius: 4px;
+}
+
+/* 声纹列表区域 */
+.voiceprint-list-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.list-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-bottom: var(--gap-sm);
+    border-bottom: 1px solid var(--border-subtle);
+    position: relative;
+}
+
+.list-header span {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 300;
+    color: var(--text-primary);
+}
+
+.list-header .icon-btn {
+    position: absolute;
+    right: 0;
+}
+
+.icon-btn {
+    padding: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.icon-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.icon-btn svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+    transition: color 0.15s ease;
+}
+
+.icon-btn:hover svg {
+    color: var(--accent-primary);
+}
+
+/* 声纹列表 */
+.voiceprint-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+    max-height: 400px;
+    overflow-y: auto;
+    padding: var(--gap-sm) 0;
+}
+
+.voiceprint-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--gap-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    transition: all 0.15s ease;
+    gap: var(--gap-md);
+}
+
+.voiceprint-item:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-2px);
+}
+
+.voiceprint-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.voiceprint-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+}
+
+.voiceprint-meta {
+    display: flex;
+    gap: var(--gap-md);
+    flex-wrap: wrap;
+}
+
+.meta-item {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+}
+
+.voiceprint-date {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+.voiceprint-actions {
+    display: flex;
+    gap: var(--gap-sm);
+}
+
+.play-btn,
+.delete-btn {
+    padding: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.play-btn:hover {
+    background: var(--color-success);
+    border-color: var(--color-success);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.delete-btn:hover {
+    background: var(--color-error);
+    border-color: var(--color-error);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.play-btn svg,
+.delete-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 空状态 */
+.empty-message {
+    padding: var(--gap-lg);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    font-style: italic;
+}
+
+/* ========================================
+   主人公相关样式
+   ======================================== */
+
+/* 主人公按钮 */
+.protagonist-btn {
+    padding: 6px;
+    background: transparent;
+    border: 1px solid var(--border-normal);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.protagonist-btn:hover {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1));
+    border-color: #f59e0b;
+    color: #f59e0b;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+
+.protagonist-btn svg {
+    transition: transform 0.3s ease;
+}
+
+.protagonist-btn:hover svg {
+    transform: scale(1.1) rotate(-10deg);
+}
+
+/* 主人公声纹项样式 */
+.voiceprint-item.is-protagonist {
+    position: relative;
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), rgba(251, 191, 36, 0.02));
+    box-shadow: 0 2px 12px rgba(245, 158, 11, 0.15), inset 0 0 20px rgba(245, 158, 11, 0.05);
+}
+
+.voiceprint-item.is-protagonist::before {
+    content: "";
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 20px;
+    z-index: 1;
+    animation: protagonist-glow 2s ease-in-out infinite;
+}
+
+.voiceprint-item.is-protagonist::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: linear-gradient(180deg, #f59e0b, #fbbf24);
+    border-radius: 4px 0 0 4px;
+}
+
+.voiceprint-item.is-protagonist .voiceprint-name {
+    color: #d97706;
+    font-weight: 600;
+}
+
+.voiceprint-item.is-protagonist .protagonist-btn {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(251, 191, 36, 0.15));
+    border-color: #f59e0b;
+    color: #d97706;
+}
+
+@keyframes protagonist-glow {
+
+    0%,
+    100% {
+        opacity: 1;
+        text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.8;
+        text-shadow: 0 0 20px rgba(245, 158, 11, 0.8);
+        transform: scale(1.05);
+    }
+}
+
+/* ========================================
+   响应式布局适配 - Responsive Layout
+   ======================================== */
+
+/* 平板端优化 */
+@media (max-width: 1024px) {
+    .modal-content {
+        max-width: 95%;
+    }
+
+    .settings-layout {
+        height: 450px;
+    }
+
+    .settings-sidebar {
+        width: 220px;
+    }
+
+    .tab-button {
+        padding: 12px 16px;
+        font-size: 13px;
+    }
+
+    .tab-button svg {
+        width: 16px;
+        height: 16px;
+    }
+}
+
+/* 移动端优化 - 垂直堆叠布局 */
+@media (max-width: 768px) {
+    .modal-content {
+        max-width: 96%;
+        max-height: 95vh;
+    }
+
+    .settings-layout {
+        flex-direction: column;
+        height: auto;
+        max-height: 70vh;
+    }
+
+    .settings-sidebar {
+        width: 100%;
+        max-height: 200px;
+        flex-shrink: 1;
+    }
+
+    .settings-content {
+        flex: 1;
+        min-height: 400px;
+    }
+
+    .settings-tabs {
+        padding: 0 var(--gap-sm);
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }
+
+    .tab-button {
+        padding: 10px 14px;
+        font-size: 12px;
+        gap: 6px;
+    }
+
+    .tab-button svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .tab-content {
+        padding: var(--gap-md);
+    }
+
+    .config-list {
+        max-height: 180px;
+    }
+
+    .config-item {
+        padding: 10px 12px;
+    }
+
+    .config-item-name {
+        font-size: 13px;
+    }
+
+    .set-current-btn {
+        font-size: 11px;
+        padding: 3px 8px;
+    }
+
+    .form-group {
+        margin-bottom: var(--gap-sm);
+    }
+
+    .form-group label {
+        font-size: 11px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .tags-quick-select {
+        flex-direction: column;
+    }
+
+    .tag-option {
+        width: 100%;
+    }
+
+    /* 智囊团配置移动端优化 */
+    .role-section {
+        padding: var(--gap-sm);
+    }
+
+    .role-section h3 {
+        font-size: 14px;
+    }
+
+    .multi-model-option {
+        padding: 8px 10px;
+    }
+
+    .multi-model-option label {
+        font-size: 13px;
+    }
+
+    /* 声纹管理移动端优化 */
+    .voiceprint-list {
+        max-height: 300px;
+    }
+
+    .voiceprint-item {
+        padding: var(--gap-sm);
+    }
+
+    .voiceprint-name {
+        font-size: 14px;
+    }
+
+    .voiceprint-actions {
+        gap: 6px;
+    }
+
+    .play-btn,
+    .delete-btn {
+        padding: 6px;
+    }
+}
+
+/* 小屏移动端 */
+@media (max-width: 480px) {
+    .modal-content {
+        max-width: 98%;
+        max-height: 96vh;
+        border-radius: 12px;
+    }
+
+    .settings-layout {
+        max-height: 65vh;
+        gap: var(--gap-sm);
+    }
+
+    .settings-sidebar {
+        max-height: 150px;
+    }
+
+    .settings-content {
+        min-height: 350px;
+    }
+
+    .tab-button {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+
+    .config-item-name {
+        font-size: 12px;
+    }
+
+    .current-indicator {
+        width: 6px;
+        height: 6px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        font-size: 11px;
+    }
+
+    .multi-llm-status {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--gap-xs);
+        font-size: 11px;
+    }
+
+    .config-help-section {
+        padding: 10px 12px;
+        font-size: 11px;
+    }
+
+    .help-icon {
+        font-size: 20px;
+    }
+}

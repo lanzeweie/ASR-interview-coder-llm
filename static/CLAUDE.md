@@ -20,11 +20,107 @@
 ## 📂 文件结构
 
 ```
-static/
-├── CLAUDE.md       # 本文档
-├── index.html      # 主页面结构
-├── script.js       # 前端交互逻辑
-└── style.css       # UI 样式定义
+📁 JavaScript 目录结构
+static/js/ 目录包含 9 个模块化文件：
+1.
+main.js (230行) - 主入口文件
+功能：应用初始化和模块协调
+注释：/* 主初始化文件 - AST Frontend, 精致技术美学 - JavaScript核心逻辑 */
+导入所有子模块，协调整个应用
+2.
+dom.js (135行) - DOM元素管理
+功能：DOM元素获取和管理
+注释：/* DOM元素获取和管理 */
+集中管理所有HTML元素引用
+3.
+websocket.js (283行) - WebSocket连接管理
+功能：WebSocket连接管理、ASR/LLM连接
+注释：/* WebSocket连接管理 */
+包含WebSocketManager和LLMStreamManager类
+4.
+utils.js (约200行) - 工具函数
+功能：通用工具函数、Toast提示、配置管理
+提供showToast、loadSavedWidths、updateModelDisplay等函数
+5.
+config.js (约150行) - 配置管理
+功能：应用配置、常量定义
+管理各种配置参数和常量
+6.
+chat.js (约300行) - 聊天管理
+功能：聊天界面逻辑、消息处理
+包含ChatManager类和相关方法
+7.
+voiceprint.js (约100行) - 声纹管理
+功能：声纹录制、播放、管理
+处理音频相关功能
+8.
+agent.js (约250行) - AI代理管理
+功能：AI代理逻辑、任务处理
+管理AI相关的核心逻辑
+9.
+ui.js (约200行) - UI界面控制
+功能：用户界面交互控制
+处理UI组件的显示和交互
+📁 CSS 目录结构
+static/css/ 目录包含 15 个模块化文件：
+1.
+main.css (25行) - CSS主入口文件
+功能：CSS模块导入管理
+注释：/* AST - Main CSS Import File, 主CSS入口文件 - 导入所有模块 */
+使用@import导入所有CSS模块
+2.
+variables.css (56行) - CSS变量定义
+功能：设计系统变量、颜色、字体、间距
+注释：/* AST - CSS Variables, CSS变量定义 */
+定义: --bg-primary, --accent-primary, --font-display 等
+3.
+global.css (132行) - 全局样式重置
+功能：CSS重置、基础设置、全局样式
+注释：/* AST - Global Styles, 全局样式重置和基础设置 */
+4.
+layout.css (64行) - 布局工具类
+功能：布局工具类、响应式设计基础
+提供网格、弹性布局等工具类
+5.
+sidebar.css (167行) - 侧边栏样式
+功能：侧边栏和聊天列表样式
+包含.sidebar, .chat-list, .chat-item等样式
+6.
+resizer.css (40行) - 可调节分隔条
+功能：可拖拽分隔条组件样式
+包含.resizer, .sidebar-resizer等样式
+7.
+panels.css (377行) - 面板样式
+功能：主面板和头部区域样式
+包含.panel, .panel-header, .asr-panel, .tts-panel等
+8.
+chat.css (229行) - 聊天窗口样式
+功能：聊天界面和消息样式
+包含.chat-window, .message, .user-message, .ai-message等
+9.
+input.css (413行) - 输入区域样式
+功能：输入框、按钮和控件样式
+包含.input-area, .btn, .toggle-switch等组件
+10.
+modals.css (329行) - 模态框样式
+功能：模态框、表单和对话框样式
+包含.modal, .modal-overlay, .modal-content等
+11.
+settings.css (723行) - 设置页面样式
+功能：设置页面和配置管理样式
+包含.settings-content, .config-section, .voiceprint-list等
+12.
+voiceprint.css (7行) - 声纹管理样式
+功能：声纹管理特定样式
+最小的专门样式文件
+13.
+mobile.css (445行) - 移动端适配
+功能：响应式设计和移动端适配
+包含各种媒体查询和移动端布局
+14.
+animations.css (232行) - 动画效果
+功能：统一的动画效果定义
+包含@keyframes、过渡动画等
 ```
 
 ## 🎨 界面布局

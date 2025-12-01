@@ -2,6 +2,7 @@ import threading
 import asyncio
 import json
 import os
+import time
 import argparse
 import wave
 import base64
@@ -32,10 +33,16 @@ except ImportError:
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='AST Real-time ASR and LLM Chat Server')
-parser.add_argument('--no-asr', '--no', action='store_true', help='Skip ASR model initialization (skip audio and ASR)')
+parser.add_argument('--no', action='store_true', help='Skip ALL model initialization (disable ASR, voiceprint, and local agent models)')
+parser.add_argument('--no-asr', '--no-voice', action='store_true', help='[DEPRECATED] Use --no instead. Skip ASR and voiceprint model initialization')
 parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind (default: 0.0.0.0)')
 parser.add_argument('--port', type=int, default=8000, help='Port to bind (default: 8000)')
 args = parser.parse_args()
+
+# Handle deprecated argument
+if args.no_asr:
+    print("[⚠️  警告] --no-asr 参数已弃用，请使用 --no 替代")
+    args.no = True
 
 app = FastAPI()
 
@@ -116,10 +123,19 @@ main_event_loop = None
 async def agent_analysis_callback(result, messages, speaker_name):
     """智能分析完成回调"""
     try:
-        is_needed = result.get('is', False)
+        # 分析完成，发送结束消息到ASR面板
+        await manager.broadcast({
+            "time": time.strftime("%H:%M:%S"),
+            "speaker": "智能分析",
+            "text": "🤔 分析完成"
+        })
+
+        # 从三阶段结果中提取阶段1的结果
+        phase1_result = result.get('phase1', {})
+        is_needed = phase1_result.get('is', False)
 
         if is_needed:
-            print(f"[智能分析] 检测到需要多模型建议，主人公: {speaker_name}")
+            print(f"[智能分析] 检测到需要AI帮助分析，主人公: {speaker_name}")
 
             # 获取当前聊天 ID
             current_chat_id = chat_manager.get_current_chat_id()
@@ -145,17 +161,41 @@ async def agent_analysis_callback(result, messages, speaker_name):
                     "content": msg.get('content', '')
                 })
 
-            # 推送到所有 LLM WebSocket 客户端
-            await llm_manager.broadcast({
-                "type": "agent_triggered",
-                "reason": result.get('reason', '智能分析建议'),
-                "speaker": speaker_name,
-                "messages": formatted_messages,
-                "chat_id": current_chat_id,
-                "is_multi_llm": True
-            })
+            # 获取分发配置
+            distribution_result = result.get('distribution', {})
+            distribution_mode = distribution_result.get('mode', 'single')
+            targets = distribution_result.get('targets', [])
+            intent_result = distribution_result.get('intent')
 
-            print(f"[智能分析] 多模型共话已触发")
+            # 根据分发模式决定处理方式
+            is_multi_llm = (distribution_mode == 'think_tank')
+
+            # 如果有智囊团目标，使用智囊团模式
+            if is_multi_llm and targets:
+                await llm_manager.broadcast({
+                    "type": "agent_triggered",
+                    "reason": phase1_result.get('reason', '检测到需要AI帮助分析，已启动智囊团'),
+                    "speaker": speaker_name,
+                    "messages": formatted_messages,
+                    "chat_id": current_chat_id,
+                    "is_multi_llm": True,
+                    "intent_recognition": intent_result is not None,
+                    "intent_data": intent_result
+                })
+                print(f"[智能分析] 🤖 智囊团已触发，分发到{len(targets)}个目标")
+            else:
+                # 使用单模型模式
+                await llm_manager.broadcast({
+                    "type": "agent_triggered",
+                    "reason": phase1_result.get('reason', '检测到需要AI帮助分析'),
+                    "speaker": speaker_name,
+                    "messages": formatted_messages,
+                    "chat_id": current_chat_id,
+                    "is_multi_llm": False,
+                    "intent_recognition": intent_result is not None,
+                    "intent_data": intent_result
+                })
+                print(f"[智能分析] 🤖 单模型模式已触发")
 
     except Exception as e:
         print(f"[智能分析] 回调处理失败: {e}")
@@ -181,9 +221,10 @@ class LLMConnectionManager:
 
 llm_manager = LLMConnectionManager()
 
-# --- 多模型请求处理函数 ---
+
+# --- 智囊团请求处理函数 ---
 async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id: str):
-    """处理多模型共话请求"""
+    """处理智囊团请求"""
     config_data = load_config()
     active_names = config_data.get("multi_llm_active_names", [])
     configs = config_data.get("configs", [])
@@ -210,7 +251,11 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
             current_messages = [m.copy() for m in messages]
             config_prompt = conf.get("system_prompt", "")
 
-            if config_prompt:
+            # Check if any tag is selected - if so, disable system prompt
+            tags = conf.get("tags", [])
+            has_tags = len(tags) > 0
+
+            if config_prompt and not has_tags:
                 # Replace or insert system prompt
                 sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
                 if sys_idx != -1:
@@ -253,7 +298,7 @@ async def startup_event():
     main_event_loop = asyncio.get_running_loop()
 
     # Initialize ASR system only if not skipped
-    if not args.no_asr and ASR_AVAILABLE:
+    if not args.no and ASR_AVAILABLE:
         print("[初始化] 启动 ASR 系统...")
         asr_system_initialized = False
 
@@ -278,15 +323,15 @@ async def startup_event():
             print("[成功] ASR 系统已在后台线程启动")
         except Exception as e:
             print(f"[错误] ASR 系统初始化失败: {e}")
-            print("[提示] 使用 --no-asr 参数跳过 ASR 初始化")
+            print("[提示] 使用 --no 参数跳过所有模型初始化")
     else:
-        if args.no_asr:
-            print("[配置] 已跳过 ASR 系统初始化 (--no-asr)")
+        if args.no:
+            print("[配置] 已跳过所有模型初始化 (--no)")
         else:
             print("[配置] ASR 系统不可用")
 
     # Initialize Intelligent Agent
-    if AGENT_AVAILABLE:
+    if AGENT_AVAILABLE and not args.no:
         try:
             # Load agent from config
             config_data = load_config()
@@ -296,7 +341,7 @@ async def startup_event():
             if agent_model_name:
                 # 检查是否显式指定了模型类型
                 model_type = agent_config.get('model_type', None)
-                
+
                 if model_type == 'local':
                     # 显式指定为本地模型
                     print(f"[配置] 使用本地模型: {agent_model_name}")
@@ -338,6 +383,21 @@ async def startup_event():
             trigger_manager.set_event_loop(main_event_loop)
             print("[成功] Trigger Manager event loop已设置")
 
+            # 设置广播回调，用于发送WebSocket消息
+            async def broadcast_to_asr(message):
+                """向ASR面板广播消息"""
+                await manager.broadcast(message)
+            trigger_manager.set_broadcast_callback(broadcast_to_asr)
+            print("[成功] 智能分析广播回调已设置")
+
+            # 加载触发阈值和消息上限
+            min_characters = agent_config.get("min_characters", 10)
+            silence_threshold = agent_config.get("silence_threshold", 2)
+            max_messages = agent_config.get("max_messages", 50)
+            trigger_manager.set_thresholds(min_characters, silence_threshold)
+            trigger_manager.set_max_history(max_messages)
+            print(f"[成功] 触发参数已加载: {min_characters}字, {silence_threshold}秒, {max_messages}条消息")
+
             # 加载主人公配置
             protagonist = config_data.get("protagonist", "")
             if protagonist:
@@ -347,7 +407,10 @@ async def startup_event():
         except Exception as e:
             print(f"[错误] 智能 Agent 初始化失败: {e}")
     else:
-        print("[配置] 智能 Agent 模块不可用")
+        if args.no:
+            print("[配置] 已跳过智能分析初始化 (--no)")
+        elif not AGENT_AVAILABLE:
+            print("[配置] 智能 Agent 模块不可用")
 
 @app.get("/")
 async def get():
@@ -474,6 +537,17 @@ async def get_agent_status():
         "config": agent_config
     }
 
+@app.get("/api/agent/roles")
+async def get_agent_roles():
+    """获取智囊团角色配置"""
+    try:
+        with open("data/agent.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"think_tank_roles": []}
+    except json.JSONDecodeError:
+        return {"think_tank_roles": []}
+
 @app.post("/api/agent/enable")
 async def enable_agent(data: dict = Body(...)):
     """启用/禁用智能 Agent"""
@@ -509,10 +583,16 @@ async def update_agent_config(data: dict = Body(...)):
 
     min_characters = data.get("min_characters", 10)
     silence_threshold = data.get("silence_threshold", 2)
+    max_messages = data.get("max_messages", 50)
     model_name = data.get("model_name")
+    model_type = data.get("model_type", "api")
+    intent_recognition_enabled = data.get("intent_recognition_enabled", False)
+    intent_model_name = data.get("intent_model_name", "")
+    intent_model_type = data.get("intent_model_type", "local")
 
     # Update thresholds
     trigger_manager.set_thresholds(min_characters, silence_threshold)
+    trigger_manager.set_max_history(max_messages)
 
     # Update config file
     config_data = load_config()
@@ -520,7 +600,12 @@ async def update_agent_config(data: dict = Body(...)):
     agent_config.update({
         "min_characters": min_characters,
         "silence_threshold": silence_threshold,
-        "model_name": model_name
+        "max_messages": max_messages,
+        "model_name": model_name,
+        "model_type": model_type,
+        "intent_recognition_enabled": intent_recognition_enabled,
+        "intent_model_name": intent_model_name,
+        "intent_model_type": intent_model_type
     })
     config_data["agent_config"] = agent_config
     save_config(config_data)
@@ -576,14 +661,14 @@ async def set_protagonist_endpoint(data: dict = Body(...)):
 
 @app.post("/api/agent/trigger")
 async def trigger_multi_llm(data: dict = Body(...)):
-    """手动触发多模型共话"""
+    """手动触发智囊团"""
     messages = data.get("messages", [])
     chat_id = data.get("chat_id")
 
     # This will be handled by the WebSocket endpoint
     return {
         "status": "triggered",
-        "message": "多模型共话已触发",
+        "message": "智囊团已触发",
         "messages": messages,
         "chat_id": chat_id
     }
@@ -843,10 +928,40 @@ async def llm_websocket(websocket: WebSocket):
                 print(f"[智能分析] WebSocket 收到触发消息")
                 messages = data.get("messages", [])
                 chat_id = data.get("chat_id")
-                is_multi_llm = True
+                is_multi_llm = data.get("is_multi_llm", False)
+                intent_recognition = data.get("intent_recognition", False)
 
-                # 直接处理多模型模式
-                await handle_multi_llm_request(websocket, messages, chat_id)
+                print(f"[智能分析] 分发模式: {'智囊团' if is_multi_llm else '单模型'}, 意图识别: {'开启' if intent_recognition else '关闭'}")
+
+                # 根据模式处理
+                if is_multi_llm:
+                    # 处理智囊团模式
+                    await handle_multi_llm_request(websocket, messages, chat_id)
+                else:
+                    # 处理单模型模式
+                    await websocket.send_json({
+                        "type": "agent_notification",
+                        "content": "🤖 智能分析已启动，将为您提供专业建议"
+                    })
+
+                    # 直接使用当前配置的模型
+                    response_text = ""
+                    try:
+                        async for chunk in llm_client.chat_stream(messages):
+                            await websocket.send_json({"type": "chunk", "content": chunk})
+                            response_text += chunk
+
+                        await websocket.send_json({"type": "done", "full_text": response_text})
+
+                        # 保存到聊天历史
+                        if chat_id:
+                            messages.append({"role": "assistant", "content": response_text})
+                            chat_manager.update_chat_messages(chat_id, messages)
+
+                    except Exception as e:
+                        print(f"单模型流式响应错误: {e}")
+                        await websocket.send_json({"type": "error", "content": f"流式响应错误: {str(e)}"})
+
                 continue
 
             # data format: { "messages": [...], "chat_id": "...", "is_multi_llm": bool }
@@ -879,8 +994,12 @@ async def llm_websocket(websocket: WebSocket):
                         # Handle separate system prompt
                         current_messages = [m.copy() for m in messages] # Deep copyish
                         config_prompt = conf.get("system_prompt", "")
-                        
-                        if config_prompt:
+
+                        # Check if any tag is selected - if so, disable system prompt
+                        tags = conf.get("tags", [])
+                        has_tags = len(tags) > 0
+
+                        if config_prompt and not has_tags:
                             # Replace or insert system prompt
                             sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
                             if sys_idx != -1:
@@ -956,7 +1075,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("🚀 AST 实时语音转文本与大模型分析系统")
     print("=" * 60)
-    print(f"[配置] ASR 系统: {'✅ 启用' if not args.no_asr else '❌ 禁用 (--no-asr)'}")
+    print(f"[配置] ASR 系统: {'✅ 启用' if not args.no else '❌ 禁用 (--no)'}")
     print(f"[配置] LLM 客户端: ✅ 启用")
     print(f"[配置] 服务地址: http://{args.host}:{args.port}")
     print("=" * 60)

@@ -12,3 +12,7 @@ wheels/
 SenseVoiceSmall
 speech_campplus_sv_zh-cn_16k-common
 api_config.json
+voiceprints
+Qwen3-0.6B
+output
+.promptx/

@@ -6,9 +6,22 @@
 
 import time
 import asyncio
+import json
+import os
 from typing import List, Dict, Optional, Callable
 from dataclasses import dataclass
 from intelligent_agent import agent_manager
+
+# 配置文件路径
+CONFIG_FILE = "api_config.json"
+
+
+def load_config():
+    """加载配置文件"""
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"configs": [], "current_config": ""}
 
 
 @dataclass
@@ -19,6 +32,7 @@ class TriggerState:
     last_speaker: str = ""
     pending_analysis: bool = False
     silence_start_time: Optional[float] = None
+    last_analysis_index: int = -1  # 记录上次分析的消息索引位置
 
 
 class TriggerManager:
@@ -33,6 +47,7 @@ class TriggerManager:
         self.max_history = 50  # 最大历史记录数
         self.event_loop = None  # 保存主event loop引用
         self.protagonist = None  # 主人公姓名
+        self.broadcast_callback = None  # 用于发送WebSocket消息的回调
         print("[触发机制] 管理器已初始化")
 
     def set_thresholds(self, min_chars: int, silence_secs: float):
@@ -41,10 +56,24 @@ class TriggerManager:
         self.silence_threshold = silence_secs
         print(f"[触发机制] 阈值已更新: {min_chars}字, {silence_secs}秒静音")
 
+    def set_max_history(self, max_history: int):
+        """设置最大历史记录数"""
+        self.max_history = max_history
+        print(f"[触发机制] 消息上限已更新: {max_history}条")
+        # 如果当前历史记录超过新上限，立即裁剪
+        if len(self.conversation_history) > self.max_history:
+            self.conversation_history = self.conversation_history[-self.max_history:]
+            print(f"[触发机制] 已裁剪历史记录，当前保留 {len(self.conversation_history)} 条")
+
     def set_event_loop(self, loop):
         """设置主event loop引用"""
         self.event_loop = loop
         print("[触发机制] 已设置event loop引用")
+
+    def set_broadcast_callback(self, callback):
+        """设置广播回调函数，用于发送WebSocket消息"""
+        self.broadcast_callback = callback
+        print("[触发机制] 已设置广播回调")
 
     def set_protagonist(self, name: str):
         """设置主人公姓名"""
@@ -100,11 +129,17 @@ class TriggerManager:
             self.conversation_history = self.conversation_history[-self.max_history:]
 
         # 检查当前累积文本是否达到阈值
-        if len(self.state.accumulated_text) >= self.min_characters:
-            # 启动静音定时器
-            if self.state.silence_start_time is None:
-                self.state.silence_start_time = current_time
-                print(f"[触发机制] 达到字数阈值 {self.min_characters}，启动静音检测...")
+        # 如果没有启动静音检测，且累积文本达到阈值，则启动
+        if self.state.silence_start_time is None and len(self.state.accumulated_text) >= self.min_characters:
+            self.state.silence_start_time = current_time
+            print(f"[触发机制] 达到字数阈值 {self.min_characters}，启动静音检测...")
+
+        # 如果已启动静音检测，检查是否需要立即触发（字数过多）
+        if self.state.silence_start_time is not None and not self.state.pending_analysis:
+            # 如果累积文本超过阈值的3倍，强制触发（避免累积过长）
+            if len(self.state.accumulated_text) >= self.min_characters * 3:
+                print(f"[触发机制] 累积文本过长（{len(self.state.accumulated_text)}字），强制触发分析")
+                self._trigger_analysis()
 
         # 检查是否超时自动触发
         self._check_silence_timeout(current_time)
@@ -113,6 +148,10 @@ class TriggerManager:
 
     def _check_trigger(self, current_time: float):
         """检查是否需要触发智能分析"""
+        # 如果正在分析中，跳过触发检查
+        if self.state.pending_analysis:
+            return
+
         # 检查是否有累积文本
         if not self.state.accumulated_text or len(self.state.accumulated_text) < self.min_characters:
             return
@@ -142,40 +181,86 @@ class TriggerManager:
         self.state.pending_analysis = True
         self.state.silence_start_time = None
 
-        # 准备分析上下文 - 取最近10条消息
-        messages = self.conversation_history[-10:]  # 取最近10条消息
+        # 发送分析开始消息
+        if self.broadcast_callback:
+            import time
+            try:
+                self.broadcast_callback({
+                    "time": time.strftime("%H:%M:%S"),
+                    "speaker": "智能分析",
+                    "text": "🤔 语音分析中..."
+                })
+            except Exception as e:
+                print(f"[触发机制] 发送分析开始消息失败: {e}")
+
+        # 准备分析上下文 - 增量分析：从上次触发位置到现在的消息
+        # 计算分析范围：上次分析结束 -> 现在
+        start_index = self.state.last_analysis_index + 1
+        if start_index < 0:
+            start_index = 0
+
+        # 取增量消息，但限制最大条数（避免一次分析太多）
+        max_increment_messages = 15  # 每次最多分析15条增量消息
+        end_index = min(start_index + max_increment_messages, len(self.conversation_history))
+        messages = self.conversation_history[start_index:end_index]
+
         if messages:
             # 使用配置的主人公，如果没有配置则从消息中提取
             if self.protagonist:
                 speaker_name = self.protagonist
-                print(f"[触发机制] 📤 使用配置的主人公: {speaker_name}, 消息数={len(messages)}/总{len(self.conversation_history)}")
+                print(f"[触发机制] 📤 使用配置的主人公: {speaker_name}, 增量消息数={len(messages)} [{start_index}-{end_index-1}]/总{len(self.conversation_history)}")
             else:
                 last_message = messages[-1]
                 speaker_name = last_message.get('speaker', '').split(' (')[0]  # 提取说话人姓名
-                print(f"[触发机制] 📤 未配置主人公，使用最后说话人: {speaker_name}, 消息数={len(messages)}/总{len(self.conversation_history)}")
+                print(f"[触发机制] 📤 未配置主人公，使用最后说话人: {speaker_name}, 增量消息数={len(messages)} [{start_index}-{end_index-1}]/总{len(self.conversation_history)}")
             
             # 异步执行分析 - 使用保存的event loop
             if self.event_loop and self.event_loop.is_running():
-                asyncio.run_coroutine_threadsafe(self._run_analysis(messages, speaker_name), self.event_loop)
+                asyncio.run_coroutine_threadsafe(self._run_analysis(messages, speaker_name, start_index), self.event_loop)
                 print("[触发机制] ✅ 分析任务已提交到主event loop")
             else:
                 print("[触发机制] ⚠️ Event loop未设置或未运行，分析任务未启动")
                 print("[触发机制] 💡 提示: 请在server启动时调用trigger_manager.set_event_loop(loop)")
                 self.state.pending_analysis = False
 
-    async def _run_analysis(self, messages: List[Dict], speaker_name: str):
+    async def _run_analysis(self, messages: List[Dict], speaker_name: str, start_index: int):
         """运行智能分析"""
         try:
             print(f"[触发机制] 🤖 开始调用本地模型分析...")
-            result = await agent_manager.analyze_conversation(messages, speaker_name)
 
-            is_needed = result.get('is', False)
-            reason = result.get('reason', '')
-            confidence = result.get('confidence', 0.0)
-            
+            # 加载配置以检查是否启用意图识别
+            config_data = load_config()
+            agent_config = config_data.get("agent_config", {})
+            intent_recognition_enabled = agent_config.get("intent_recognition_enabled", False)
+
+            # 运行完整的三阶段智能分析
+            result = await agent_manager.run_intelligent_analysis(
+                messages,
+                speaker_name,
+                intent_recognition=intent_recognition_enabled
+            )
+
+            # 从三阶段结果中提取阶段1的结果
+            phase1_result = result.get('phase1', {})
+            is_needed = phase1_result.get('is', False)
+            reason = phase1_result.get('reason', '')
+            confidence = phase1_result.get('confidence', 0.0)
+
             if is_needed:
-                print(f"[触发机制] ✅ 智能分析结果: 需要启动多模型共话 (置信度: {confidence:.0%})")
+                print(f"[触发机制] ✅ 智能分析结果: 需要让AI帮助分析 (置信度: {confidence:.0%})")
                 print(f"[触发机制] 📋 原因: {reason}")
+
+                # 输出阶段2和阶段3的结果
+                phase2_result = result.get('phase2')
+                if phase2_result:
+                    print(f"[触发机制] 📊 意图识别: {'完成' if phase2_result.get('success') else '跳过'}")
+                    if phase2_result.get('success'):
+                        print(f"[触发机制] 🎯 核心问题: {phase2_result.get('core_question', '')[:50]}...")
+
+                distribution_result = result.get('distribution', {})
+                distribution_mode = distribution_result.get('mode', 'unknown')
+                targets = distribution_result.get('targets', [])
+                print(f"[触发机制] 🎭 分发模式: {distribution_mode}, 目标数量: {len(targets)}")
             else:
                 print(f"[触发机制] ❌ 智能分析结果: 普通对话，无需AI介入")
                 print(f"[触发机制] 📋 原因: {reason}")
@@ -196,6 +281,11 @@ class TriggerManager:
             import traceback
             traceback.print_exc()
         finally:
+            # 更新分析位置：指向这次分析的最后一条消息
+            if messages:
+                self.state.last_analysis_index = start_index + len(messages) - 1
+                print(f"[触发机制] 📍 更新分析位置: {self.state.last_analysis_index} (下次从 {self.state.last_analysis_index + 1} 开始)")
+
             # 重置累积文本
             self.state.accumulated_text = ""
             self.state.pending_analysis = False
@@ -208,8 +298,26 @@ class TriggerManager:
     def clear_history(self):
         """清空对话历史"""
         self.conversation_history = []
+        # 保留配置参数，只重置状态
+        old_min_chars = self.min_characters
+        old_silence_threshold = self.silence_threshold
+        old_max_history = self.max_history
+        old_protagonist = self.protagonist
+
         self.state = TriggerState()
+
+        # 恢复配置参数
+        self.min_characters = old_min_chars
+        self.silence_threshold = old_silence_threshold
+        self.max_history = old_max_history
+        self.protagonist = old_protagonist
+
         print("[触发机制] 已清空对话历史")
+
+    def reset_analysis_position(self):
+        """重置分析位置，下次分析从头开始"""
+        self.state.last_analysis_index = -1
+        print("[触发机制] 🔄 已重置分析位置，下次将从头分析")
 
     def get_status(self) -> dict:
         """获取当前状态"""
@@ -221,7 +329,9 @@ class TriggerManager:
             'last_message_time': self.state.last_message_time,
             'pending_analysis': self.state.pending_analysis,
             'last_speaker': self.state.last_speaker,
-            'history_count': len(self.conversation_history)
+            'last_analysis_index': self.state.last_analysis_index,
+            'history_count': len(self.conversation_history),
+            'next_analysis_start': self.state.last_analysis_index + 1
         }
 
     def set_enabled(self, enabled: bool):

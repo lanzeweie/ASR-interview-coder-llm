@@ -1,0 +1,167 @@
+/* ========================================
+   侧边栏样式 - Sidebar
+   ======================================== */
+.sidebar {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    transition: all 0.15s ease;
+    min-width: var(--sidebar-min);
+    flex: 0 0 var(--sidebar-width);
+    box-shadow: var(--shadow-md);
+}
+
+.sidebar-header {
+    padding: var(--gap-lg) var(--gap-md) var(--gap-md);
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+}
+
+.sidebar-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 300;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    margin-bottom: var(--gap-md);
+}
+
+.new-chat-btn {
+    width: 100%;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--gap-sm);
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+    text-transform: uppercase;
+}
+
+.new-chat-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(79, 70, 229, 0.3), var(--shadow-glow);
+}
+
+.new-chat-btn:active {
+    transform: translateY(0);
+}
+
+.new-chat-btn svg {
+    transition: transform 0.3s ease;
+}
+
+.new-chat-btn:hover svg {
+    transform: rotate(90deg);
+}
+
+/* 聊天列表 */
+.chat-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--gap-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.chat-item {
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--gap-sm);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.15s ease;
+}
+
+.chat-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+    transform: scaleY(0);
+    transition: transform 0.2s ease;
+}
+
+.chat-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-normal);
+    transform: translateX(2px);
+}
+
+.chat-item:hover::before {
+    transform: scaleY(1);
+}
+
+.chat-item.active {
+    background: linear-gradient(90deg, rgba(79, 70, 229, 0.08), rgba(99, 102, 241, 0.05));
+    border-color: var(--accent-primary);
+    box-shadow: inset 0 0 12px rgba(79, 70, 229, 0.1);
+}
+
+.chat-item.active::before {
+    transform: scaleY(1);
+}
+
+.chat-title {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-item.active .chat-title {
+    color: var(--text-primary);
+}
+
+.delete-chat-btn {
+    opacity: 0;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.15s ease;
+}
+
+.chat-item:hover .delete-chat-btn {
+    opacity: 1;
+}
+
+.delete-chat-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-error);
+}

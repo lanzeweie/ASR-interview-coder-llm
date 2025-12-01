@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AST · 实时语音转写 & AI 助手</title>
+    <title>AST · 语音厅 & 助手</title>
 
     <!-- 高贵的字体 - Distinctive Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,7 +13,7 @@
         href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=JetBrains+Mono:wght@300;400;500;600&family=Source+Sans+3:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
 
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/css/main.css">
 </head>
 
 <body>
@@ -52,7 +52,7 @@
                                 fill="currentColor" />
                         </svg>
                     </div>
-                    <h1 class="panel-title">实时语音转写</h1>
+                    <h1 class="panel-title">语音厅</h1>
                 </div>
                 <div class="header-controls">
                     <div id="asr-status" class="status disconnected">
@@ -103,7 +103,7 @@
                                 stroke-linejoin="round" />
                         </svg>
                     </div>
-                    <h1 class="panel-title">AI 助手</h1>
+                    <h1 class="panel-title">助手</h1>
                     <!-- 当前模型显示 -->
                     <div class="current-model-display" id="current-model-display">
                         <div class="model-indicator active">
@@ -123,6 +123,11 @@
                     <div id="agent-status-indicator" class="agent-status-indicator">
                         <div class="agent-status-dot"></div>
                         <span class="agent-status-text">智能分析</span>
+                    </div>
+                    <!-- 意图识别状态指示器 -->
+                    <div id="intent-recognition-indicator" class="intent-recognition-indicator">
+                        <div class="intent-recognition-dot"></div>
+                        <span class="intent-recognition-text">意图识别</span>
                     </div>
                     <button id="settings-btn" class="control-btn" title="设置">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -165,8 +170,8 @@
                             <span class="tooltip-text">智能分析</span>
                         </button>
 
-                        <!-- 多模型会话开关 -->
-                        <button id="multi-llm-toggle" class="icon-control-btn" title="多模型会话">
+                        <!-- 智囊团开关 -->
+                        <button id="multi-llm-toggle" class="icon-control-btn" title="智囊团">
                             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                                 <circle cx="4" cy="9" r="3" stroke="currentColor" stroke-width="1.5" />
                                 <circle cx="9" cy="5" r="3" stroke="currentColor" stroke-width="1.5" />
@@ -174,7 +179,18 @@
                                 <path d="M6.5 7L8 6.5M12 6.5L13.5 7" stroke="currentColor" stroke-width="1.5"
                                     stroke-linecap="round" />
                             </svg>
-                            <span class="tooltip-text">多模型会议</span>
+                            <span class="tooltip-text">智囊团</span>
+                        </button>
+
+                        <!-- 意图识别开关 -->
+                        <button id="intent-recognition-toggle" class="icon-control-btn" title="意图识别">
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                <path d="M3 3h12v12H3z" stroke="currentColor" stroke-width="1.5"
+                                    stroke-linejoin="round" />
+                                <path d="M5 6h8M5 9h8M5 12h5" stroke="currentColor" stroke-width="1.5"
+                                    stroke-linecap="round" />
+                            </svg>
+                            <span class="tooltip-text">启用后进行聊天记录汇总分析，提取大纲</span>
                         </button>
                     </div>
 
@@ -220,13 +236,13 @@
                         <ul>
                             <li><strong>单击</strong>左侧模型查看配置详情</li>
                             <li><strong>双击模型或点击"设为当前"</strong>切换当前生效模型</li>
-                            <li>右侧有<strong>三个标签页</strong>：常规配置 + 多模型集群配置 + 智能分析</li>
+                            <li>右侧有<strong>三个标签页</strong>：常规配置 + 智囊团配置 + 智能分析</li>
                             <li>当前生效模型有<strong>绿色标识</strong></li>
                         </ul>
                     </div>
                 </div>
 
-                <!-- 多模型状态条 -->
+                <!-- 智囊团状态条 -->
                 <div class="multi-llm-status">
                     <span class="status-label">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -235,7 +251,7 @@
                             <path d="M2 11L8 14L14 11" stroke="currentColor" stroke-width="1.5"
                                 stroke-linejoin="round" />
                         </svg>
-                        多模型集群:
+                        智囊团:
                     </span>
                     <span id="multi-llm-count" class="status-value">未启用</span>
                 </div>
@@ -276,7 +292,7 @@
                                     <path d="M5.5 7.5L7.5 6.5M12.5 6.5L14.5 7.5" stroke="currentColor"
                                         stroke-width="1.5" />
                                 </svg>
-                                多模型集群
+                                智囊团
                             </button>
                             <button class="tab-button" data-tab="agent">
                                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -294,15 +310,20 @@
                                 <input type="text" id="config-name" placeholder="例如: DeepSeek">
                             </div>
                             <div class="form-group">
-                                <label>标签快速选择</label>
+                                <label>身份选择(可选)</label>
                                 <div class="tags-quick-select">
                                     <div class="tag-option">
-                                        <input type="radio" name="model-tag" id="tag-thinking" value="思考">
-                                        <label for="tag-thinking" class="tag-label">思考</label>
+                                        <input type="radio" name="model-tag" id="tag-tech" value="tech_assistant_tag">
+                                        <label for="tag-tech" class="tag-label">技术辅助者</label>
                                     </div>
                                     <div class="tag-option">
-                                        <input type="radio" name="model-tag" id="tag-fast" value="快速">
-                                        <label for="tag-fast" class="tag-label">快速</label>
+                                        <input type="radio" name="model-tag" id="tag-concise"
+                                            value="concise_assistant_tag">
+                                        <label for="tag-concise" class="tag-label">精简辅助者</label>
+                                    </div>
+                                    <div class="tag-option">
+                                        <input type="radio" name="model-tag" id="tag-guide" value="guide_tag">
+                                        <label for="tag-guide" class="tag-label">引导者</label>
                                     </div>
                                 </div>
                             </div>
@@ -323,16 +344,16 @@
                                 <label>System Prompt (可选)</label>
                                 <textarea id="system-prompt" rows="3"
                                     placeholder="为此模型设置专属的 System Prompt..."></textarea>
+                                <div id="system-prompt-hint" class="form-hint"
+                                    style="display: none; margin-top: 8px; color: var(--text-tertiary); font-size: 12px;">
+                                    ⚠️ 选择身份后将自动禁用 System Prompt（清除身份选择可使用）
+                                </div>
                             </div>
                         </div>
 
                         <div id="tab-multi" class="tab-content">
                             <div class="multi-model-cluster">
-                                <div class="cluster-description">
-                                    <strong>🎯 多模型集群配置</strong><br>
-                                    选择要同时调用的AI模型，多个模型会同时生成回答，<br>
-                                    适合需要对比不同模型回答或增强回答质量场景。
-                                </div>
+                                <div class="cluster-header">智囊团</div>
                                 <div id="multi-model-list" class="multi-model-options"></div>
                             </div>
                         </div>
@@ -340,13 +361,17 @@
                         <div id="tab-agent" class="tab-content">
                             <div class="multi-model-cluster">
                                 <div class="cluster-description">
-                                    <strong>🧠 智能分析配置</strong><br>
-                                    基于底层小模型智能判定是否需要启动多模型共话，<br>
+                                    <strong>智能分析</strong><br>
+                                    从语音中分析，何时需要启动Ai辅助，<br>
                                     在语音讨论场景下自动辅助主人公进行分析回答。
                                 </div>
 
+                                <!-- 智能分析模型配置 -->
+                                <div class="config-section-title">
+                                    <strong>智能分析模型配置</strong>
+                                </div>
                                 <div class="form-group">
-                                    <label>模型类型</label>
+                                    <label>智能分析模型类型</label>
                                     <select id="agent-model-type-select" class="form-select"
                                         onchange="handleModelTypeChange(this)">
                                         <option value="local">本地模型</option>
@@ -381,6 +406,16 @@
                                         <span class="input-suffix">秒</span>
                                     </div>
                                     <div class="form-hint">检测到多少秒没有新语音时触发分析（默认2秒）</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>消息上限</label>
+                                    <div class="input-group">
+                                        <input type="number" id="agent-max-messages" min="10" max="200" value="50"
+                                            class="form-input">
+                                        <span class="input-suffix">条</span>
+                                    </div>
+                                    <div class="form-hint">分析时最多保留多少条历史消息（默认50条）</div>
                                 </div>
                             </div>
                         </div>
@@ -435,7 +470,7 @@
                 <div class="voiceprint-config-section">
                     <div class="voiceprint-description">
                         <strong>🎙️ 声纹管理</strong><br>
-                        录入和管理说话人声纹库，用于实时语音转写中的说话人识别。<br>
+                        录入和管理说话人声纹库，用于语音厅中的说话人识别。<br>
                         录制时长要求：10-40 秒，请清晰说话。
                     </div>
 
@@ -481,7 +516,9 @@
                         <div id="recording-status" class="recording-status" style="display: none;">
                             <!-- 朗读提示文字 -->
                             <div id="recording-prompt" class="recording-prompt" style="display: none;">
-                                <div class="prompt-content"><strong>请清晰朗读以下内容：</strong><br>不是所有的鲜花都盛开在春天，不是所有的河流都流向大海，鲜花盛开在四季，河流流向八方，只要热爱山海皆可平，无处不风景</div>
+                                <div class="prompt-content">
+                                    <strong>请清晰朗读以下内容：</strong><br>不是所有的鲜花都盛开在春天，不是所有的河流都流向大海，鲜花盛开在四季，河流流向八方，只要热爱山海皆可平，无处不风景
+                                </div>
 
                                 <!-- 音量波浪可视化 -->
                                 <div id="recording-pulse" class="recording-pulse">
@@ -552,7 +589,7 @@
         </div>
     </div>
 
-    <script src="/static/script.js"></script>
+    <script type="module" src="/static/js/main.js"></script>
 </body>
 
 </html>

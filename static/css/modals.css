@@ -1,0 +1,356 @@
+/* ========================================
+   模态框 - Modal
+   ======================================== */
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.modal.active {
+    display: flex;
+    pointer-events: auto;
+}
+
+.modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(31, 41, 55, 0.4);
+    backdrop-filter: blur(8px);
+    animation: fadeIn 0.3s ease;
+    pointer-events: auto;
+}
+
+.modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 760px;
+    max-height: 92vh;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-normal);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(79, 70, 229, 0.1);
+    animation: modalSlideUp 0.4s ease;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+    z-index: 1;
+}
+
+@keyframes modalSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-header {
+    padding: var(--gap-lg);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.modal-title {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 300;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+}
+
+.close-btn {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.close-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-normal);
+    color: var(--text-primary);
+    transform: rotate(90deg);
+}
+
+.modal-body {
+    padding: var(--gap-lg) var(--gap-lg) 0 var(--gap-lg); 
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.form-group {
+    margin-bottom: var(--gap-md);
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: var(--gap-sm);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Textarea styling */
+.form-group textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    transition: all 0.15s ease;
+    resize: vertical;
+}
+
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    background: var(--bg-elevated);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.form-group textarea::placeholder {
+    color: var(--text-muted);
+}
+
+/* 下拉选择框 */
+.form-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    transition: all 0.15s ease;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    background: var(--bg-elevated);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* 表单提示 */
+.form-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+}
+
+/* 输入组 */
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.form-input {
+    flex: 1;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.input-suffix {
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-left: none;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+/* Switch Toggle */
+.switch-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+.switch-container input {
+    display: none;
+}
+
+.slider {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 18px;
+    background-color: var(--border-normal);
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background-color: var(--primary-color);
+}
+
+input:checked+.slider:before {
+    transform: translateX(14px);
+}
+
+.switch-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+/* 增强多模型切换按钮 */
+.switch-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.switch-container::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-primary);
+    transform: scaleY(0);
+    transition: transform 0.2s ease;
+}
+
+.switch-container:hover {
+    border-color: var(--accent-primary);
+    background: rgba(79, 70, 229, 0.05);
+}
+
+.switch-container:hover::before {
+    transform: scaleY(1);
+}
+
+.switch-container input:checked ~ .slider {
+    background: var(--accent-primary);
+}
+
+.switch-container input:checked ~ .slider:before {
+    transform: translateX(14px);
+}
+
+.switch-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.switch-label .icon {
+    font-size: 14px;
+}
+
+/* 多模型指示器 */
+.multi-llm-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(79, 70, 229, 0.1);
+    border: 1px solid var(--accent-primary);
+    border-radius: 6px;
+    color: var(--accent-primary);
+    font-size: 12px;
+    font-weight: 500;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.multi-llm-indicator .indicator-text {
+    font-family: var(--font-mono);
+}
+
+/* Spacer for modal actions */
+.spacer {
+    flex: 1;
+}
+
+/* ========================================
+   模态框操作栏 - Modal Actions
+   ======================================== */
+.modal-actions {
+    padding: var(--gap-lg);
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+}
+
+/* 按钮组之间的分隔 */
+.modal-actions .spacer {
+    flex: 1;
+}
+
+/* 按钮样式优化 */
+.modal-actions .btn {
+    min-width: 100px;
+    justify-content: center;
+}

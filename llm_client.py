@@ -51,55 +51,63 @@ class LLMClient:
         self.model = model
         self.init_client()
 
-    async def chat_stream(self, messages):
+    async def chat_stream(self, messages, stream=True):
             """
-            流式请求 LLM 响应 (Async - 深度调试版)
+            请求 LLM 响应 (Async - 支持流式和非流式)
             """
             if not self.client:
                 yield "错误: LLM 客户端未初始化，请检查配置。"
                 return
 
             try:
-                print(f"[调试] 正在发送请求到模型: {self.model}...")
+                print(f"[调试] 正在发送请求到模型: {self.model} (Stream={stream})...")
                 
                 # 发起请求
-                stream = await self.client.chat.completions.create(
+                response = await self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    stream=True,
+                    stream=stream,
                     # 某些中转商如果遇到不支持的参数会报错，这里保持最简参数
                     temperature=0.7 
                 )
-                print("[调试] 请求连接建立成功，准备接收流式数据...")
+                print("[调试] 请求连接建立成功...")
                 
-                chunk_count = 0
-                async for chunk in stream:
-                    chunk_count += 1
-                    
-                    # --- 🔍 深度调试：打印前3个包的原始数据，看看服务器到底回了什么 ---
-                    if chunk_count <= 3:
-                        print(f"\n[底层数据 Chunk {chunk_count}] {chunk.model_dump_json()}")
-                    # -----------------------------------------------------------
-
-                    if chunk.choices and len(chunk.choices) > 0:
-                        delta = chunk.choices[0].delta
+                if stream:
+                    chunk_count = 0
+                    async for chunk in response:
+                        chunk_count += 1
                         
-                        # 检查 delta 里到底有什么
-                        if chunk_count == 1 and not delta.content:
-                            print(f"[调试] 第一个包内容为空，Role: {getattr(delta, 'role', 'Unknown')}")
+                        # --- 🔍 深度调试：打印前3个包的原始数据，看看服务器到底回了什么 ---
+                        if chunk_count <= 3:
+                            print(f"\n[底层数据 Chunk {chunk_count}] {chunk.model_dump_json()}")
+                        # -----------------------------------------------------------
 
-                        if hasattr(delta, 'content') and delta.content is not None:
-                            content = delta.content
-                            if content: 
-                                yield content
-                            else:
-                                # 这是一个空字符串 ""，有些模型会发空字符串保活
-                                pass 
-                
-                if chunk_count == 0:
-                    yield "\n[警告] 连接建立成功，但流是空的 (Stream Empty)。\n可能原因：API Key额度不足、模型名称拼写错误 (尝试改为 gpt-3.5-turbo 或 deepseek-chat 测试)。"
-                
-                print(f"\n[调试] 流接收完毕，共收到 {chunk_count} 个数据包。")
+                        if chunk.choices and len(chunk.choices) > 0:
+                            delta = chunk.choices[0].delta
+                            
+                            # 检查 delta 里到底有什么
+                            if chunk_count == 1 and not delta.content:
+                                print(f"[调试] 第一个包内容为空，Role: {getattr(delta, 'role', 'Unknown')}")
+
+                            if hasattr(delta, 'content') and delta.content is not None:
+                                content = delta.content
+                                if content: 
+                                    yield content
+                                else:
+                                    # 这是一个空字符串 ""，有些模型会发空字符串保活
+                                    pass 
+                    
+                    if chunk_count == 0:
+                        yield "\n[警告] 连接建立成功，但流是空的 (Stream Empty)。\n可能原因：API Key额度不足、模型名称拼写错误 (尝试改为 gpt-3.5-turbo 或 deepseek-chat 测试)。"
+                    
+                    print(f"\n[调试] 流接收完毕，共收到 {chunk_count} 个数据包。")
+                else:
+                    # 非流式处理
+                    if response.choices and len(response.choices) > 0:
+                        content = response.choices[0].message.content
+                        yield content
+                    else:
+                         yield "\n[警告] 未收到有效响应内容。"
 
             except Exception as e:
                 print(f"\n[严重错误] 请求过程中发生异常:")

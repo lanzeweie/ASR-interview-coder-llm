@@ -353,6 +353,8 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex: 1;
+    min-width: 0;
 }
 
 /* 当前模型显示 */
@@ -536,6 +538,7 @@ body {
     border: 1px solid var(--border-normal);
     border-radius: 8px;
     color: var(--accent-primary);
+    flex-shrink: 0;
 }
 
 .panel-title {
@@ -544,6 +547,7 @@ body {
     font-weight: 300;
     letter-spacing: 0.02em;
     color: var(--text-primary);
+    white-space: nowrap;
 }
 
 .header-controls {
@@ -1693,6 +1697,31 @@ body {
     .message {
         max-width: 90%;
     }
+
+    /* 面板头部布局优化 - 防止标题被挤压 */
+    .panel-header {
+        flex-wrap: wrap;
+        padding: var(--gap-sm) var(--gap-md);
+    }
+
+    .header-left {
+        flex-basis: 100%;
+        margin-bottom: var(--gap-sm);
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .header-controls {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
+    .panel-title {
+        /* 确保标题有最小宽度，不被完全挤压 */
+        min-width: 100px;
+        flex-shrink: 0;
+    }
 }
 
 @media (max-width: 900px) {
@@ -1742,6 +1771,25 @@ body {
     .panel {
         border-radius: 0;
         border: none;
+    }
+
+    /* 移动端面板头部进一步优化 */
+    .panel-title {
+        font-size: 14px;
+        min-width: 80px;
+    }
+
+    .header-left {
+        gap: 8px;
+    }
+
+    .current-model-display {
+        padding: 4px 8px;
+    }
+
+    .agent-status-indicator {
+        padding: 4px 10px;
+        font-size: 10px;
     }
 }
 
@@ -2223,26 +2271,6 @@ input:checked+.slider:before {
         width: 36px;
         height: 36px;
     }
-
-    .current-model-display {
-        padding: 4px 8px;
-        gap: 6px;
-    }
-
-    .model-name-display {
-        font-size: 11px;
-        max-width: 80px;
-    }
-
-    .agent-status-indicator {
-        padding: 6px 12px;
-        font-size: 11px;
-    }
-
-    .agent-status-dot {
-        width: 7px;
-        height: 7px;
-    }
 }
 
 /* Multi-LLM Message Styles */
@@ -2699,31 +2727,6 @@ input:checked+.slider:before {
 
     .input-hint {
         display: none;
-    }
-
-    .current-model-display {
-        padding: 3px 6px;
-        gap: 4px;
-    }
-
-    .model-name-display {
-        max-width: 60px;
-        font-size: 10px;
-    }
-
-    .model-switch-btn {
-        width: 14px;
-        height: 14px;
-    }
-
-    .agent-status-indicator {
-        padding: 4px 10px;
-        font-size: 10px;
-    }
-
-    .agent-status-dot {
-        width: 6px;
-        height: 6px;
     }
 }
 

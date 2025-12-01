@@ -1,0 +1,40 @@
+/* ========================================
+   可调节分隔条 - Resizer
+   ======================================== */
+.resizer {
+    position: relative;
+    background: transparent;
+    cursor: col-resize;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex: 0 0 var(--resizer-width);
+    z-index: 10;
+}
+
+.resizer::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 60%;
+    background: var(--border-normal);
+    border-radius: 2px;
+    transition: all 0.15s ease;
+}
+
+.resizer:hover::before,
+.resizer.resizing::before {
+    width: 3px;
+    height: 80%;
+    background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.resizer:active::before {
+    background: var(--accent-primary);
+}

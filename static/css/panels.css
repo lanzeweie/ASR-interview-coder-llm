@@ -1,0 +1,500 @@
+/* ========================================
+   面板样式 - Panel
+   ======================================== */
+.panel {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    min-width: 300px;
+    flex: 1 1 auto;
+    box-shadow: var(--shadow-md);
+}
+
+.asr-panel {
+    width: 40%;
+    flex: 1 1 auto;
+}
+
+.llm-panel {
+    width: 48%;
+    flex: 1.2 1 auto;
+}
+
+.panel-header {
+    padding: var(--gap-md) var(--gap-lg);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--gap-md);
+    position: relative;
+    flex-wrap: nowrap;
+    /* 大屏幕下不换行 */
+    /* 启用容器查询 - 检测面板宽度变化 */
+    container-type: inline-size;
+}
+
+.panel-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+            transparent 0%,
+            var(--accent-primary) 50%,
+            transparent 100%);
+    opacity: 0.3;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    /* 进一步缩小间距，让标题和模型显示更紧密 */
+    flex: 1;
+    min-width: 0;
+}
+
+/* 当前模型显示 */
+.current-model-display {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    margin-left: 0;
+    /* 移除左边距，紧贴助手标题 */
+    overflow: hidden;
+    flex-shrink: 1;
+    /* 减少收缩比例 */
+    max-width: fit-content;
+    /* 自适应内容宽度 */
+    white-space: nowrap;
+    /* 避免换行 */
+}
+
+/* 容器查询：面板过窄时，隐藏当前模型显示 */
+@container (max-width: 300px) {
+    .current-model-display {
+        display: none;
+    }
+}
+
+.current-model-display::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s ease;
+}
+
+.current-model-display:hover::before {
+    left: 100%;
+}
+
+.current-model-display:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+}
+
+.current-model-display:hover .model-name-display {
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+.model-name-display {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.model-switch-btn {
+    width: 18px;
+    height: 18px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.model-switch-btn:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
+/* 智能分析状态指示器 */
+.agent-status-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(139, 92, 246, 0.05));
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+}
+
+.agent-status-indicator.active {
+    display: flex;
+}
+
+.agent-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #8b5cf6;
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+    animation: agent-status-pulse 2s ease-in-out infinite;
+    position: relative;
+}
+
+.agent-status-dot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #8b5cf6;
+    transform: translate(-50%, -50%);
+    animation: agent-status-glow 2s ease-in-out infinite;
+}
+
+.agent-status-dot::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #8b5cf6;
+    transform: translate(-50%, -50%);
+    animation: agent-status-glow 2s ease-in-out infinite reverse;
+    animation-delay: 1s;
+}
+
+.agent-status-text {
+    color: #8b5cf6;
+    font-weight: 700;
+    animation: agent-text-flicker 3s ease-in-out infinite;
+}
+
+@keyframes agent-status-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.6;
+        transform: scale(0.9);
+    }
+}
+
+@keyframes agent-status-glow {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(2);
+        opacity: 0;
+    }
+}
+
+@keyframes agent-text-flicker {
+
+    0%,
+    100% {
+        opacity: 1;
+        text-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+    }
+}
+
+/* 意图识别状态指示器 */
+.intent-recognition-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05));
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+}
+
+.intent-recognition-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    animation: intent-recognition-pulse 2s ease-in-out infinite;
+    position: relative;
+}
+
+.intent-recognition-dot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #22c55e;
+    transform: translate(-50%, -50%);
+    animation: intent-recognition-glow 2s ease-in-out infinite;
+}
+
+.intent-recognition-dot::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #22c55e;
+    transform: translate(-50%, -50%);
+    animation: intent-recognition-glow 2s ease-in-out infinite reverse;
+    animation-delay: 1s;
+}
+
+.intent-recognition-text {
+    color: #22c55e;
+    font-weight: 700;
+    animation: intent-recognition-text-flicker 3s ease-in-out infinite;
+}
+
+@keyframes intent-recognition-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.6;
+        transform: scale(0.9);
+    }
+}
+
+@keyframes intent-recognition-glow {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(2);
+        opacity: 0;
+    }
+}
+
+@keyframes intent-recognition-text-flicker {
+
+    0%,
+    100% {
+        opacity: 1;
+        text-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+    }
+
+    50% {
+        opacity: 0.9;
+        text-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+    }
+}
+
+.panel-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(99, 102, 241, 0.05));
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+.panel-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 300;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    white-space: nowrap;
+    /* 大屏幕下保持单行显示 */
+    flex: 0 0 auto;
+    /* 不收缩，优先级最高 */
+    z-index: 10;
+    /* 提高层级 */
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+/* 状态指示器 */
+.status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    max-width: 120px;
+    /* 限制最大宽度，防止遮挡标题 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 3;
+    /* 允许收缩，优先级更高 */
+    transition: all 0.3s ease;
+}
+
+/* 容器查询：当面板宽度小于380px时，只显示圆点 */
+@container (max-width: 380px) {
+    .status {
+        max-width: 24px;
+        padding: 6px;
+        background: transparent;
+        border: none;
+    }
+
+    .status-text {
+        display: none;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+    }
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.status.connected .status-dot {
+    background: var(--color-success);
+    box-shadow: 0 0 8px var(--color-success);
+}
+
+.status.connected .status-text {
+    color: var(--color-success);
+}
+
+.status.disconnected .status-dot {
+    background: var(--text-muted);
+}
+
+.status.disconnected .status-text {
+    color: var(--text-tertiary);
+}
+
+/* 控制按钮 */
+.control-btn {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 4;
+    /* 最高收缩优先级 */
+}
+
+/* 容器查询：面板过窄时，隐藏部分按钮 */
+@container (max-width: 320px) {
+    .control-btn[title="发送全部到AI"] {
+        display: none;
+        /* 隐藏发送全部按钮 */
+    }
+}
+
+@container (max-width: 280px) {
+
+    .control-btn[title="发送全部到AI"],
+    .control-btn[title="清空记录"] {
+        display: none;
+        /* 隐藏发送全部和清空按钮 */
+    }
+}
+
+.control-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-normal);
+    color: var(--accent-primary);
+    transform: translateY(-1px);
+}
+
+.control-btn:active {
+    transform: translateY(0);
+}

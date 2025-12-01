@@ -1,0 +1,229 @@
+/* ========================================
+   聊天窗口 - Chat Window
+   ======================================== */
+.chat-window {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--gap-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+    background: var(--bg-primary);
+}
+
+/* 消息样式 */
+.message {
+    display: flex;
+    flex-direction: column;
+    max-width: 85%;
+    gap: 6px;
+    animation: messageSlideIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+}
+
+.message::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: var(--accent-primary);
+    border-radius: 0 4px 4px 0;
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.message:hover::before {
+    width: 3px;
+    opacity: 0.8;
+}
+
+@keyframes messageSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+    60% {
+        opacity: 1;
+        transform: translateY(-2px) scale(1.01);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.message.user {
+    align-self: flex-end;
+}
+
+.message.ai {
+    align-self: flex-start;
+}
+
+.message-header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--gap-sm);
+    padding: 0 4px;
+}
+
+.speaker-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.timestamp {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+
+.message-content,
+.content {
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    position: relative;
+    border: 1px solid transparent;
+}
+
+.message.user .message-content,
+.message.user .content {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+    color: white;
+    border-top-right-radius: 4px;
+    font-weight: 400;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+}
+
+.message.ai .message-content,
+.message.ai .content {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-top-left-radius: 4px;
+}
+
+.system-message {
+    align-self: center;
+    max-width: 90%;
+    text-align: center;
+}
+
+.system-message .message-content {
+    background: transparent;
+    border: 1px dashed var(--border-normal);
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 13px;
+}
+
+/* 智能分析消息特殊样式 */
+.message.system-message.agent-analysis {
+    align-self: center;
+    max-width: 80%;
+    text-align: center;
+    margin: var(--gap-xs) 0;
+}
+
+.message.system-message.agent-analysis .message-content {
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(99, 102, 241, 0.05));
+    border: 1px solid rgba(79, 70, 229, 0.3);
+    color: var(--accent-primary);
+    font-style: normal;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    animation: analysisGlow 2s ease-in-out infinite;
+}
+
+@keyframes analysisGlow {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(79, 70, 229, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(79, 70, 229, 0.4);
+    }
+}
+
+/* Thinking 动画 */
+.thinking-dots {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.thinking-dots span {
+    width: 6px;
+    height: 6px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    animation: thinkingBounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-dots span:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.thinking-dots span:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+@keyframes thinkingBounce {
+
+    0%,
+    80%,
+    100% {
+        transform: scale(0);
+        opacity: 0.3;
+    }
+
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* AI消息正在输入状态的特殊样式 */
+.message.ai .content.thinking {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-style: italic;
+    opacity: 0.8;
+    animation: thinkingPulse 2s ease-in-out infinite;
+}
+
+@keyframes thinkingPulse {
+    0%, 100% {
+        opacity: 0.7;
+    }
+    50% {
+        opacity: 0.9;
+    }
+}
+
+/* Multi-LLM Message Styles */
+.message-header .model-tag {
+    font-size: 11px;
+    background-color: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}

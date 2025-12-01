@@ -1,0 +1,40 @@
+/* ========================================
+   AST - Main CSS Import File
+   主CSS入口文件 - 导入所有模块
+   ======================================== */
+
+/* 导入所有CSS模块 */
+@import url('./variables.css');
+/* CSS变量定义 */
+@import url('./global.css');
+/* 全局样式和基础设置 */
+@import url('./layout.css');
+/* 布局相关样式 */
+@import url('./sidebar.css');
+/* 侧边栏样式 */
+@import url('./resizer.css');
+/* 可调节分隔条样式 */
+@import url('./panels.css');
+/* 面板样式 */
+@import url('./chat.css');
+/* 聊天窗口样式 */
+@import url('./input.css');
+/* 输入区域样式 */
+@import url('./modals.css');
+/* 模态框样式 */
+@import url('./settings.css');
+/* 设置相关样式 */
+@import url('./voiceprint.css');
+/* 声纹管理样式 */
+@import url('./mobile.css');
+/* 移动端适配样式 */
+@import url('./animations.css');
+/* 动画效果 */
+@import url('./toast.css');
+/* Toast 通知样式 */
+
+/* 全局注释：
+   这个文件是CSS模块化的主入口文件
+   通过@import语句引入所有子模块CSS文件
+   保持了原有的样式功能完整性
+*/

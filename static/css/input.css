@@ -1,0 +1,413 @@
+/* ========================================
+   输入区域 - Enhanced Input Area
+   ======================================== */
+.input-area {
+    padding: var(--gap-md) var(--gap-lg);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+    align-items: stretch;
+    position: relative;
+}
+
+/* 快捷键提示 */
+.input-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 4px 0;
+    opacity: 0.7;
+}
+
+.hint-key {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* ========================================
+   统一输入栏 - Unified Input Bar
+   ======================================== */
+.unified-input-bar {
+    display: flex;
+    align-items: stretch;
+    gap: var(--gap-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-normal);
+    border-radius: 12px;
+    padding: var(--gap-sm);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s ease;
+}
+
+.unified-input-bar:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-strong);
+}
+
+/* 左侧控制区 */
+.input-left-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border-right: 1px solid var(--border-subtle);
+}
+
+/* 图标控制按钮 */
+.icon-control-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+    will-change: transform;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+.icon-control-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(79, 70, 229, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s ease, height 0.6s ease;
+}
+
+.icon-control-btn:hover::before {
+    width: 100%;
+    height: 100%;
+}
+
+.icon-control-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 16px rgba(79, 70, 229, 0.3);
+}
+
+.icon-control-btn:active {
+    transform: translateY(-1px) scale(0.98);
+    transition: all 0.1s ease;
+}
+
+.icon-control-btn.active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+    border-color: var(--accent-primary);
+    color: white;
+    box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
+    animation: buttonActivate 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.icon-control-btn.active::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid var(--accent-primary);
+    transform: translate(-50%, -50%);
+    animation: multiCircleRipple 2s ease-out infinite;
+    opacity: 0;
+}
+
+@keyframes buttonActivate {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+    100% {
+        transform: scale(1.05);
+    }
+}
+
+@keyframes multiCircleRipple {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.6;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1.8);
+        opacity: 0;
+    }
+}
+
+/* 智能分析按钮专属动画 */
+.icon-control-btn.active#agent-toggle {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    animation: agentThinking 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.icon-control-btn.active#agent-toggle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 120%;
+    height: 120%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
+    transform: translate(-50%, -50%);
+    animation: agentPulse 1.5s ease-in-out infinite;
+}
+
+.icon-control-btn.active#agent-toggle svg {
+    animation: agentIconSpin 3s linear infinite;
+}
+
+@keyframes agentThinking {
+    0% {
+        transform: scale(1) rotate(0deg);
+    }
+    25% {
+        transform: scale(1.1) rotate(-5deg);
+    }
+    75% {
+        transform: scale(1.1) rotate(5deg);
+    }
+    100% {
+        transform: scale(1.05) rotate(0deg);
+    }
+}
+
+@keyframes agentPulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.6;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.2);
+        opacity: 0.8;
+    }
+}
+
+@keyframes agentIconSpin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Tooltip */
+.icon-control-btn .tooltip-text {
+    position: absolute;
+    bottom: -32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: var(--text-primary);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    z-index: 100;
+}
+
+.icon-control-btn .tooltip-text::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-bottom-color: var(--text-primary);
+}
+
+.icon-control-btn:hover .tooltip-text {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* 中间输入区 */
+.input-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.main-input {
+    width: 100%;
+    min-height: 36px;
+    max-height: 120px;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    resize: none;
+    overflow-y: auto;
+    transition: all 0.3s ease;
+}
+
+.main-input::placeholder {
+    color: var(--text-tertiary);
+    font-style: italic;
+    transition: all 0.3s ease;
+}
+
+.main-input:focus {
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    animation: inputFocus 0.3s ease;
+    box-shadow: inset 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.main-input:focus::placeholder {
+    color: var(--accent-primary);
+    opacity: 0.6;
+}
+
+@keyframes inputFocus {
+    0% {
+        transform: scale(0.98);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* 右侧控制区 */
+.input-right-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: 4px;
+    border-left: 1px solid var(--border-subtle);
+}
+
+.send-btn {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
+    border: none;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+    will-change: transform;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+.send-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s ease, height 0.6s ease;
+}
+
+.send-btn:hover::before {
+    width: 100%;
+    height: 100%;
+}
+
+.send-btn:hover {
+    transform: translateY(-3px) scale(1.08);
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.5), var(--shadow-glow);
+}
+
+.send-btn:active {
+    transform: translateY(-1px) scale(1.02);
+    transition: all 0.1s ease;
+}
+
+.send-btn:active::before {
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.send-btn svg {
+    transition: transform 0.3s ease;
+}
+
+.send-btn:hover svg {
+    transform: rotate(15deg) scale(1.2);
+}
+
+/* 复用原有的模型指示器样式 */
+.model-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.model-indicator.active {
+    background: var(--accent-primary);
+    box-shadow: 0 0 10px rgba(79, 70, 229, 0.5);
+}
+
+.model-dot {
+    width: 6px;
+    height: 6px;
+    background: white;
+    border-radius: 50%;
+    animation: breathe 3s infinite ease-in-out;
+}
+
+.model-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

@@ -1,7 +1,7 @@
 """
 智能分析 Agent 模块
 
-基于底层小模型判定是否需要启动多模型共话
+基于底层小模型判定是否需要让AI帮助分析
 支持本地模型和云端 API 两种方式
 """
 
@@ -99,39 +99,37 @@ class IntelligentAgent:
 
         dialogue = "\n".join(message_texts)
 
-        prompt = f"""请你分析以下对话：
+        print(f"[智能分析] 构建Prompt，消息数: {len(messages)}")
+        print(f"[智能分析] 对话内容预览: {dialogue[:200]}...")
 
+        prompt = f"""请根据对话内容进行判断，只需要给出最终结果。
+
+对话内容：
 {dialogue}
 
-注意：{speaker_name} 是主人公。
+判断标准：
+- {speaker_name} 是主人公
+- 仅当对话包含技术问题、专业讨论或需要专业建议时，才返回 true
+- 普通问候、日常聊天、闲聊等返回 false
 
-请分析以下内容：
-1. 是否包含技术问题或专业讨论？
-2. 是否需要专业建议或解决方案？
-3. 是否涉及复杂决策或需要多方面思考？
-4. 排除问候语、家乡、姓名等日常对话
-
-请返回严格的 JSON 格式，不要包含任何其他内容，也不要使用 markdown 格式：
-{{"is": true}} 或 {{"is": false}}
-
-- true: 需要启动多模型共话
-- false: 普通对话"""
+只输出一个 JSON 对象，不要输出任何其他内容：
+{{"is": true}} 或 {{"is": false}}"""
 
         return prompt
 
     def validate_response(self, response: str) -> Tuple[bool, Optional[dict]]:
-        """验证响应格式"""
+        """验证响应格式，返回最后一个有效结果（最终决定）"""
         try:
-            # 1. 优先尝试正则匹配 (最快且最准确)
-            # 匹配 {"is": true} 或 {"is": false}，允许各种引号和空白
-            # 同时也兼容 {"is": "true"} 这种字符串形式
-            match = re.search(r'\{[\s"\']*is[\s"\']*:\s*[\"\']?(true|false)[\"\']?\s*\}', response, re.IGNORECASE)
-            if match:
-                is_true = match.group(1).lower() == 'true'
-                return True, {'is': is_true}
+            # 收集所有有效的JSON结果
+            valid_results = []
 
-            # 2. 尝试解析所有可能的 JSON 对象
-            # 使用 raw_decode 循环解析，可以处理包含多个 JSON 或混合文本的情况
+            # 1. 尝试正则匹配，收集所有匹配结果
+            matches = re.finditer(r'\{[\s"\']*is[\s"\']*:\s*[\"\']?(true|false)[\"\']?\s*\}', response, re.IGNORECASE)
+            for match in matches:
+                is_true = match.group(1).lower() == 'true'
+                valid_results.append({'is': is_true, 'match': match})
+
+            # 2. 使用 JSONDecoder 解析所有可能的 JSON 对象
             decoder = json.JSONDecoder()
             pos = 0
             while pos < len(response):
@@ -139,7 +137,7 @@ class IntelligentAgent:
                 start = response.find('{', pos)
                 if start == -1:
                     break
-                
+
                 try:
                     obj, end = decoder.raw_decode(response, idx=start)
                     # 检查是否是我们需要的对象
@@ -147,19 +145,22 @@ class IntelligentAgent:
                         val = obj['is']
                         # 处理字符串类型的 "true"/"false"
                         if isinstance(val, str):
-                            if val.lower() == 'true':
-                                return True, {'is': True}
-                            elif val.lower() == 'false':
-                                return True, {'is': False}
+                            if val.lower() in ['true', 'false']:
+                                valid_results.append({'is': val.lower() == 'true', 'pos': start})
                         elif isinstance(val, bool):
-                            return True, {'is': val}
-                    
+                            valid_results.append({'is': val, 'pos': start})
+
                     # 继续搜索下一个
                     pos = end
                 except json.JSONDecodeError:
                     # 当前位置解析失败，尝试下一个字符
                     pos = start + 1
-            
+
+            # 如果有多个结果，返回最后一个（最终决定）
+            if valid_results:
+                print(f"[智能分析] 找到 {len(valid_results)} 个判定结果，使用最后一个: {valid_results[-1]['is']}")
+                return True, {'is': valid_results[-1]['is']}
+
         except Exception as e:
             print(f"[智能分析] 响应解析出错: {e}")
 
@@ -186,12 +187,16 @@ class IntelligentAgent:
                 ]):
                     response_text += chunk
 
-                print(f"[智能分析] 小模型响应: {response_text[:100]}...")
+                print(f"[智能分析] API模型完整响应内容:")
+                print("=" * 80)
+                print(response_text)
+                print("=" * 80)
+                print(f"[智能分析] 响应长度: {len(response_text)} 字符")
                 is_valid, result = self.validate_response(response_text)
                 
                 if is_valid and result:
                     is_needed = result['is']
-                    reason = "检测到技术讨论，建议启动多模型共话" if is_needed else "普通对话，无需 AI 介入"
+                    reason = "检测到需要AI帮助分析" if is_needed else "普通对话，无需 AI 介入"
                     print(f"[智能分析] 判定结果: {is_needed}")
                     return {
                         'is': is_needed,
@@ -206,14 +211,15 @@ class IntelligentAgent:
                     # 准备输入
                     inputs = self.local_tokenizer(prompt, return_tensors="pt").to(self.local_model.device)
 
-                    # 生成响应
+                    # 生成响应 - 限制token数量，避免过度推理
                     with torch.no_grad():
                         outputs = self.local_model.generate(
                             **inputs,
-                            max_new_tokens=100,
-                            temperature=0.1,
+                            max_new_tokens=50,  # 减少到50，降低冗余推理
+                            temperature=0.0,    # 降到0，完全确定性
                             do_sample=False,
-                            pad_token_id=self.local_tokenizer.eos_token_id
+                            pad_token_id=self.local_tokenizer.eos_token_id,
+                            eos_token_id=self.local_tokenizer.eos_token_id
                         )
 
                     response_text = self.local_tokenizer.decode(
@@ -221,12 +227,16 @@ class IntelligentAgent:
                         skip_special_tokens=True
                     ).strip()
 
-                    print(f"[智能分析] 本地模型响应: {response_text[:100]}...")
+                    print(f"[智能分析] 本地模型完整响应内容:")
+                    print("=" * 80)
+                    print(response_text)
+                    print("=" * 80)
+                    print(f"[智能分析] 响应长度: {len(response_text)} 字符")
                     is_valid, result = self.validate_response(response_text)
 
                     if is_valid and result:
                         is_needed = result['is']
-                        reason = "检测到技术讨论，建议启动多模型共话" if is_needed else "普通对话，无需 AI 介入"
+                        reason = "检测到需要AI帮助分析" if is_needed else "普通对话，无需 AI 介入"
                         print(f"[智能分析] 本地模型判定结果: {is_needed}")
                         return {
                             'is': is_needed,
@@ -357,6 +367,192 @@ class AgentManager:
             return {'is': False, 'reason': '未配置智能 Agent'}
 
         return await agent.analyze(messages, speaker_name)
+
+    async def run_intelligent_analysis(self, messages: List[Dict], speaker_name: str, intent_recognition: bool = False) -> Dict:
+        """
+        运行三阶段智能分析流程
+
+        Args:
+            messages: 对话消息列表
+            speaker_name: 主人公姓名
+            intent_recognition: 是否启用意图识别
+
+        Returns:
+            包含分析结果和分发信息的字典
+        """
+        print(f"[智能分析] 开始三阶段分析，启用意图识别: {intent_recognition}")
+
+        # 阶段1：现有分析（保持不变）
+        phase1_result = await self.analyze_conversation(messages, speaker_name)
+        print(f"[智能分析] 阶段1完成: {phase1_result}")
+
+        # 阶段2：意图识别（如果启用）
+        intent_result = None
+        if intent_recognition and phase1_result.get('is', False):
+            print("[智能分析] 进入阶段2：意图识别")
+            intent_result = await self._recognize_intent(messages, speaker_name)
+            print(f"[智能分析] 阶段2完成: 意图识别结果")
+
+        # 阶段3：最终分发
+        distribution_result = self._prepare_distribution(messages, phase1_result, intent_result)
+        print(f"[智能分析] 阶段3完成: 准备分发到 {distribution_result.get('targets', [])}")
+
+        return {
+            'phase1': phase1_result,
+            'phase2': intent_result,
+            'distribution': distribution_result
+        }
+
+    async def _recognize_intent(self, messages: List[Dict], speaker_name: str) -> Dict:
+        """
+        阶段2：意图识别和上下文提取
+
+        Args:
+            messages: 对话消息列表
+            speaker_name: 主人公姓名
+
+        Returns:
+            意图识别结果
+        """
+        # 构建意图识别Prompt
+        message_texts = []
+        for msg in messages:
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            speaker = msg.get('speaker', '')
+            message_texts.append(f"[{speaker}] {content}")
+
+        dialogue = "\n".join(message_texts)
+
+        intent_prompt = f"""请分析以下对话，提取核心问题和讨论轮廓：
+
+{dialogue}
+
+注意：{speaker_name} 是主人公。
+
+请返回JSON格式：
+{{
+    "core_question": "核心问题描述",
+    "outline": ["要点1", "要点2", "要点3"]
+}}
+
+要求：
+1. 识别对话中的核心问题或讨论主题
+2. 提取关键要点和子话题
+3. 保持客观中立，不要添加建议"""
+
+        try:
+            # 获取第一个可用的agent进行意图识别
+            agent = list(self.agents.values())[0]
+            agent_type = agent.config.get('model_type', 'api')
+
+            if agent_type == 'api' and agent.client:
+                response_text = ""
+                async for chunk in agent.client.chat_stream([
+                    {"role": "user", "content": intent_prompt}
+                ]):
+                    response_text += chunk
+
+                # 尝试解析JSON响应
+                import re
+                match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if match:
+                    import json
+                    try:
+                        result = json.loads(match.group())
+                        return {
+                            'success': True,
+                            'core_question': result.get('core_question', ''),
+                            'outline': result.get('outline', []),
+                            'raw_response': response_text
+                        }
+                    except json.JSONDecodeError:
+                        pass
+
+                return {
+                    'success': False,
+                    'error': 'JSON解析失败',
+                    'raw_response': response_text
+                }
+
+            elif agent_type == 'local' and agent.local_model:
+                # 本地模型实现（简化版）
+                return {
+                    'success': True,
+                    'core_question': '检测到需要多模型分析的场景',
+                    'outline': ['技术讨论', '需要专业建议', '涉及复杂决策']
+                }
+
+            return {'success': False, 'error': '无可用的Agent进行意图识别'}
+
+        except Exception as e:
+            print(f"[智能分析] 意图识别失败: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _prepare_distribution(self, messages: List[Dict], phase1_result: Dict, intent_result: Dict = None) -> Dict:
+        """
+        阶段3：准备分发到智囊团角色
+
+        Args:
+            messages: 对话消息列表
+            phase1_result: 阶段1的分析结果
+            intent_result: 阶段2的意图识别结果
+
+        Returns:
+            分发配置
+        """
+        # 加载智囊团角色配置
+        try:
+            import json
+            with open("data/agent.json", "r", encoding="utf-8") as f:
+                agent_data = json.load(f)
+                roles = agent_data.get('think_tank_roles', [])
+        except Exception as e:
+            print(f"[智能分析] 加载角色配置失败: {e}")
+            roles = []
+
+        # 加载当前配置
+        try:
+            with open("api_config.json", "r", encoding="utf-8") as f:
+                config_data = json.load(f)
+                active_names = config_data.get('multi_llm_active_names', [])
+                configs = config_data.get('configs', [])
+        except Exception as e:
+            print(f"[智能分析] 加载API配置失败: {e}")
+            return {'targets': [], 'mode': 'default'}
+
+        # 根据角色标签匹配模型
+        role_targets = {}
+        for role in roles:
+            role_id = role.get('id')
+            tag_key = role.get('tag_key')
+
+            # 查找匹配该角色标签的模型
+            matching_configs = [
+                c for c in configs
+                if c['name'] in active_names
+                and c.get('tags', [])
+                and tag_key in c['tags']
+            ]
+
+            if matching_configs:
+                # 选择第一个匹配的模型
+                role_targets[role_id] = matching_configs[0]['name']
+
+        # 如果有角色匹配，使用智囊团模式
+        if role_targets:
+            return {
+                'mode': 'think_tank',
+                'targets': role_targets,
+                'intent': intent_result
+            }
+        else:
+            # 否则使用默认模式（单模型）
+            return {
+                'mode': 'default',
+                'targets': active_names[:1] if active_names else [],
+                'intent': intent_result
+            }
 
     def should_analyze(self, message: Dict, conversation_history: List[Dict]) -> bool:
         """

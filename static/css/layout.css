@@ -1,0 +1,64 @@
+/* ========================================
+   布局样式 - Layout
+   基础布局相关样式
+   ======================================== */
+
+/* 主容器布局已在global.css中定义 */
+
+/* 响应式网格布局 */
+.grid-container {
+    display: grid;
+    gap: var(--gap-md);
+    padding: var(--gap-md);
+}
+
+/* 弹性布局 */
+.flex-container {
+    display: flex;
+    gap: var(--gap-sm);
+}
+
+.flex-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.flex-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* 隐藏/显示工具类 */
+.hidden {
+    display: none !important;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* 间距工具类 */
+.mt-xs { margin-top: var(--gap-xs); }
+.mt-sm { margin-top: var(--gap-sm); }
+.mt-md { margin-top: var(--gap-md); }
+.mt-lg { margin-top: var(--gap-lg); }
+
+.mb-xs { margin-bottom: var(--gap-xs); }
+.mb-sm { margin-bottom: var(--gap-sm); }
+.mb-md { margin-bottom: var(--gap-md); }
+.mb-lg { margin-bottom: var(--gap-lg); }
+
+.p-xs { padding: var(--gap-xs); }
+.p-sm { padding: var(--gap-sm); }
+.p-md { padding: var(--gap-md); }
+.p-lg { padding: var(--gap-lg); }
