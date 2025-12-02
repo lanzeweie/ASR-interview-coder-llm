@@ -16,3 +16,5 @@ voiceprints
 Qwen3-0.6B
 output
 .promptx/
+Qwen2.5-0.5B-Instruct
+output/

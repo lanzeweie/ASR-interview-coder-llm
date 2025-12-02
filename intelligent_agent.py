@@ -8,12 +8,7 @@
 import json
 import asyncio
 import re
-from typing import List, Dict, Optional, Tuple
-from llm_client import LLMClient
-
-import json
-import asyncio
-import re
+import time
 from typing import List, Dict, Optional, Tuple
 from llm_client import LLMClient
 
@@ -50,6 +45,14 @@ class IntelligentAgent:
         self.client = None
         self.local_model = None
         self.local_tokenizer = None
+        self.last_message_time = 0  # 最后消息时间
+        self.current_speaker = None  # 当前说话人
+        self.accumulated_text = ""  # 累积文本
+        self.silence_timer = None  # 静音计时器
+        self.silence_detection_started = False  # 是否已启动静音检测
+        self.last_analysis_time = 0  # 上次分析时间
+        self.force_trigger_threshold = self.threshold * 3  # 强制触发阈值（3倍）
+        self.generation_params = config.get('generation_params', {})
 
         model_type = config.get('model_type', 'api')
 
@@ -62,7 +65,13 @@ class IntelligentAgent:
             )
         elif model_type == 'local':
             if TRANSFORMERS_AVAILABLE:
-                self._load_local_model(config.get('model_name', 'Qwen3-0.6B'))
+                model_name = config.get('model_name', 'Qwen/Qwen2-0.5B-Instruct')
+                success = self._load_local_model(model_name)
+                if not success:
+                    print(f"[智能分析] 模型 {model_name} 加载失败，请检查:")
+                    print(f"  1. 模型名称是否正确")
+                    print(f"  2. 网络连接是否正常（需要下载模型）")
+                    print(f"  3. 磁盘空间是否充足")
             else:
                 print("[智能分析] 缺少依赖，无法加载本地模型")
 
@@ -71,104 +80,145 @@ class IntelligentAgent:
     def _load_local_model(self, model_name: str):
         """加载本地模型"""
         print(f"[智能分析] 正在加载本地模型: {model_name}")
+        print(f"[智能分析] 检查依赖: TRANSFORMERS_AVAILABLE={TRANSFORMERS_AVAILABLE}")
         try:
+            print(f"[智能分析] 步骤1: 加载tokenizer...")
             self.local_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            print(f"[智能分析] ✅ Tokenizer加载成功")
+
+            print(f"[智能分析] 步骤2: 加载模型...")
             self.local_model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 dtype=torch.float16,
                 device_map="auto"
             )
+            print(f"[智能分析] ✅ 模型加载成功")
+
             self.local_model.eval()
-            print(f"[智能分析] ✅ 本地模型加载成功: {model_name}")
+            print(f"[智能分析] ✅ 本地模型完全加载成功: {model_name}")
+            print(f"[智能分析] 模型设备: {self.local_model.device}")
+            return True
         except Exception as e:
-            print(f"[智能分析] ⚠️ 本地模型加载失败: {e}")
+            print(f"[智能分析] ⚠️❌ 本地模型加载失败")
+            print(f"[智能分析] 错误类型: {type(e).__name__}")
+            print(f"[智能分析] 错误信息: {e}")
             self.local_model = None
             self.local_tokenizer = None
+            return False
 
     def build_analysis_prompt(self, messages: List[Dict], speaker_name: str) -> str:
         """
         构建分析 Prompt
         """
-        # 格式化对话内容
-        message_texts = []
-        for msg in messages:
-            role = msg.get('role', 'unknown')
-            content = msg.get('content', '')
-            speaker = msg.get('speaker', '')
-            message_texts.append(f"[{speaker}] {content}")
-
-        dialogue = "\n".join(message_texts)
+        # 使用紧凑格式化的对话内容
+        dialogue = self.format_messages_compact(messages)
 
         print(f"[智能分析] 构建Prompt，消息数: {len(messages)}")
-        print(f"[智能分析] 对话内容预览: {dialogue[:200]}...")
+        print(f"[智能分析] 格式化对话长度: {len(dialogue)} 字符")
+        print(f"[智能分析] 对话内容预览: {dialogue[:2000]}...")
 
-        prompt = f"""请根据对话内容进行判断，只需要给出最终结果。
+        prompt = """
+        你是一个软件工程对话分析器。请严格根据以下规则分析提供的对话内容，并仅输出一个标准 JSON 对象，不得包含任何额外文本、解释、格式符号或换行。
+        **输入：**
+        {dialogue}
+        **判断规则：**
+        1. {speaker_name} 是对话中的主人公。
+        2. 仅当对话中明确涉及 **软件开发相关** 的以下任一内容时，返回 {{"is": true}}：
+        - 编程语言、框架、库的使用问题（如 Python、React、TensorFlow）
+        - 调试、报错排查、性能优化
+        - 系统架构、API 设计、数据库设计
+        - 开发工具链（如 Git、Docker、CI/CD）
+        - 算法、数据结构、代码审查
+        - 软件工程实践（如测试、部署、DevOps）
+        3. 以下情况**一律返回 {{"is": false}}**：
+        - 非软件类技术话题（如电路设计、生物信息学、量化金融——即使有代码也不算）
+        - 日常聊天、问候、情感表达
+        - 泛泛而谈的科技观点（如"AI 会取代程序员吗？"无具体技术细节）
+        - 仅提及"写代码"但无实质技术内容
+        - 使用自然语言描述非编程任务（如"帮我写个 Excel 公式"不属于软件开发）
 
-对话内容：
-{dialogue}
+        **输出要求：**
+        - 严格输出：{{"is": true}} 或 {{"is": false}}
+        - 必须是合法 JSON，不包裹在 Markdown、反引号或代码块中
 
-判断标准：
-- {speaker_name} 是主人公
-- 仅当对话包含技术问题、专业讨论或需要专业建议时，才返回 true
-- 普通问候、日常聊天、闲聊等返回 false
-
-只输出一个 JSON 对象，不要输出任何其他内容：
-{{"is": true}} 或 {{"is": false}}"""
-
+        **示例：**
+        {{"is": true}}
+        {{"is": false}}
+        """.format(dialogue=dialogue, speaker_name=speaker_name)
         return prompt
 
+    def format_messages_compact(self, messages: List[Dict]) -> str:
+        """
+        将消息格式化为紧凑的XML格式，大幅减少token消耗
+
+        Args:
+            messages: 消息列表，每个消息包含 role、content、speaker、timestamp
+
+        Returns:
+            格式化的XML字符串
+        """
+        xml_lines = ['<conversation>']
+
+        for msg in messages:
+            role = msg.get('role', 'u')  # 默认为user
+            content = msg.get('content', '').strip()
+            speaker = msg.get('speaker', '')
+
+            # 提取说话人姓名（去掉置信度）
+            if ' (' in speaker:
+                speaker = speaker.split(' (')[0]
+            elif '(' in speaker:
+                speaker = speaker.split('(')[0]
+
+            # 获取时间戳（如果存在）
+            timestamp = msg.get('timestamp', 0)
+            if isinstance(timestamp, (int, float)) and timestamp > 0:
+                # 转换为相对时间（秒），节省字符
+                relative_time = int(timestamp % 3600)  # 只保留小时内的秒数
+                timestamp_str = f' t="{relative_time}"'
+            else:
+                timestamp_str = ''
+
+            # 生成紧凑的XML标签
+            # r=role, sp=speaker, t=timestamp（可选）
+            xml_lines.append(
+                f'  <msg r="{role[0]}" sp="{speaker}"{timestamp_str}>{content}</msg>'
+            )
+
+        xml_lines.append('</conversation>')
+
+        result = '\n'.join(xml_lines)
+        print(f"[格式化] 原始消息数: {len(messages)}, 格式化后长度: {len(result)} 字符")
+
+        return result
+
     def validate_response(self, response: str) -> Tuple[bool, Optional[dict]]:
-        """验证响应格式，返回最后一个有效结果（最终决定）"""
+        """简单验证响应格式（模型返回稳定）"""
         try:
-            # 收集所有有效的JSON结果
-            valid_results = []
-
-            # 1. 尝试正则匹配，收集所有匹配结果
-            matches = re.finditer(r'\{[\s"\']*is[\s"\']*:\s*[\"\']?(true|false)[\"\']?\s*\}', response, re.IGNORECASE)
-            for match in matches:
+            # 使用正则匹配 {"is": true} 格式
+            match = re.search(r'\{\s*"is"\s*:\s*(true|false)\s*\}', response, re.IGNORECASE)
+            if match:
                 is_true = match.group(1).lower() == 'true'
-                valid_results.append({'is': is_true, 'match': match})
-
-            # 2. 使用 JSONDecoder 解析所有可能的 JSON 对象
-            decoder = json.JSONDecoder()
-            pos = 0
-            while pos < len(response):
-                # 查找下一个可能的 JSON 起始点
-                start = response.find('{', pos)
-                if start == -1:
-                    break
-
-                try:
-                    obj, end = decoder.raw_decode(response, idx=start)
-                    # 检查是否是我们需要的对象
-                    if isinstance(obj, dict) and 'is' in obj:
-                        val = obj['is']
-                        # 处理字符串类型的 "true"/"false"
-                        if isinstance(val, str):
-                            if val.lower() in ['true', 'false']:
-                                valid_results.append({'is': val.lower() == 'true', 'pos': start})
-                        elif isinstance(val, bool):
-                            valid_results.append({'is': val, 'pos': start})
-
-                    # 继续搜索下一个
-                    pos = end
-                except json.JSONDecodeError:
-                    # 当前位置解析失败，尝试下一个字符
-                    pos = start + 1
-
-            # 如果有多个结果，返回最后一个（最终决定）
-            if valid_results:
-                print(f"[智能分析] 找到 {len(valid_results)} 个判定结果，使用最后一个: {valid_results[-1]['is']}")
-                return True, {'is': valid_results[-1]['is']}
-
+                print(f"[智能分析] 简单判定结果: {is_true}")
+                return True, {'is': is_true}
         except Exception as e:
             print(f"[智能分析] 响应解析出错: {e}")
-
         return False, None
+
+    def _get_local_generation_kwargs(self) -> Dict:
+        defaults = {
+            "max_new_tokens": 512,
+            "do_sample": False,
+        }
+        params = {**defaults, **self.generation_params}
+        if self.local_tokenizer:
+            params.setdefault("pad_token_id", self.local_tokenizer.eos_token_id)
+            params.setdefault("eos_token_id", self.local_tokenizer.eos_token_id)
+        return params
 
     async def analyze(self, messages: List[Dict], speaker_name: str) -> Dict:
         """
-        分析对话并判定是否需要启动多模型共话
+        分析对话并判定是否需要Ai辅助
         """
         try:
             # 构建 Prompt
@@ -178,9 +228,17 @@ class IntelligentAgent:
 
             # 调用小模型
             model_type = self.config.get('model_type', 'api')
-
-            if model_type == 'api' and self.client:
+            if model_type == 'api':
+                if not self.client:
+                    print("[智能分析] ❌ API模式，但客户端未初始化")
+                    return {
+                        'is': False,
+                        'confidence': 0.0,
+                        'reason': f'API客户端未初始化 (model_type={model_type})',
+                        'raw_response': ''
+                    }
                 # API 模式
+                print(f"[智能分析] 📡 使用API模式调用，模型: {self.config.get('model', 'unknown')}")
                 response_text = ""
                 async for chunk in self.client.chat_stream([
                     {"role": "user", "content": prompt}
@@ -193,7 +251,7 @@ class IntelligentAgent:
                 print("=" * 80)
                 print(f"[智能分析] 响应长度: {len(response_text)} 字符")
                 is_valid, result = self.validate_response(response_text)
-                
+
                 if is_valid and result:
                     is_needed = result['is']
                     reason = "检测到需要AI帮助分析" if is_needed else "普通对话，无需 AI 介入"
@@ -204,35 +262,65 @@ class IntelligentAgent:
                         'reason': reason,
                         'raw_response': response_text
                     }
+                else:
+                    print(f"[智能分析] ❌ API响应无效")
+                    return {
+                        'is': False,
+                        'confidence': 0.0,
+                        'reason': 'API响应无效',
+                        'raw_response': response_text
+                    }
 
-            elif model_type == 'local' and self.local_model:
+            elif model_type == 'local':
+                if not self.local_model:
+                    print("[智能分析] ❌ 本地模式，但模型未加载")
+                    return {
+                        'is': False,
+                        'confidence': 0.0,
+                        'reason': f'本地模型未加载 (model_type={model_type})',
+                        'raw_response': ''
+                    }
                 # 本地模式
                 try:
-                    # 准备输入
-                    inputs = self.local_tokenizer(prompt, return_tensors="pt").to(self.local_model.device)
-
-                    # 生成响应 - 限制token数量，避免过度推理
+                    messages = [
+                        {
+                            "role": "system", 
+                            "content": "你是一个严谨的格式化输出工具。你的唯一任务是接收对话分析指令并输出JSON。严禁输出任何其他解释性文字。"
+                        },
+                        {
+                            "role": "user", 
+                            "content": prompt 
+                        }
+                    ]
+                    text = self.local_tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True
+                    )
+                    inputs = self.local_tokenizer([text], return_tensors="pt").to(self.local_model.device)
+                    # 4. 生成响应
                     with torch.no_grad():
                         outputs = self.local_model.generate(
-                            **inputs,
-                            max_new_tokens=50,  # 减少到50，降低冗余推理
-                            temperature=0.0,    # 降到0，完全确定性
-                            do_sample=False,
-                            pad_token_id=self.local_tokenizer.eos_token_id,
-                            eos_token_id=self.local_tokenizer.eos_token_id
+                            inputs.input_ids,
+                            attention_mask=inputs.attention_mask, # 显式传入 mask，消除警告
+                            **self._get_local_generation_kwargs()
                         )
-
                     response_text = self.local_tokenizer.decode(
-                        outputs[0][inputs['input_ids'].shape[1]:],
+                        outputs[0][inputs.input_ids.shape[1]:],
                         skip_special_tokens=True
                     ).strip()
+
 
                     print(f"[智能分析] 本地模型完整响应内容:")
                     print("=" * 80)
                     print(response_text)
                     print("=" * 80)
                     print(f"[智能分析] 响应长度: {len(response_text)} 字符")
-                    is_valid, result = self.validate_response(response_text)
+                    
+                    # 尝试清理可能残留的 Markdown 标记 (0.5B 有时会顽固地输出 ```json)
+                    clean_text = response_text.replace("```json", "").replace("```", "").strip()
+                    
+                    is_valid, result = self.validate_response(clean_text)
 
                     if is_valid and result:
                         is_needed = result['is']
@@ -246,6 +334,8 @@ class IntelligentAgent:
                         }
                 except Exception as e:
                     print(f"[智能分析] 本地模型推理失败: {e}")
+                    import traceback
+                    traceback.print_exc()
                     return {
                         'is': False,
                         'confidence': 0.0,
@@ -254,11 +344,15 @@ class IntelligentAgent:
                     }
 
             # 如果没有客户端或验证失败，返回默认结果
-            print("[智能分析] 未配置小模型或响应无效，默认返回 false")
+            print(f"[智能分析] ❌ 未满足任何条件:")
+            print(f"  - model_type: {model_type}")
+            print(f"  - API条件: model_type=='api' and self.client: {model_type == 'api' and self.client is not None}")
+            print(f"  - 本地条件: model_type=='local' and self.local_model: {model_type == 'local' and self.local_model is not None}")
+            print(f"[智能分析] 返回默认结果")
             return {
                 'is': False,
                 'confidence': 0.0,
-                'reason': '小模型未配置或响应无效',
+                'reason': f'模型未正确配置 (model_type={model_type}, client={self.client}, local_model={self.local_model})',
                 'raw_response': ''
             }
 
@@ -271,29 +365,130 @@ class IntelligentAgent:
                 'raw_response': ''
             }
 
-    def should_trigger(self, message: Dict, conversation_history: List[Dict]) -> bool:
+    def process_message(self, message: Dict, conversation_history: List[Dict]) -> Tuple[bool, Optional[str]]:
         """
-        检查是否应该触发智能分析
+        按照流程图处理ASR消息，检查是否应该触发智能分析
 
         Args:
-            message: 当前消息
+            message: 当前消息，包含text和speaker信息
             conversation_history: 对话历史
+
+        Returns:
+            (是否应该触发, 触发原因)
+        """
+        # Step 1: 检查长度是否≥3字符
+        text = message.get('text', '').strip()
+        if len(text) < 3:
+            print(f"[智能分析] 消息长度不足3字符，忽略: {len(text)}字符")
+            return False, None
+
+        # Step 2: 更新最后消息时间
+        current_time = time.time()
+        self.last_message_time = current_time
+
+        # Step 3: 提取说话人信息
+        speaker_info = message.get('speaker', '')
+        # 从speaker中提取姓名（格式如"张三 (置信度:0.85)"）
+        speaker_name = speaker_info.split(' (')[0] if '(' in speaker_info else speaker_info
+
+        print(f"[智能分析] 处理消息: {speaker_name} - {text[:20]}... (长度: {len(text)})")
+
+        # Step 4 & 5: 检查是否为同一说话人并处理累积
+        if self.current_speaker is None:
+            # 首次接收消息
+            self.current_speaker = speaker_name
+            self.accumulated_text = text
+            print(f"[智能分析] 首次接收消息，说话人: {speaker_name}")
+        elif self.current_speaker == speaker_name:
+            # 同一说话人，累积文本
+            self.accumulated_text += text
+            print(f"[智能分析] 同一说话人累积，累积长度: {len(self.accumulated_text)}")
+        else:
+            # 不同说话人，重置累积并更新说话人
+            print(f"[智能分析] 说话人变更: {self.current_speaker} -> {speaker_name}")
+            print(f"[智能分析] 重置累积 (原长度: {len(self.accumulated_text)})")
+            self.current_speaker = speaker_name
+            self.accumulated_text = text
+
+        # Step 6: 检查累积字符是否≥最小值（默认10）
+        if len(self.accumulated_text) < self.threshold:
+            print(f"[智能分析] 累积字符不足: {len(self.accumulated_text)}/{self.threshold}，等待更多音频")
+            return False, None
+
+        # Step 7: 达到阈值，启动或检查静音检测
+        if not self.silence_detection_started:
+            # 首次达到阈值，启动静音检测
+            self.silence_detection_started = True
+            # 重置静音计时器
+            if self.silence_timer:
+                self.silence_timer.cancel()
+            self.silence_timer = asyncio.create_task(self._monitor_silence())
+            print(f"[智能分析] 已启动静音检测，静音阈值: {self.silence_seconds}秒")
+            return False, None
+        else:
+            # 已在静音检测中，检查条件
+            print(f"[智能分析] 静音检测中...")
+            return self._check_trigger_conditions(text), "满足触发条件"
+
+    async def _monitor_silence(self):
+        """监听静音状态，超时后自动触发分析"""
+        try:
+            await asyncio.sleep(self.silence_seconds)
+            print(f"[智能分析] 静音超时，触发分析")
+            # 重置静音检测状态
+            self.silence_detection_started = False
+            self.silence_timer = None
+        except asyncio.CancelledError:
+            # 静音检测被取消（收到新消息）
+            print(f"[智能分析] 静音检测被取消")
+            pass
+
+    def _check_trigger_conditions(self, current_text: str) -> bool:
+        """
+        检查是否满足触发条件（按照流程图的逻辑）
+
+        Args:
+            current_text: 当前文本
 
         Returns:
             是否应该触发
         """
-        # 检查字数阈值
-        text = message.get('text', '')
-        if len(text) < self.threshold:
-            print(f"[智能分析] 字数不足: {len(text)}/{self.threshold}")
-            return False
+        current_time = time.time()
+        silence_duration = current_time - self.last_message_time
 
-        # 检查是否是新消息
-        if conversation_history and text == conversation_history[-1].get('text', ''):
-            return False
+        print(f"[智能分析] 静音时长: {silence_duration:.2f}秒")
 
-        print(f"[智能分析] 满足触发条件，字数: {len(text)}")
-        return True
+        # Step 8: 检查静音是否≥阈值（2秒）
+        if silence_duration >= self.silence_seconds:
+            print(f"[智能分析] 条件1: 静音 ≥ 阈值 ({silence_duration:.2f}s ≥ {self.silence_seconds}s)")
+            return True
+
+        # Step 9: 检查文本是否≥3倍阈值（强制触发）
+        current_length = len(self.accumulated_text)
+        if current_length >= self.force_trigger_threshold:
+            print(f"[智能分析] 条件2: 累积文本 ≥ 3倍阈值 ({current_length} ≥ {self.force_trigger_threshold})")
+            return True
+
+        # Step 10: 检查静音是否≥2倍阈值
+        double_threshold = self.silence_seconds * 2
+        if silence_duration >= double_threshold:
+            print(f"[智能分析] 条件3: 静音 ≥ 2倍阈值 ({silence_duration:.2f}s ≥ {double_threshold}s)")
+            return True
+
+        print(f"[智能分析] 条件不满足，继续等待")
+        return False
+
+    def reset_state(self):
+        """重置Agent状态"""
+        self.last_message_time = 0
+        self.current_speaker = None
+        self.accumulated_text = ""
+        self.silence_detection_started = False
+        if self.silence_timer:
+            self.silence_timer.cancel()
+            self.silence_timer = None
+        self.last_analysis_time = 0
+        print(f"[智能分析] 状态已重置")
 
 
 class AgentManager:
@@ -317,7 +512,9 @@ class AgentManager:
             是否加载成功
         """
         try:
-            model_name = config.get('model_name', 'default')
+            # 对于本地模式，model_name 应该从 model_config 获取（或者使用默认值）
+            # 优先级：model_config.model_name > config.model_name > 默认值
+            model_name = model_config.get('model_name', config.get('model_name', 'Qwen/Qwen2-0.5B-Instruct'))
 
             # 合并配置
             agent_config = {
@@ -325,8 +522,10 @@ class AgentManager:
                 'api_key': model_config.get('api_key', ''),
                 'base_url': model_config.get('base_url', ''),
                 'model': model_config.get('model', ''),
+                'model_name': model_name,  # 添加 model_name 到 agent_config
                 'threshold': config.get('min_characters', 10),
-                'silence_seconds': config.get('silence_threshold', 2)
+                'silence_seconds': config.get('silence_threshold', 2),
+                'generation_params': model_config.get('generation_params', {})
             }
 
             # 创建 Agent
@@ -386,9 +585,29 @@ class AgentManager:
         phase1_result = await self.analyze_conversation(messages, speaker_name)
         print(f"[智能分析] 阶段1完成: {phase1_result}")
 
+        # 检查阶段1是否成功（分析失败或模型未配置）
+        reason = phase1_result.get('reason', '')
+        confidence = phase1_result.get('confidence', 0.0)
+        if confidence == 0.0 and ('分析失败' in reason or '未配置' in reason or '无效' in reason):
+            print(f"[智能分析] ⚠️ 阶段1失败，跳过后续阶段，原因: {reason}")
+            return {
+                'phase1': phase1_result,
+                'phase2': None,
+                'distribution': {'mode': 'default', 'targets': []}
+            }
+
+        # 修复：如果阶段1判断不需要AI帮助，直接返回，不执行后续阶段
+        if not phase1_result.get('is', False):
+            print(f"[智能分析] ⚠️ 阶段1判断无需AI帮助，跳过阶段2和阶段3，原因: {reason}")
+            return {
+                'phase1': phase1_result,
+                'phase2': None,
+                'distribution': {'mode': 'default', 'targets': []}
+            }
+
         # 阶段2：意图识别（如果启用）
         intent_result = None
-        if intent_recognition and phase1_result.get('is', False):
+        if intent_recognition:
             print("[智能分析] 进入阶段2：意图识别")
             intent_result = await self._recognize_intent(messages, speaker_name)
             print(f"[智能分析] 阶段2完成: 意图识别结果")
@@ -414,80 +633,83 @@ class AgentManager:
         Returns:
             意图识别结果
         """
-        # 构建意图识别Prompt
-        message_texts = []
-        for msg in messages:
-            role = msg.get('role', 'unknown')
-            content = msg.get('content', '')
-            speaker = msg.get('speaker', '')
-            message_texts.append(f"[{speaker}] {content}")
+        # 获取第一个可用的agent进行格式化
+        agent = list(self.agents.values())[0]
+        dialogue = agent.format_messages_compact(messages)
 
-        dialogue = "\n".join(message_texts)
+        intent_prompt = (
+            "你是一名专业的意图识别Agent，请阅读下方对话并提炼核心问题与讨论大纲。\n\n"
+            f"{speaker_name} 是对话中的主人公。\n\n"
+            f"{dialogue}\n\n"
+            "请仅输出以下XML结构：\n"
+            "<analysis>\n"
+            "  <core>核心问题</core>\n"
+            "  <outline>\n"
+            "    <item>要点1</item>\n"
+            "    <item>要点2</item>\n"
+            "  </outline>\n"
+            "</analysis>\n"
+            "要求：\n"
+            "1. 核心问题精炼为一句话。\n"
+            "2. 大纲列出2-5个要点，按重要性排序。\n"
+            "3. 禁止输出XML结构之外的任何文本。"
+        )
 
-        intent_prompt = f"""请分析以下对话，提取核心问题和讨论轮廓：
+        def _extract_xml(text: str) -> str:
+            match = re.search(r'<analysis[\s\S]*?</analysis>', text, re.IGNORECASE)
+            return match.group(0).strip() if match else text.strip()
 
-{dialogue}
+        agent_type = agent.config.get('model_type', 'api')
 
-注意：{speaker_name} 是主人公。
+        if agent_type == 'api' and agent.client:
+            response_text = ""
+            async for chunk in agent.client.chat_stream([
+                {"role": "user", "content": intent_prompt}
+            ]):
+                response_text += chunk
+            xml_content = _extract_xml(response_text)
+            return {
+                'success': True,
+                'summary_xml': xml_content,
+                'raw_response': response_text
+            }
 
-请返回JSON格式：
-{{
-    "core_question": "核心问题描述",
-    "outline": ["要点1", "要点2", "要点3"]
-}}
-
-要求：
-1. 识别对话中的核心问题或讨论主题
-2. 提取关键要点和子话题
-3. 保持客观中立，不要添加建议"""
-
-        try:
-            # 获取第一个可用的agent进行意图识别
-            agent = list(self.agents.values())[0]
-            agent_type = agent.config.get('model_type', 'api')
-
-            if agent_type == 'api' and agent.client:
-                response_text = ""
-                async for chunk in agent.client.chat_stream([
+        elif agent_type == 'local' and agent.local_model and agent.local_tokenizer:
+            try:
+                chat_messages = [
+                    {
+                        "role": "system",
+                        "content": "你是意图识别Agent，只能输出严格的XML分析结果。"
+                    },
                     {"role": "user", "content": intent_prompt}
-                ]):
-                    response_text += chunk
-
-                # 尝试解析JSON响应
-                import re
-                match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                if match:
-                    import json
-                    try:
-                        result = json.loads(match.group())
-                        return {
-                            'success': True,
-                            'core_question': result.get('core_question', ''),
-                            'outline': result.get('outline', []),
-                            'raw_response': response_text
-                        }
-                    except json.JSONDecodeError:
-                        pass
-
-                return {
-                    'success': False,
-                    'error': 'JSON解析失败',
-                    'raw_response': response_text
-                }
-
-            elif agent_type == 'local' and agent.local_model:
-                # 本地模型实现（简化版）
+                ]
+                text = agent.local_tokenizer.apply_chat_template(
+                    chat_messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+                inputs = agent.local_tokenizer([text], return_tensors="pt").to(agent.local_model.device)
+                with torch.no_grad():
+                    outputs = agent.local_model.generate(
+                        inputs.input_ids,
+                        attention_mask=inputs.attention_mask,
+                        **agent._get_local_generation_kwargs()
+                    )
+                response_text = agent.local_tokenizer.decode(
+                    outputs[0][inputs.input_ids.shape[1]:],
+                    skip_special_tokens=True
+                ).strip()
+                xml_content = _extract_xml(response_text)
                 return {
                     'success': True,
-                    'core_question': '检测到需要多模型分析的场景',
-                    'outline': ['技术讨论', '需要专业建议', '涉及复杂决策']
+                    'summary_xml': xml_content,
+                    'raw_response': response_text
                 }
+            except Exception as e:
+                print(f"[智能分析] 意图识别失败: {e}")
+                return {'success': False, 'error': f'本地意图识别失败: {str(e)}'}
 
-            return {'success': False, 'error': '无可用的Agent进行意图识别'}
-
-        except Exception as e:
-            print(f"[智能分析] 意图识别失败: {e}")
-            return {'success': False, 'error': str(e)}
+        return {'success': False, 'error': '无可用的Agent进行意图识别'}
 
     def _prepare_distribution(self, messages: List[Dict], phase1_result: Dict, intent_result: Dict = None) -> Dict:
         """
@@ -501,6 +723,15 @@ class AgentManager:
         Returns:
             分发配置
         """
+        # 修复：首先检查阶段1是否判断需要AI帮助
+        if not phase1_result.get('is', False):
+            print(f"[智能分析] 阶段1判断无需AI帮助，不准备分发配置")
+            return {
+                'mode': 'default',
+                'targets': [],
+                'intent': intent_result
+            }
+
         # 加载智囊团角色配置
         try:
             import json
@@ -554,30 +785,31 @@ class AgentManager:
                 'intent': intent_result
             }
 
-    def should_analyze(self, message: Dict, conversation_history: List[Dict]) -> bool:
+    async def should_analyze(self, message: Dict, conversation_history: List[Dict]) -> Tuple[bool, Optional[str]]:
         """
-        检查是否需要分析
+        异步检查是否需要分析（按照流程图逻辑）
 
         Args:
             message: 当前消息
             conversation_history: 对话历史
 
         Returns:
-            是否需要分析
+            (是否需要分析, 触发原因)
         """
         if not self.enabled:
-            return False
+            return False, "智能分析已关闭"
 
         if not self.auto_trigger:
-            return False
+            return False, "自动触发已关闭"
 
         # 检查是否有 Agent
         if not self.agents:
-            return False
+            return False, "未配置Agent"
 
         # 选择第一个 Agent 检查触发条件
         agent = list(self.agents.values())[0]
-        return agent.should_trigger(message, conversation_history)
+        should_trigger, reason = agent.process_message(message, conversation_history)
+        return should_trigger, reason
 
 
 # 全局 Agent 管理器实例

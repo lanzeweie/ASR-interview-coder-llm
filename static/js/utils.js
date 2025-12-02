@@ -97,8 +97,10 @@ export class PanelResizer {
             resizer.classList.add('resizing');
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
-            document.addEventListener('mousemove', PanelResizer.panelMouseMove);
-            document.addEventListener('mouseup', PanelResizer.panelMouseUp);
+            state.mouseMoveHandler = (event) => PanelResizer.panelMouseMove(event, state, asrPanel, llmPanel);
+            state.mouseUpHandler = () => PanelResizer.panelMouseUp(state, resizer, asrPanel);
+            document.addEventListener('mousemove', state.mouseMoveHandler);
+            document.addEventListener('mouseup', state.mouseUpHandler);
         });
     }
 
@@ -135,8 +137,14 @@ export class PanelResizer {
         document.body.style.userSelect = '';
         // 保存 ASR 面板宽度（LLM 面板宽度会自适应）
         localStorage.setItem(`ast_asr_width`, asrPanel.offsetWidth);
-        document.removeEventListener('mousemove', PanelResizer.panelMouseMove);
-        document.removeEventListener('mouseup', PanelResizer.panelMouseUp);
+        if (state.mouseMoveHandler) {
+            document.removeEventListener('mousemove', state.mouseMoveHandler);
+            state.mouseMoveHandler = null;
+        }
+        if (state.mouseUpHandler) {
+            document.removeEventListener('mouseup', state.mouseUpHandler);
+            state.mouseUpHandler = null;
+        }
     }
 }
 

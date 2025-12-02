@@ -67,9 +67,9 @@ async function initializeManagers() {
     managers.intentRecognition = new IntentRecognitionManager();
     managers.llm = new LLMManager();
 
-
     // 设置管理器之间的依赖关系
     managers.llm.setStreamManager(managers.streamManager);
+    managers.llm.setWebSocketManager(managers.websocket);
 
     // 设置WebSocket消息处理
     managers.websocket.handleLLMMessage = (data) => {

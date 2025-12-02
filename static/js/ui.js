@@ -203,6 +203,7 @@ export class UIManager {
         // 清空对话
         domUtils.addEvent('clear-llm-btn', 'click', () => {
             this.managers.chat.clearCurrentChat();
+            this.managers.llm.clearHistory();
         });
 
         // 清空语音记录
@@ -216,8 +217,28 @@ export class UIManager {
 
         // 发送全部到AI
         domUtils.addEvent('send-all-btn', 'click', () => {
+            console.log('[发送全部到AI] 按钮被点击');
+            console.log('[发送全部到AI] 当前WebSocket状态:', {
+                asrConnected: this.managers.websocket?.asrSocket?.readyState,
+                llmConnected: this.managers.websocket?.llmSocket?.readyState,
+                llmSocketExists: !!this.managers.websocket?.llmSocket
+            });
+
             this.managers.chat.sendVoiceRecordsToAI((text) => {
-                this.managers.llm.sendToLLM(this.managers.websocket, text);
+                console.log('[发送全部到AI] 准备发送文本（格式：[时间] 说话人: 内容）:');
+                console.log('--- 发送内容开始 ---');
+                console.log(text);
+                console.log('--- 发送内容结束 ---');
+                console.log('[发送全部到AI] 文本长度:', text.length);
+                console.log('[发送全部到AI] 调用sendToLLM...');
+
+                try {
+                    this.managers.llm.sendToLLM(this.managers.websocket, text);
+                    console.log('[发送全部到AI] sendToLLM调用完成');
+                } catch (error) {
+                    console.error('[发送全部到AI] 发送失败:', error);
+                    showToast('发送失败: ' + error.message, 'error');
+                }
             });
         });
     }
@@ -266,12 +287,12 @@ export class UIManager {
             });
         }
 
-        // 多模型会话开关
+        // 智囊团开关
         if (dom.multiLLMToggle) {
             dom.multiLLMToggle.addEventListener('click', () => {
                 const isMulti = dom.multiLLMToggle.classList.toggle('active');
-                dom.multiLLMToggle.title = isMulti ? '多模型会话已开启，点击关闭' : '多模型会话已关闭，点击开启';
-                showToast(`多模型会话模式已${isMulti ? '开启' : '关闭'}`, 'info');
+                dom.multiLLMToggle.title = isMulti ? '智囊团已开启，点击关闭' : '智囊团已关闭，点击开启';
+                showToast(`智囊团模式已${isMulti ? '开启' : '关闭'}`, 'info');
                 updateModelDisplay(isMulti, this.managers.config.currentConfigName);
                 this.managers.chat.updateWelcomeMessage();
                 saveUIState({
@@ -378,13 +399,13 @@ export class UIManager {
         });
     }
 
-    // 初始化多模型会话开关
+    // 初始化智囊团开关
     initMultiLLMToggle() {
         // 如果没有保存的状态，则设置为默认关闭状态
         if (!localStorage.getItem('ast_ui_state')) {
             if (dom.multiLLMToggle) {
                 dom.multiLLMToggle.classList.remove('active');
-                dom.multiLLMToggle.title = '多模型会话已关闭，点击开启';
+                dom.multiLLMToggle.title = '智囊团已关闭，点击开启';
             }
         }
     }
@@ -411,7 +432,7 @@ export class UIManager {
         const savedState = loadUIState();
         if (!savedState) return;
 
-        // 恢复多模型会话开关状态
+        // 恢复智囊团开关状态
         if (typeof savedState.multiLLMActive === 'boolean') {
             if (savedState.multiLLMActive && dom.multiLLMToggle && !dom.multiLLMToggle.classList.contains('active')) {
                 dom.multiLLMToggle.classList.add('active');
@@ -469,6 +490,7 @@ export class UIManager {
     // 更新全局变量（供其他模块使用）
     updateGlobalVariables() {
         window.currentConfigName = this.managers.config.currentConfigName;
+        window.currentDisplayName = this.managers.config.getCurrentDisplayName();
         window.multiLLMActiveNames = this.managers.config.multiLLMActiveNames;
         window.agentEnabled = this.managers.agent.isEnabled();
         window.intentRecognitionEnabled = this.managers.intentRecognition.isEnabled();

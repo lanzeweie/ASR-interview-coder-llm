@@ -90,6 +90,10 @@ class TriggerManager:
         Returns:
             是否触发了分析
         """
+        # 修复：首先检查智能分析是否启用，如果没有启用，直接返回不处理
+        if not agent_manager.enabled:
+            return False
+
         current_time = time.time()
         text = message.get('text', '').strip()
         speaker = message.get('speaker', '未知用户')
@@ -148,6 +152,10 @@ class TriggerManager:
 
     def _check_trigger(self, current_time: float):
         """检查是否需要触发智能分析"""
+        # 首先检查智能分析是否启用
+        if not agent_manager.enabled:
+            return
+
         # 如果正在分析中，跳过触发检查
         if self.state.pending_analysis:
             return
@@ -170,6 +178,10 @@ class TriggerManager:
 
     def _check_silence_timeout(self, current_time: float):
         """检查静音超时"""
+        # 首先检查智能分析是否启用
+        if not agent_manager.enabled:
+            return
+
         if self.state.silence_start_time and not self.state.pending_analysis:
             silence_duration = current_time - self.state.silence_start_time
             if silence_duration >= self.silence_threshold * 2:
@@ -178,6 +190,15 @@ class TriggerManager:
 
     def _trigger_analysis(self):
         """触发智能分析"""
+        # 首先检查智能分析是否启用
+        if not agent_manager.enabled:
+            print("[触发机制] ⚠️ 智能分析未启用，重置触发状态")
+            # 重置所有状态
+            self.state.pending_analysis = False
+            self.state.silence_start_time = None
+            self.state.accumulated_text = ""
+            return
+
         self.state.pending_analysis = True
         self.state.silence_start_time = None
 
@@ -213,7 +234,7 @@ class TriggerManager:
                 last_message = messages[-1]
                 speaker_name = last_message.get('speaker', '').split(' (')[0]  # 提取说话人姓名
                 print(f"[触发机制] 📤 未配置主人公，使用最后说话人: {speaker_name}, 增量消息数={len(messages)} [{start_index}-{end_index-1}]/总{len(self.conversation_history)}")
-            
+
             # 异步执行分析 - 使用保存的event loop
             if self.event_loop and self.event_loop.is_running():
                 asyncio.run_coroutine_threadsafe(self._run_analysis(messages, speaker_name, start_index), self.event_loop)

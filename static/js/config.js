@@ -1,4 +1,4 @@
-/* ========================================
+﻿/* ========================================
    配置管理
    ======================================== */
 
@@ -12,6 +12,7 @@ export class ConfigManager {
         this.currentConfigName = "";
         this.multiLLMActiveNames = new Set();
         this.editingConfigName = null; // Track which config is being edited in the form
+        this.identities = []; // Store loaded identities
     }
 
     // 加载配置
@@ -20,23 +21,12 @@ export class ConfigManager {
             const res = await fetch('/api/config');
             const data = await res.json();
 
-            // 身份映射：旧身份 → 新身份
-            const tagMapping = {
-                '思考': 'tech_assistant_tag',
-                '快速': 'concise_assistant_tag',
-                '引导': 'guide_tag'
-            };
-
-            // 自动迁移旧身份
-            this.configs = (data.configs || []).map(config => {
-                if (config.tags) {
-                    config.tags = config.tags.map(tag => tagMapping[tag] || tag);
-                }
-                return config;
-            });
-
+            this.configs = (data.configs || []);
             this.currentConfigName = data.current_config;
             this.multiLLMActiveNames = new Set(data.multi_llm_active_names || []);
+
+            // Load identities first
+            await this.loadIdentities();
 
             // 初始化标签页
             this.initTabs();
@@ -63,6 +53,118 @@ export class ConfigManager {
             showToast("加载配置失败", 'error');
             throw e;
         }
+    }
+
+    // Load identities from backend
+    async loadIdentities() {
+        try {
+            const res = await fetch('/api/identities');
+            const data = await res.json();
+
+            // 身份映射：旧身份 → 新身份 (for backward compatibility during loading)
+            const tagMapping = {
+                '思考': 'tech_assistant_tag',
+                '快速': 'concise_assistant_tag',
+                '引导': 'guide_tag'
+            };
+
+            // Apply migration to loaded identities if they are old format
+            this.identities = (data || []).map(identity => {
+                if (tagMapping[identity.name]) {
+                    identity.name = tagMapping[identity.name];
+                }
+                return identity;
+            });
+
+            // Also apply migration to existing configs' tags
+            this.configs = this.configs.map(config => {
+                if (config.tags) {
+                    config.tags = config.tags.map(tag => tagMapping[tag] || tag);
+                }
+                return config;
+            });
+
+        } catch (e) {
+            console.error("Failed to load identities:", e);
+            this.identities = [];
+        }
+    }
+
+    // Render identity options
+    renderIdentityOptions(selectedTag = '') {
+        const container = document.getElementById('identity-list');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        // Reset disabled state initially
+        if (dom.systemPromptInput) dom.systemPromptInput.disabled = false;
+
+        if (this.identities.length === 0) {
+            container.innerHTML = '<div class="no-identities">暂无可用身份</div>';
+            return;
+        }
+
+        this.identities.forEach((identity, index) => {
+            const option = document.createElement('div');
+            option.className = 'tag-option';
+
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'identity_option';
+            input.id = `identity-${index}`;
+            // Use tag_key as the value if available, otherwise name
+            const tagValue = identity.tag_key || identity.name;
+            input.value = tagValue;
+            input.dataset.prompt = identity.prompt || "";
+
+            // Check if this is the selected tag
+            if (selectedTag && (selectedTag === tagValue || selectedTag === identity.name)) {
+                input.checked = true;
+                input.dataset.wasChecked = "true";
+                // Lock system prompt if identity is selected
+                if (dom.systemPromptInput) dom.systemPromptInput.disabled = true;
+            } else {
+                input.dataset.wasChecked = "false";
+            }
+
+            const label = document.createElement('label');
+            label.htmlFor = `identity-${index}`;
+            label.className = 'tag-label'; // Add styling class
+            label.textContent = identity.name;
+
+            // Click event for toggle logic and auto-fill
+            input.onclick = (e) => {
+                if (input.dataset.wasChecked === "true") {
+                    input.checked = false;
+                    input.dataset.wasChecked = "false";
+                    this.updateTagsInput();
+                    this.updateSystemPromptHintVisibility('');
+                    // Unlock system prompt
+                    if (dom.systemPromptInput) dom.systemPromptInput.disabled = false;
+                } else {
+                    // Uncheck others
+                    const allRadios = container.querySelectorAll('input[type="radio"]');
+                    allRadios.forEach(r => r.dataset.wasChecked = "false");
+
+                    input.checked = true;
+                    input.dataset.wasChecked = "true";
+                    this.updateTagsInput();
+
+                    // Auto-fill prompt
+                    if (input.dataset.prompt) {
+                        dom.systemPromptInput.value = input.dataset.prompt;
+                    }
+                    this.updateSystemPromptHintVisibility(input.value);
+                    // Lock system prompt
+                    if (dom.systemPromptInput) dom.systemPromptInput.disabled = true;
+                }
+            };
+
+            option.appendChild(input);
+            option.appendChild(label);
+            container.appendChild(option);
+        });
     }
 
     // 渲染配置列表
@@ -187,14 +289,11 @@ export class ConfigManager {
                 selectedTag = tagMapping[selectedTag];
             }
 
-            // 选中对应的radio按钮
-            document.querySelectorAll('.tags-quick-select input[type="radio"]').forEach(radio => {
-                radio.checked = radio.value === selectedTag;
-                // 设置 wasChecked 状态，用于点击取消功能
-                radio.dataset.wasChecked = radio.checked ? 'true' : 'false';
-            });
-            // 更新隐藏的输入框
-            this.updateTagsInput();
+            // Render identities with selection
+            this.renderIdentityOptions(selectedTag);
+
+            // Update hidden input
+            dom.configTagsInput.value = selectedTag;
 
             dom.systemPromptInput.value = config.system_prompt || "";
             // 根据身份选择显示/隐藏提示
@@ -244,6 +343,10 @@ export class ConfigManager {
                 label.htmlFor = `multi-model-${config.name}`;
                 // 将英文标签转换为中文显示
                 const chineseTags = config.tags.map(tag => {
+                    // Check if it's one of our loaded identities
+                    const identity = this.identities.find(i => i.name === tag);
+                    if (identity) return identity.name;
+
                     const tagMap = {
                         'tech_assistant_tag': '技术辅助者',
                         'concise_assistant_tag': '精简辅助者',
@@ -296,10 +399,8 @@ export class ConfigManager {
         dom.modelNameInput.value = "";
         dom.configTagsInput.value = "";
         // 清除身份单选框
-        document.querySelectorAll('.tags-quick-select input[type="radio"]').forEach(radio => {
-            radio.checked = false;
-            radio.dataset.wasChecked = 'false';
-        });
+        // Reset identities
+        this.renderIdentityOptions('');
         dom.systemPromptInput.value = "";
         // 隐藏 System Prompt 提示
         this.updateSystemPromptHintVisibility('');
@@ -315,14 +416,14 @@ export class ConfigManager {
         // 获取并映射身份：旧身份 → 新身份
         let tags = dom.configTagsInput.value.split(',').map(t => t.trim()).filter(t => t);
 
-        // 身份映射：旧身份 → 新身份
+        // 身份映射：旧身份 → 新身份 (for backward compatibility during saving)
         const tagMapping = {
             '思考': 'tech_assistant_tag',
             '快速': 'concise_assistant_tag',
             '引导': 'guide_tag'
         };
 
-        // 转换为新身份格式
+        // Convert to new identity format if old identity name is used
         tags = tags.map(tag => tagMapping[tag] || tag);
 
         // ===== 身份唯一性验证 =====
@@ -545,21 +646,24 @@ export class ConfigManager {
                 dom.agentModelTypeSelect.value = agentConfig.model_type;
             }
 
-            // 触发模型类型变化事件来设置模型选择框
+            // 触发类型切换处理
             this.handleModelTypeChange(dom.agentModelTypeSelect);
 
-            // 如果是API模式且有保存的模型名称，需要选中它
+            // 如果是API模式，设置选中的模型
             if (agentConfig.model_type === 'api' && agentConfig.model_name) {
-                // 延迟一点再设置，确保选项已经加载
-                setTimeout(() => {
-                    dom.agentModelSelect.value = agentConfig.model_name;
-                }, 100);
+                dom.agentModelSelect.value = agentConfig.model_name;
             }
 
-            // 设置阈值
-            dom.agentMinCharsInput.value = agentConfig.min_characters || 10;
-            dom.agentSilenceThresholdInput.value = agentConfig.silence_threshold || 2;
-            dom.agentMaxMessagesInput.value = agentConfig.max_messages || 50;
+            // 设置其他参数
+            if (agentConfig.min_chars_threshold) {
+                dom.agentMinCharsInput.value = agentConfig.min_chars_threshold;
+            }
+            if (agentConfig.silence_threshold) {
+                dom.agentSilenceThresholdInput.value = agentConfig.silence_threshold;
+            }
+            if (agentConfig.max_history_messages) {
+                dom.agentMaxMessagesInput.value = agentConfig.max_history_messages;
+            }
 
         } catch (e) {
             console.error('加载智能分析配置失败:', e);
@@ -570,20 +674,26 @@ export class ConfigManager {
     async saveAgentConfig() {
         try {
             const modelType = dom.agentModelTypeSelect.value;
+            let modelName = '';
+
+            if (modelType === 'local') {
+                // 本地模式下，模型名保持不变（或者从配置中读取）
+                modelName = window.agentConfig?.model_name || 'Qwen3-0.6B';
+            } else {
+                modelName = dom.agentModelSelect.value;
+                if (!modelName) {
+                    showToast('请选择API模型', 'error');
+                    return false;
+                }
+            }
 
             const config = {
                 model_type: modelType,
-                model_name: dom.agentModelSelect.value,
-                min_characters: parseInt(dom.agentMinCharsInput.value) || 10,
-                silence_threshold: parseFloat(dom.agentSilenceThresholdInput.value) || 2,
-                max_messages: parseInt(dom.agentMaxMessagesInput.value) || 50
+                model_name: modelName,
+                min_chars_threshold: parseInt(dom.agentMinCharsInput.value) || 10,
+                silence_threshold: parseFloat(dom.agentSilenceThresholdInput.value) || 2.0,
+                max_history_messages: parseInt(dom.agentMaxMessagesInput.value) || 50
             };
-
-            // 验证配置
-            if (!config.model_name && modelType === 'api') {
-                showToast('请选择智能分析模型', 'error');
-                return false;
-            }
 
             const response = await fetch('/api/agent/config', {
                 method: 'POST',
@@ -591,7 +701,10 @@ export class ConfigManager {
                 body: JSON.stringify(config)
             });
 
-            if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                // 更新本地缓存的配置
+                window.agentConfig = { ...window.agentConfig, ...config };
                 return true;
             } else {
                 return false;
@@ -652,11 +765,34 @@ export class ConfigManager {
     updateSystemPromptHintVisibility(selectedTag) {
         if (dom.systemPromptHint) {
             // 当选择身份标签时显示提示
-            if (selectedTag === 'tech_assistant_tag' || selectedTag === 'concise_assistant_tag' || selectedTag === 'guide_tag') {
+            if (selectedTag) {
                 dom.systemPromptHint.style.display = 'block';
             } else {
                 dom.systemPromptHint.style.display = 'none';
             }
         }
+    }
+
+    // 获取当前配置的显示名称（如果有身份标签则显示身份名，否则显示配置名）
+    getCurrentDisplayName() {
+        const config = this.configs.find(c => c.name === this.currentConfigName);
+        if (!config) return this.currentConfigName;
+
+        if (config.tags && config.tags.length > 0) {
+            const tag = config.tags[0];
+            // Find identity with this tag
+            const identity = this.identities.find(i => i.tag_key === tag || i.name === tag);
+            if (identity) return identity.name;
+
+            // Fallback map
+            const tagMap = {
+                'tech_assistant_tag': '技术辅助者',
+                'concise_assistant_tag': '精简辅助者',
+                'guide_tag': '引导者'
+            };
+            if (tagMap[tag]) return tagMap[tag];
+        }
+
+        return this.currentConfigName;
     }
 }

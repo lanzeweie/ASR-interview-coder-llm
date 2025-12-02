@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AST · 语音厅 & 助手</title>
+    <title>ASR & LLM 语音助手</title>
 
     <!-- 高贵的字体 - Distinctive Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -311,20 +311,9 @@
                             </div>
                             <div class="form-group">
                                 <label>身份选择(可选)</label>
-                                <div class="tags-quick-select">
-                                    <div class="tag-option">
-                                        <input type="radio" name="model-tag" id="tag-tech" value="tech_assistant_tag">
-                                        <label for="tag-tech" class="tag-label">技术辅助者</label>
-                                    </div>
-                                    <div class="tag-option">
-                                        <input type="radio" name="model-tag" id="tag-concise"
-                                            value="concise_assistant_tag">
-                                        <label for="tag-concise" class="tag-label">精简辅助者</label>
-                                    </div>
-                                    <div class="tag-option">
-                                        <input type="radio" name="model-tag" id="tag-guide" value="guide_tag">
-                                        <label for="tag-guide" class="tag-label">引导者</label>
-                                    </div>
+                                <div class="tags-quick-select" id="identity-list">
+                                    <!-- Identities will be loaded dynamically -->
+                                    <div class="loading-placeholder">加载身份中...</div>
                                 </div>
                             </div>
                             <input type="hidden" id="config-tags">
@@ -341,7 +330,7 @@
                                 <input type="text" id="model-name" placeholder="gpt-3.5-turbo">
                             </div>
                             <div class="form-group">
-                                <label>System Prompt (可选)</label>
+                                <label>System Prompt</label>
                                 <textarea id="system-prompt" rows="3"
                                     placeholder="为此模型设置专属的 System Prompt..."></textarea>
                                 <div id="system-prompt-hint" class="form-hint"

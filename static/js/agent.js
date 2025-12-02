@@ -114,7 +114,7 @@ export class AgentManager {
                 this.enabled = newEnabled;
                 this.updateAgentToggleUI();
                 this.updateAgentStatusIndicator();
-                
+
                 // 保存UI状态（开关按钮的状态）
                 if (dom.agentToggleBtn) {
                     if (newEnabled) {
@@ -123,7 +123,7 @@ export class AgentManager {
                         dom.agentToggleBtn.classList.remove('active');
                     }
                 }
-                
+
                 showToast(`智能分析已${newEnabled ? '开启' : '关闭'}`, 'success');
                 return newEnabled;
             } else {
@@ -216,13 +216,18 @@ export class LLMManager {
         this.streamManager = streamManager;
     }
 
+    // 设置WebSocket管理器
+    setWebSocketManager(wsManager) {
+        this.wsManager = wsManager;
+    }
+
     // 处理LLM消息
     handleLLMMessage(data) {
         if (!this.streamManager) return;
 
         if (data.type === 'chunk') {
             const model = data.model || 'default';
-            const div = this.streamManager.getOrCreateResponseDiv(model, window.currentConfigName);
+            const div = this.streamManager.getOrCreateResponseDiv(model, window.currentDisplayName || window.currentConfigName);
             const contentDiv = div.querySelector('.content');
 
             // 如果是预响应提示，需要先清除"正在输入"文本
@@ -266,7 +271,7 @@ export class LLMManager {
 
             // Reset state
             this.streamManager.clearLLMState();
-            
+
             // Refresh chat list preview if needed
             if (typeof window.loadChatList === 'function') {
                 window.loadChatList();
@@ -277,17 +282,68 @@ export class LLMManager {
             const errorDiv = document.createElement('div');
             errorDiv.className = 'message system-message';
             errorDiv.innerHTML = `<div class="message-content" style="color: var(--color-error)">❌ ${data.content}</div>`;
-            
+
             if (dom.llmWindow) {
                 dom.llmWindow.appendChild(errorDiv);
                 dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+            }
+        }
+        else if (data.type === 'agent_notification') {
+            // 智能分析通知消息
+            console.log('[智能分析通知]:', data.content);
+            const notificationDiv = document.createElement('div');
+            notificationDiv.className = 'message system-message agent-notification';
+            notificationDiv.innerHTML = `<div class="message-content">${data.content}</div>`;
+
+            if (dom.llmWindow) {
+                dom.llmWindow.appendChild(notificationDiv);
+                dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+            }
+        }
+        else if (data.type === 'agent_triggered') {
+            // 智能分析触发消息
+            console.log('[智能分析触发]:', data);
+            const reason = data.reason || '检测到需要AI帮助分析';
+
+            // 显示触发通知
+            showToast(`智能分析已触发: ${reason}`, 'info');
+
+            // 关键修复：将触发消息发送回服务器以启动 LLM 生成
+            if (this.wsManager) {
+                console.log('[智能分析] 正在请求服务器开始生成回复...');
+
+                // 创建预响应提示 (Visual feedback)
+                const isMulti = data.is_multi_llm || false;
+                if (this.streamManager) {
+                    // 清除旧状态
+                    this.streamManager.clearLLMState();
+                    // 创建新的预响应
+                    this.streamManager.createPreResponse(
+                        isMulti,
+                        window.multiLLMActiveNames || new Set(),
+                        window.currentDisplayName || window.currentConfigName || ''
+                    );
+                }
+
+                // 发送回服务器
+                this.wsManager.sendToLLM(data);
+            } else {
+                console.error('[智能分析] 无法发送请求：WebSocketManager 未设置');
+                showToast('智能分析无法启动：连接错误', 'error');
             }
         }
     }
 
     // 发送消息到LLM
     async sendToLLM(wsManager, text) {
-        if (!text.trim() || this.isProcessing) return;
+        console.log('[LLM] sendToLLM 被调用, 文本长度:', text.length);
+        console.log('[LLM] 文本内容:', text);
+        console.log('[LLM] 是否正在处理:', this.isProcessing);
+
+        if (!text.trim() || this.isProcessing) {
+            console.log('[LLM] 发送失败: 文本为空或正在处理');
+            return;
+        }
 
         this.isProcessing = true;
 
@@ -298,7 +354,9 @@ export class LLMManager {
             this.chatHistory.push({ role: "user", content: text });
 
             if (wsManager && wsManager.llmSocket && wsManager.llmSocket.readyState === WebSocket.OPEN) {
+                console.log('[LLM] WebSocket已连接');
                 const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+                console.log('[LLM] 智囊团模式:', isMulti);
 
                 // Reset stream state
                 if (this.streamManager) {
@@ -307,25 +365,32 @@ export class LLMManager {
 
                 // 创建预响应提示
                 if (this.streamManager) {
-                    this.streamManager.createPreResponse(isMulti, window.multiLLMActiveNames || new Set(), window.currentConfigName || '');
+                    this.streamManager.createPreResponse(isMulti, window.multiLLMActiveNames || new Set(), window.currentDisplayName || window.currentConfigName || '');
                 }
 
-                const success = wsManager.sendToLLM({
+                const payload = {
                     messages: this.chatHistory,
                     chat_id: this.currentChatId,
                     is_multi_llm: isMulti
-                });
+                };
+                console.log('[LLM] 发送载荷:', payload);
+
+                const success = wsManager.sendToLLM(payload);
 
                 if (!success) {
+                    console.log('[LLM] 发送失败: sendToLLM返回false');
                     showToast("LLM 服务未连接", 'error');
                     this.isProcessing = false;
+                } else {
+                    console.log('[LLM] 发送成功');
                 }
             } else {
+                console.log('[LLM] 发送失败: WebSocket未连接');
                 showToast("LLM 服务未连接", 'error');
                 this.isProcessing = false;
             }
         } catch (error) {
-            console.error('发送消息失败:', error);
+            console.error('[LLM] 发送消息失败:', error);
             showToast("发送消息失败", 'error');
             this.isProcessing = false;
         }
@@ -334,7 +399,7 @@ export class LLMManager {
     // 添加用户消息
     addUserMessage(text) {
         if (!dom.llmWindow) return;
-        
+
         const userDiv = document.createElement('div');
         userDiv.className = 'message user';
         userDiv.innerHTML = `<div class="message-content">${text}</div>`;
@@ -345,10 +410,10 @@ export class LLMManager {
     // 添加助手消息
     addAssistantMessage(text, modelName = null) {
         if (!dom.llmWindow) return;
-        
+
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message ai';
-        
+
         const speakerName = modelName || 'AI 助手';
         const headerHtml = modelName
             ? `<div class="message-header"><span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span></div>`
@@ -358,10 +423,10 @@ export class LLMManager {
             ${headerHtml}
             <div class="message-content">${text}</div>
         `;
-        
+
         dom.llmWindow.appendChild(msgDiv);
         dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
-        
+
         // 添加到历史记录
         const content = modelName ? `**${modelName}**:\n${text}` : text;
         this.chatHistory.push({ role: "assistant", content });

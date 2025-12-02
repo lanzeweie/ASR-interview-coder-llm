@@ -294,16 +294,64 @@ export class ChatManager {
 
     // 发送语音记录到AI
     sendVoiceRecordsToAI(sendToLLM) {
-        if (!dom.asrWindow) return;
+        console.log('[发送全部到AI] sendVoiceRecordsToAI 被调用');
+        if (!dom.asrWindow) {
+            console.error('[发送全部到AI] ASR窗口不存在');
+            return;
+        }
 
-        const messages = Array.from(dom.asrWindow.querySelectorAll('.message .content'))
-            .map(el => el.textContent);
+        // 提取完整的消息信息（说话人、时间、内容）
+        const messageElements = dom.asrWindow.querySelectorAll('.message');
+        const formattedMessages = [];
 
-        if (messages.length === 0) {
+        messageElements.forEach(msgEl => {
+            // 跳过系统消息（如果有特殊标识）
+            if (msgEl.classList.contains('system-message') && !msgEl.classList.contains('agent-analysis')) {
+                return;
+            }
+
+            // 提取时间（如果存在）
+            const timeEl = msgEl.querySelector('.timestamp');
+            const time = timeEl ? timeEl.textContent.trim() : '';
+
+            // 提取说话人（如果存在）
+            const speakerEl = msgEl.querySelector('.speaker-name');
+            const speaker = speakerEl ? speakerEl.textContent.trim() : '未知';
+
+            // 提取内容（兼容 .content 和 .message-content）
+            const contentEl = msgEl.querySelector('.content, .message-content');
+            const content = contentEl ? contentEl.textContent.trim() : '';
+
+            if (content) {
+                // 格式：[时间] 说话人: 内容
+                const formattedMessage = time ? `[${time}] ${speaker}: ${content}` : `${speaker}: ${content}`;
+                formattedMessages.push(formattedMessage);
+            }
+        });
+
+        console.log('[发送全部到AI] 提取到消息数量:', formattedMessages.length);
+        console.log('[发送全部到AI] 格式化后的消息:', formattedMessages);
+
+        if (formattedMessages.length === 0) {
+            console.log('[发送全部到AI] 没有语音记录可发送');
             showToast("没有语音记录可发送", 'info');
             return;
         }
 
-        sendToLLM("以下是语音转写的聊天记录：\n" + messages.join("\n"));
+        // 添加智能分析消息（如果有）
+        const agentMessages = Array.from(dom.asrWindow.querySelectorAll('.message.agent-analysis .message-content'))
+            .map(el => {
+                const text = el.textContent.trim();
+                return text ? `[系统] ${text}` : '';
+            })
+            .filter(text => text);
+
+        if (agentMessages.length > 0) {
+            formattedMessages.push(...agentMessages);
+        }
+
+        const combinedText = "以下是语音转写的聊天记录：\n" + formattedMessages.join("\n");
+        console.log('[发送全部到AI] 合并后的文本:', combinedText);
+        sendToLLM(combinedText);
     }
 }

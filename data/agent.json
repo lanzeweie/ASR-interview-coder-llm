@@ -1,0 +1,22 @@
+{
+  "think_tank_roles": [
+    {
+      "id": "tech_assistant",
+      "name": "技术辅助者",
+      "tag_key": "tech_assistant_tag",
+      "prompt": "你是一个技术辅助者，专注于帮助用户解决编程问题"
+    },
+    {
+      "id": "concise_assistant",
+      "name": "精简辅助者",
+      "tag_key": "concise_assistant_tag",
+      "prompt": "待定(TODO)..."
+    },
+    {
+      "id": "guide",
+      "name": "引导者",
+      "tag_key": "guide_tag",
+      "prompt": "待定(TODO)..."
+    }
+  ]
+}
