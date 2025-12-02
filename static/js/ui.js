@@ -139,6 +139,13 @@ export class UIManager {
             });
         }
 
+        // 意图识别配置相关
+        if (dom.intentRecognitionModelTypeSelect) {
+            dom.intentRecognitionModelTypeSelect.addEventListener('change', (e) => {
+                this.managers.config.handleIntentRecognitionModelTypeChange(e.target);
+            });
+        }
+
         // 全局window对象，供其他模块使用
         window.handleModelTypeChange = (select) => {
             this.managers.config.handleModelTypeChange(select);

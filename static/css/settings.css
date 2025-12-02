@@ -6,7 +6,7 @@
 .settings-layout {
     display: flex;
     gap: var(--gap-lg);
-    height: 500px;
+    /* 移除固定高度，让内容自然撑开，由父级容器控制滚动 */
     min-height: 0;
 }
 
@@ -45,6 +45,8 @@
     border-bottom: 1px solid var(--border-subtle);
     padding: 0 var(--gap-md);
     flex-shrink: 0;
+    flex-wrap: wrap;  /* 允许标签页换行 */
+    row-gap: 2px;     /* 换行时的行间距 */
 }
 
 .tab-button {
@@ -92,13 +94,14 @@
     color: var(--accent-primary);
 }
 
-/* 标签页内容区域 */
+/* 标签页内容区域 - 移除嵌套滚动条 */
 .tab-content {
     display: none;
     padding: var(--gap-lg);
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
+    /* 移除 overflow-y 和 flex，让内容自然撑开 */
+    /* overflow-y: auto; */
+    /* flex: 1; */
+    /* min-height: 0; */
 }
 
 .tab-content.active {
@@ -1190,7 +1193,8 @@
     }
 
     .settings-layout {
-        height: 450px;
+        /* 移除固定高度，由内容自然撑开 */
+        /* height: 450px; */
     }
 
     .settings-sidebar {
@@ -1217,19 +1221,22 @@
 
     .settings-layout {
         flex-direction: column;
+        /* 保持合理高度，但不强制限制，让内容自然撑开 */
         height: auto;
         max-height: 70vh;
     }
 
     .settings-sidebar {
         width: 100%;
-        max-height: 200px;
-        flex-shrink: 1;
+        /* 移除强制高度限制，避免嵌套滚动 */
+        max-height: none;
+        flex-shrink: 0;
     }
 
     .settings-content {
         flex: 1;
-        min-height: 400px;
+        /* 移除最小高度限制 */
+        /* min-height: 400px; */
     }
 
     .settings-tabs {
@@ -1251,6 +1258,8 @@
 
     .tab-content {
         padding: var(--gap-md);
+        /* 移动端也移除滚动限制 */
+        /* overflow-y: auto; */
     }
 
     .config-list {
@@ -1342,16 +1351,19 @@
     }
 
     .settings-layout {
+        /* 保持合理最大高度，但不强制限制 */
         max-height: 65vh;
         gap: var(--gap-sm);
     }
 
     .settings-sidebar {
-        max-height: 150px;
+        /* 移除强制高度限制 */
+        max-height: none;
     }
 
     .settings-content {
-        min-height: 350px;
+        /* 移除最小高度限制 */
+        /* min-height: 350px; */
     }
 
     .tab-button {

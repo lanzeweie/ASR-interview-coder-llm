@@ -348,11 +348,142 @@ export class LLMManager {
         this.isProcessing = true;
 
         try {
-            // Add User Message
+            // 检查是否启用了意图识别
+            const intentRecognitionEnabled = window.intentRecognitionEnabled === true;
+            console.log('[LLM] 意图识别状态:', intentRecognitionEnabled);
+
+            if (intentRecognitionEnabled) {
+                // 启用了意图识别，先进行分析
+                console.log('[LLM] 意图识别已启用，开始分析...');
+                await this.processWithIntentRecognition(wsManager, text);
+            } else {
+                // 未启用意图识别，直接发送
+                console.log('[LLM] 意图识别未启用，直接发送');
+                await this.sendDirectlyToLLM(wsManager, text);
+            }
+        } catch (error) {
+            console.error('[LLM] 发送消息失败:', error);
+            showToast("发送消息失败: " + error.message, 'error');
+            this.isProcessing = false;
+        }
+    }
+
+    // 处理意图识别流程
+    async processWithIntentRecognition(wsManager, text) {
+        try {
+            // 1. 添加用户消息到界面
             this.addUserMessage(text);
 
+            // 2. 准备对话历史（用于意图识别）
+            const messages = [...this.chatHistory, { role: "user", content: text }];
+
+            // 3. 显示意图识别中...
+            const analyzingDiv = document.createElement('div');
+            analyzingDiv.className = 'message system-message intent-analysis';
+            analyzingDiv.innerHTML = `
+                <div class="message-content">
+                    <div class="intent-status">🤔 意图识别分析中...</div>
+                </div>
+            `;
+            if (dom.llmWindow) {
+                dom.llmWindow.appendChild(analyzingDiv);
+                dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+            }
+
+            // 4. 调用意图识别API（使用后端的 /api/agent/analyze 端点）
+            console.log('[LLM] 调用智能分析API...');
+            // 获取意图识别配置
+            const intentConfig = window.intentRecognitionConfig || { model_type: 'local', model_name: 'Qwen3-0.6B' };
+            console.log('[LLM] 意图识别配置:', intentConfig);
+
+            const response = await fetch('/api/agent/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: messages,
+                    speaker_name: '用户', // 可以根据实际情况设置
+                    // 传递意图识别模型配置
+                    intent_recognition_config: {
+                        model_type: intentConfig.model_type,
+                        model_name: intentConfig.model_name
+                    },
+                    // 标识这是意图识别请求，而不是智能分析请求
+                    request_type: 'intent_recognition'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`意图识别API请求失败: ${response.status}`);
+            }
+
+            const analysisResult = await response.json();
+            console.log('[LLM] 意图识别结果:', analysisResult);
+
+            // 5. 显示意图识别结果
+            this.displayIntentAnalysisResult(analysisResult, analyzingDiv);
+
+            // 6. 将意图识别结果添加到历史记录中
             this.chatHistory.push({ role: "user", content: text });
 
+            // 7. 继续发送到LLM
+            setTimeout(async () => {
+                await this.sendDirectlyToLLM(wsManager, text);
+            }, 1000); // 延迟1秒后继续，让用户看到意图识别结果
+
+        } catch (error) {
+            console.error('[LLM] 意图识别失败:', error);
+            showToast("意图识别失败: " + error.message, 'error');
+
+            // 意图识别失败时，仍然继续发送原始消息
+            console.log('[LLM] 意图识别失败，继续发送原始消息');
+            await this.sendDirectlyToLLM(wsManager, text);
+        }
+    }
+
+    // 显示意图识别结果
+    displayIntentAnalysisResult(result, containerDiv) {
+        if (!containerDiv || !dom.llmWindow) return;
+
+        // 提取结果信息
+        const phase1Result = result.phase1 || {};
+        const isNeeded = phase1Result.is === true;
+        const reason = phase1Result.reason || '分析完成';
+
+        // 解析意图识别结果（如果存在）
+        let intentInfo = '';
+        if (result.phase2 && result.phase2.success) {
+            const summaryXml = result.phase2.summary_xml || '';
+            // 尝试从XML中提取内容
+            const coreMatch = summaryXml.match(/<core>(.*?)<\/core>/);
+            const outlineMatch = summaryXml.match(/<outline>(.*?)<\/outline>/);
+
+            if (coreMatch) {
+                intentInfo += `\n核心问题: ${coreMatch[1].trim()}`;
+            }
+        }
+
+        // 更新显示内容
+        const icon = isNeeded ? '✅' : 'ℹ️';
+        const statusClass = isNeeded ? 'intent-positive' : 'intent-neutral';
+
+        containerDiv.className = `message system-message intent-analysis-result ${statusClass}`;
+        containerDiv.innerHTML = `
+            <div class="message-content">
+                <div class="intent-status ${statusClass}">
+                    ${icon} 意图识别完成
+                </div>
+                <div class="intent-reason">${reason}${intentInfo}</div>
+            </div>
+        `;
+
+        dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+    }
+
+    // 直接发送到LLM（不经过意图识别）
+    async sendDirectlyToLLM(wsManager, text) {
+        try {
             if (wsManager && wsManager.llmSocket && wsManager.llmSocket.readyState === WebSocket.OPEN) {
                 console.log('[LLM] WebSocket已连接');
                 const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;

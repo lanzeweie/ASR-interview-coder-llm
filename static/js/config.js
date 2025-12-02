@@ -45,6 +45,9 @@ export class ConfigManager {
             // 加载智能分析配置
             await this.loadAgentConfig();
 
+            // 加载意图识别配置
+            await this.loadIntentRecognitionConfig();
+
             return {
                 currentConfigName: this.currentConfigName,
                 multiLLMActiveNames: this.multiLLMActiveNames
@@ -794,5 +797,146 @@ export class ConfigManager {
         }
 
         return this.currentConfigName;
+    }
+
+    // ===== 意图识别配置管理 =====
+
+    // 加载意图识别配置
+    async loadIntentRecognitionConfig() {
+        try {
+            // 从 /api/agent/status 加载智能分析配置，其中包含意图识别配置
+            const response = await fetch('/api/agent/status');
+            const data = await response.json();
+
+            if (!data || !data.available) {
+                console.log('智能分析模块不可用');
+                return;
+            }
+
+            // 从 agent_config 中提取意图识别配置
+            const agentConfig = data.config || {};
+            window.intentRecognitionConfig = {
+                model_type: agentConfig.intent_model_type || 'local',
+                model_name: agentConfig.intent_model_name || 'Qwen3-0.6B'
+            };
+
+            // 填充模型类型选择框
+            const typeSelect = document.getElementById('intent-recognition-model-type-select');
+            if (typeSelect) {
+                typeSelect.innerHTML = `
+                    <option value="local">本地模型</option>
+                    <option value="api">API 模型</option>
+                `;
+
+                // 设置模型选择
+                const config = window.intentRecognitionConfig;
+                if (config.model_type) {
+                    typeSelect.value = config.model_type;
+                }
+
+                // 触发类型切换处理
+                this.handleIntentRecognitionModelTypeChange(typeSelect);
+
+                // 如果是API模式，设置选中的模型
+                if (config.model_type === 'api' && config.model_name) {
+                    const modelSelect = document.getElementById('intent-recognition-model-select');
+                    if (modelSelect) {
+                        modelSelect.value = config.model_name;
+                    }
+                }
+            }
+
+        } catch (e) {
+            console.error('加载意图识别配置失败:', e);
+        }
+    }
+
+    // 保存意图识别配置
+    async saveIntentRecognitionConfig() {
+        try {
+            const typeSelect = document.getElementById('intent-recognition-model-type-select');
+            if (!typeSelect) return false;
+
+            const modelType = typeSelect.value;
+            let modelName = '';
+
+            if (modelType === 'local') {
+                // 本地模式下，模型名保持不变
+                modelName = window.intentRecognitionConfig?.model_name || 'Qwen3-0.6B';
+            } else {
+                const modelSelect = document.getElementById('intent-recognition-model-select');
+                modelName = modelSelect.value;
+                if (!modelName) {
+                    showToast('请选择API模型', 'error');
+                    return false;
+                }
+            }
+
+            const config = {
+                intent_recognition_enabled: true,
+                intent_model_type: modelType,
+                intent_model_name: modelName
+            };
+
+            // 使用与智能分析相同的保存路径
+            const response = await fetch('/api/agent/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const result = await response.json();
+            if (result.status === "success") {
+                // 更新本地缓存的配置
+                window.intentRecognitionConfig = {
+                    model_type: modelType,
+                    model_name: modelName
+                };
+                return true;
+            } else {
+                return false;
+            }
+        } catch (e) {
+            console.error('保存意图识别配置失败:', e);
+            return false;
+        }
+    }
+
+    // 处理意图识别模型类型切换
+    handleIntentRecognitionModelTypeChange(select) {
+        const apiModelGroup = document.getElementById('intent-recognition-api-model-select-group');
+        if (!apiModelGroup) return;
+
+        const apiModelLabel = apiModelGroup.querySelector('label');
+        const apiModelSelect = document.getElementById('intent-recognition-model-select');
+        const hintText = apiModelGroup.querySelector('.form-hint');
+
+        if (select.value === 'local') {
+            // 本地模型模式
+            const config = window.intentRecognitionConfig || {};
+            const modelName = config.model_name || 'Qwen3-0.6B';
+
+            apiModelGroup.style.display = 'block';
+            apiModelLabel.textContent = '本地模型';
+            apiModelSelect.innerHTML = `<option value="${modelName}" selected>${modelName}</option>`;
+            apiModelSelect.disabled = true;
+            hintText.textContent = `本地模型：${modelName}`;
+        } else {
+            // API 模型模式
+            apiModelGroup.style.display = 'block';
+            apiModelLabel.textContent = 'API 模型选择';
+            apiModelSelect.innerHTML = '<option value="">-- 请选择 --</option>';
+            apiModelSelect.disabled = false;
+
+            // 加载配置列表中的所有模型
+            this.configs.forEach(config => {
+                const option = document.createElement('option');
+                option.value = config.name;
+                option.textContent = config.name;
+                apiModelSelect.appendChild(option);
+            });
+
+            hintText.textContent = '选择用于意图识别的小模型（建议使用轻量级模型）';
+        }
     }
 }

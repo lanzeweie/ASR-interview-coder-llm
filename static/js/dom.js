@@ -74,7 +74,11 @@ export const dom = {
     agentMinCharsInput: document.getElementById('agent-min-chars'),
     agentSilenceThresholdInput: document.getElementById('agent-silence-threshold'),
     agentMaxMessagesInput: document.getElementById('agent-max-messages'),
-    
+
+    // 意图识别配置元素
+    intentRecognitionModelSelect: document.getElementById('intent-recognition-model-select'),
+    intentRecognitionModelTypeSelect: document.getElementById('intent-recognition-model-type-select'),
+
     // 状态指示器
     agentStatusIndicator: document.getElementById('agent-status-indicator'),
     intentRecognitionIndicator: document.getElementById('intent-recognition-indicator'),

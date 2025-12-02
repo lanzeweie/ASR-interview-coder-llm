@@ -703,13 +703,55 @@ async def update_agent_config(data: dict = Body(...)):
 
 @app.post("/api/agent/analyze")
 async def manual_analyze(data: dict = Body(...)):
-    """手动触发智能分析"""
+    """手动触发智能分析或意图识别"""
     if not AGENT_AVAILABLE:
         raise HTTPException(status_code=503, detail="智能 Agent 模块不可用")
 
     messages = data.get("messages", [])
     speaker_name = data.get("speaker_name", "用户")
+    request_type = data.get("request_type", "agent_analysis")  # 区分是智能分析还是意图识别
 
+    # 如果是意图识别请求，先获取配置的意图识别模型，然后重新加载agent
+    if request_type == "intent_recognition":
+        intent_config = data.get("intent_recognition_config", {})
+        model_type = intent_config.get("model_type", "local")
+        model_name = intent_config.get("model_name", "Qwen3-0.6B")
+
+        # 获取配置数据
+        config_data = load_config()
+        model_config = None
+
+        # 如果是API模式，从configs中查找模型配置
+        if model_type == "api":
+            model_config = next(
+                (c for c in config_data.get("configs", []) if c["name"] == model_name),
+                None
+            )
+            if model_config:
+                model_config['model_type'] = 'api'
+            else:
+                # 如果没找到，降级到本地模式
+                print(f"[意图识别] 未找到API模型 '{model_name}'，降级到本地模式")
+                model_type = "local"
+                model_name = "Qwen3-0.6B"
+
+        # 准备agent配置
+        agent_config = {
+            "model_type": model_type,
+            "model_name": model_name
+        }
+
+        # 如果找到了模型配置，使用它
+        if model_config:
+            agent_manager.load_agent(agent_config, model_config)
+        else:
+            # 本地模式，使用默认配置
+            agent_manager.load_agent(agent_config, {
+                "model_type": "local",
+                "model": model_name
+            })
+
+    # 调用分析
     result = await agent_manager.analyze_conversation(messages, speaker_name)
     return result
 

@@ -28,7 +28,7 @@
 .modal-content {
     position: relative;
     width: 90%;
-    max-width: 760px;
+    max-width: 1000px;
     max-height: 92vh;
     background: var(--bg-secondary);
     border: 1px solid var(--border-normal);
