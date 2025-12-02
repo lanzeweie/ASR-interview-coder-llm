@@ -28,6 +28,10 @@ export class ConfigManager {
             // Load identities first
             await this.loadIdentities();
 
+            // 更新显示名称（根据智囊团开关状态决定显示配置名还是身份标签名）
+            const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+            await this.updateCurrentDisplayNameByToggle(isMulti);
+
             // 初始化标签页
             this.initTabs();
 
@@ -143,8 +147,10 @@ export class ConfigManager {
                     input.dataset.wasChecked = "false";
                     this.updateTagsInput();
                     this.updateSystemPromptHintVisibility('');
-                    // Unlock system prompt
-                    if (dom.systemPromptInput) dom.systemPromptInput.disabled = false;
+                    if (dom.systemPromptInput) {
+                        dom.systemPromptInput.disabled = false;
+                        dom.systemPromptInput.value = '';
+                    }
                 } else {
                     // Uncheck others
                     const allRadios = container.querySelectorAll('input[type="radio"]');
@@ -210,6 +216,9 @@ export class ConfigManager {
                     this.currentConfigName = c.name;
                     showToast(`已切换到模型: ${c.name}`, 'success');
                     await this.saveConfigs();
+                    // 更新显示名称，确保身份标签生效
+                    const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+                    await this.updateCurrentDisplayNameByToggle(isMulti);
                     this.renderConfigList();
                     this.selectConfigToEdit(c.name);
                 };
@@ -243,6 +252,9 @@ export class ConfigManager {
             });
             // 保存成功后刷新智囊团显示
             this.loadThinkTankRoles();
+            // 更新全局显示名称（重要：确保身份标签生效）
+            const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+            await this.updateCurrentDisplayNameByToggle(isMulti);
             return true;
         } catch (e) {
             showToast('保存失败', 'error');
@@ -474,6 +486,9 @@ export class ConfigManager {
                     // 更新当前配置引用
                     if (this.currentConfigName === this.editingConfigName) {
                         this.currentConfigName = name;
+                        // 更新显示名称
+                        const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+                        await this.updateCurrentDisplayNameByToggle(isMulti);
                     }
                     // 更新多模型激活集合
                     if (this.multiLLMActiveNames.has(this.editingConfigName)) {
@@ -504,6 +519,9 @@ export class ConfigManager {
         if (name === this.currentConfigName || !this.currentConfigName) {
             this.currentConfigName = name;
             showToast(`配置已保存`, 'success');
+            // 更新显示名称
+            const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+            await this.updateCurrentDisplayNameByToggle(isMulti);
         } else {
             // 如果修改的不是当前模型，不自动切换，只提示保存成功
             showToast("配置已保存", 'success');
@@ -525,6 +543,9 @@ export class ConfigManager {
 
         if (this.currentConfigName === name) {
             this.currentConfigName = this.configs.length > 0 ? this.configs[0].name : "";
+            // 更新显示名称
+            const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+            await this.updateCurrentDisplayNameByToggle(isMulti);
         }
 
         try {
@@ -776,12 +797,13 @@ export class ConfigManager {
         }
     }
 
-    // 获取当前配置的显示名称（如果有身份标签则显示身份名，否则显示配置名）
+    // 获取当前配置的显示名称（根据智囊团状态决定）
     getCurrentDisplayName() {
         const config = this.configs.find(c => c.name === this.currentConfigName);
         if (!config) return this.currentConfigName;
 
-        if (config.tags && config.tags.length > 0) {
+        // 只有开启智囊团模式时，才显示身份标签名
+        if (this.multiLLMActiveNames.size > 0 && config.tags && config.tags.length > 0) {
             const tag = config.tags[0];
             // Find identity with this tag
             const identity = this.identities.find(i => i.tag_key === tag || i.name === tag);
@@ -796,7 +818,62 @@ export class ConfigManager {
             if (tagMap[tag]) return tagMap[tag];
         }
 
+        // 默认显示配置名称
         return this.currentConfigName;
+    }
+
+    // 更新全局显示名称（根据智囊团状态动态决定）
+    updateCurrentDisplayName() {
+        const displayName = this.getCurrentDisplayName();
+        window.currentDisplayName = displayName;
+
+        // 返回显示名称，供调用者使用
+        return displayName;
+    }
+
+    // 根据智囊团开关状态更新显示名称
+    async updateCurrentDisplayNameByToggle(isMultiToggleActive) {
+        // 确保身份数据已加载
+        if (this.identities.length === 0) {
+            try {
+                await this.loadIdentities();
+            } catch (error) {
+                console.error('加载身份数据失败:', error);
+            }
+        }
+
+        const config = this.configs.find(c => c.name === this.currentConfigName);
+        let displayName = this.currentConfigName;
+
+        // 只有开启智囊团开关且有身份标签时，才显示身份标签名
+        if (isMultiToggleActive && config.tags && config.tags.length > 0) {
+            const tag = config.tags[0];
+            const identity = this.identities.find(i => i.tag_key === tag || i.name === tag);
+            if (identity) {
+                displayName = identity.name;
+            } else {
+                // Fallback map
+                const tagMap = {
+                    'tech_assistant_tag': '技术辅助者',
+                    'concise_assistant_tag': '精简辅助者',
+                    'guide_tag': '引导者'
+                };
+                if (tagMap[tag]) {
+                    displayName = tagMap[tag];
+                }
+            }
+        }
+
+        window.currentDisplayName = displayName;
+
+        // 同时更新 UI 上的显示
+        const displayElement = document.querySelector('.model-name-display');
+        if (displayElement) {
+            displayElement.textContent = displayName;
+        }
+
+        // 返回显示名称
+        return displayName;
     }
 
     // ===== 意图识别配置管理 =====

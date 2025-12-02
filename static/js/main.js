@@ -70,6 +70,9 @@ async function initializeManagers() {
     // 设置管理器之间的依赖关系
     managers.llm.setStreamManager(managers.streamManager);
     managers.llm.setWebSocketManager(managers.websocket);
+    if (typeof managers.llm.setChatManager === 'function') {
+        managers.llm.setChatManager(managers.chat);
+    }
 
     // 设置WebSocket消息处理
     managers.websocket.handleLLMMessage = (data) => {
@@ -128,21 +131,21 @@ async function loadInitialState() {
         // 6. 初始化意图识别状态
         managers.intentRecognition.initIntentRecognitionStatus();
 
-        // 7. 更新模型显示
-        const isMultiMode = dom.multiLLMToggle?.classList.contains('active') || false;
-        updateModelDisplay(isMultiMode, managers.config.currentConfigName);
+        // 7. 更新全局变量
+        managers.ui.updateGlobalVariables();
 
-        // 6. 自动调整输入框
+        // 8. 更新模型显示名称（根据智囊团开关状态决定显示配置名还是身份标签名）
+        const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
+        await managers.config.updateCurrentDisplayNameByToggle(isMulti);
+
+        // 9. 自动调整输入框
         if (dom.llmInput) {
             dom.llmInput.style.height = 'auto';
             dom.llmInput.style.height = Math.min(dom.llmInput.scrollHeight, 120) + 'px';
         }
 
-        // 7. 加载聊天列表
+        // 10. 加载聊天列表
         await managers.chat.loadChatList();
-
-        // 8. 更新全局变量
-        managers.ui.updateGlobalVariables();
 
         // 9. 立即更新欢迎语以反映当前功能状态
         managers.chat.updateWelcomeMessage();

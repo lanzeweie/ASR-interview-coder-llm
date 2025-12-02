@@ -93,8 +93,11 @@ export class UIManager {
                 // 获取当前选中的身份标签
                 const selectedRadio = document.querySelector('.tags-quick-select input[type="radio"]:checked');
                 const selectedTag = selectedRadio ? selectedRadio.value : '';
-                // 更新 System Prompt 提示的显示状态
                 this.managers.config.updateSystemPromptHintVisibility(selectedTag);
+                if (!selectedTag && dom.systemPromptInput) {
+                    dom.systemPromptInput.value = '';
+                    dom.systemPromptInput.disabled = false;
+                }
             });
         });
 
@@ -255,8 +258,10 @@ export class UIManager {
         // 发送按钮
         domUtils.addEvent('llm-send-btn', 'click', () => {
             const text = dom.llmInput.value;
-            if (text) {
-                this.managers.llm.sendToLLM(this.managers.websocket, text);
+            const trimmed = text.trim();
+            if (trimmed) {
+                this.echoUserMessage(trimmed);
+                this.managers.llm.sendToLLM(this.managers.websocket, trimmed);
                 dom.llmInput.value = '';
                 autoResizeTextarea(dom.llmInput);
             }
@@ -296,11 +301,23 @@ export class UIManager {
 
         // 智囊团开关
         if (dom.multiLLMToggle) {
-            dom.multiLLMToggle.addEventListener('click', () => {
+            dom.multiLLMToggle.addEventListener('click', async () => {
                 const isMulti = dom.multiLLMToggle.classList.toggle('active');
                 dom.multiLLMToggle.title = isMulti ? '智囊团已开启，点击关闭' : '智囊团已关闭，点击开启';
+
+                // 检查是否有启用的模型
+                if (isMulti && this.managers.config.multiLLMActiveNames.size === 0) {
+                    showToast('请先在设置中启用智囊团模型', 'warning');
+                    // 还原开关状态
+                    dom.multiLLMToggle.classList.remove('active');
+                    return;
+                }
+
                 showToast(`智囊团模式已${isMulti ? '开启' : '关闭'}`, 'info');
-                updateModelDisplay(isMulti, this.managers.config.currentConfigName);
+
+                // 更新模型显示名称（根据智囊团开关状态决定显示配置名还是身份标签名）
+                const displayName = await this.managers.config.updateCurrentDisplayNameByToggle(isMulti);
+
                 this.managers.chat.updateWelcomeMessage();
                 saveUIState({
                     multiLLMActive: isMulti,
@@ -401,6 +418,7 @@ export class UIManager {
     initTextSelectionEvents() {
         document.addEventListener('mouseup', (e) => {
             handleTextSelection(e, (text) => {
+                this.echoUserMessage(text);
                 this.managers.llm.sendToLLM(this.managers.websocket, text);
             });
         });
@@ -501,5 +519,24 @@ export class UIManager {
         window.multiLLMActiveNames = this.managers.config.multiLLMActiveNames;
         window.agentEnabled = this.managers.agent.isEnabled();
         window.intentRecognitionEnabled = this.managers.intentRecognition.isEnabled();
+    }
+
+    echoUserMessage(content) {
+        const chatManager = this.managers.chat;
+        if (!chatManager) return;
+
+        if (typeof chatManager.addUserMessage === 'function') {
+            chatManager.addUserMessage(content);
+        } else if (typeof chatManager.addMessage === 'function') {
+            chatManager.addMessage({ role: 'user', content });
+        } else if (typeof chatManager.appendMessage === 'function') {
+            chatManager.appendMessage('user', content);
+        } else if (typeof chatManager.appendUserMessage === 'function') {
+            chatManager.appendUserMessage(content);
+        } else {
+            document.dispatchEvent(new CustomEvent('ast:user-message', {
+                detail: { role: 'user', content }
+            }));
+        }
     }
 }

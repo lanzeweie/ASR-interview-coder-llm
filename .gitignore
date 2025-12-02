@@ -17,4 +17,4 @@ Qwen3-0.6B
 .promptx/
 Qwen2.5-0.5B-Instruct
 output/
-voiceprints
+data\chat_history.json

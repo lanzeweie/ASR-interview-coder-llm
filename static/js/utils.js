@@ -236,15 +236,17 @@ export function updateModelDisplay(isMultiMode = false, currentConfigName = '') 
     const modelIndicator = dom.currentModelDisplay.querySelector('.model-indicator');
 
     if (isMultiMode) {
-        // 显示智囊团
-        if (modelNameDisplay) modelNameDisplay.textContent = '智囊团';
+        // 显示智囊团 - 使用当前配置的显示名称（可能是身份标签名）
+        const displayName = window.currentDisplayName || currentConfigName || '智囊团';
+        if (modelNameDisplay) modelNameDisplay.textContent = displayName;
         if (modelIndicator) {
             modelIndicator.style.background = 'linear-gradient(135deg, #3b82f6, #60a5fa)';
             modelIndicator.style.boxShadow = '0 0 10px rgba(59, 130, 246, 0.5)';
         }
     } else {
-        // 显示当前选择的模型
-        if (modelNameDisplay) modelNameDisplay.textContent = currentConfigName || 'DeepSeek-V3.2';
+        // 显示当前选择的模型 - 使用当前配置的显示名称
+        const displayName = window.currentDisplayName || currentConfigName;
+        if (modelNameDisplay) modelNameDisplay.textContent = displayName;
         if (modelIndicator) {
             modelIndicator.style.background = 'var(--accent-primary)';
             modelIndicator.style.boxShadow = '0 0 10px rgba(79, 70, 229, 0.5)';
