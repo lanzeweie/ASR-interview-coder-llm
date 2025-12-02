@@ -14,7 +14,14 @@
       "mcp__mcp-router__browser_snapshot",
       "mcp__mcp-router__project",
       "mcp__mcp-router__browser_click",
-      "mcp__mcp-router__list_directory"
+      "mcp__mcp-router__list_directory",
+      "mcp__mcp-router__list_allowed_directories",
+      "mcp__mcp-router__directory_tree",
+      "mcp__mcp-router__get_current_config",
+      "mcp__mcp-router__list_memories",
+      "mcp__mcp-router__read_memory",
+      "mcp__mcp-router__find_file",
+      "mcp__mcp-router__execute_shell_command"
     ],
     "deny": [],
     "ask": []

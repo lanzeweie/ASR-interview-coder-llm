@@ -233,7 +233,6 @@ class IntelligentAgent:
                     print("[智能分析] ❌ API模式，但客户端未初始化")
                     return {
                         'is': False,
-                        'confidence': 0.0,
                         'reason': f'API客户端未初始化 (model_type={model_type})',
                         'raw_response': ''
                     }
@@ -258,7 +257,6 @@ class IntelligentAgent:
                     print(f"[智能分析] 判定结果: {is_needed}")
                     return {
                         'is': is_needed,
-                        'confidence': 0.95,
                         'reason': reason,
                         'raw_response': response_text
                     }
@@ -266,17 +264,14 @@ class IntelligentAgent:
                     print(f"[智能分析] ❌ API响应无效")
                     return {
                         'is': False,
-                        'confidence': 0.0,
                         'reason': 'API响应无效',
                         'raw_response': response_text
                     }
-
             elif model_type == 'local':
                 if not self.local_model:
                     print("[智能分析] ❌ 本地模式，但模型未加载")
                     return {
                         'is': False,
-                        'confidence': 0.0,
                         'reason': f'本地模型未加载 (model_type={model_type})',
                         'raw_response': ''
                     }
@@ -328,7 +323,6 @@ class IntelligentAgent:
                         print(f"[智能分析] 本地模型判定结果: {is_needed}")
                         return {
                             'is': is_needed,
-                            'confidence': 0.95,
                             'reason': reason,
                             'raw_response': response_text
                         }
@@ -338,11 +332,9 @@ class IntelligentAgent:
                     traceback.print_exc()
                     return {
                         'is': False,
-                        'confidence': 0.0,
                         'reason': f'本地模型推理失败: {str(e)}',
                         'raw_response': ''
                     }
-
             # 如果没有客户端或验证失败，返回默认结果
             print(f"[智能分析] ❌ 未满足任何条件:")
             print(f"  - model_type: {model_type}")
@@ -351,16 +343,13 @@ class IntelligentAgent:
             print(f"[智能分析] 返回默认结果")
             return {
                 'is': False,
-                'confidence': 0.0,
                 'reason': f'模型未正确配置 (model_type={model_type}, client={self.client}, local_model={self.local_model})',
                 'raw_response': ''
             }
-
         except Exception as e:
             print(f"[智能分析] 分析过程出错: {e}")
             return {
                 'is': False,
-                'confidence': 0.0,
                 'reason': f'分析失败: {str(e)}',
                 'raw_response': ''
             }
