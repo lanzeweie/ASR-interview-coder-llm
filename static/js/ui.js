@@ -111,13 +111,16 @@ export class UIManager {
 
         // 保存配置
         domUtils.addEvent('save-config-btn', 'click', async () => {
-            await this.managers.config.saveConfigForm();
+            const configSaved = await this.managers.config.saveConfigForm({ skipReload: true });
+            if (!configSaved) return;
 
             // 同时保存智能分析配置
             const agentSuccess = await this.managers.config.saveAgentConfig();
-            if (agentSuccess) {
-                // 智能分析配置保存成功
+            if (!agentSuccess) {
+                showToast('智能分析配置保存失败', 'error');
             }
+
+            await this.managers.config.loadConfigs();
         });
 
         // 删除配置

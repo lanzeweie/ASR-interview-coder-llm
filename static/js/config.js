@@ -424,9 +424,13 @@ export class ConfigManager {
     }
 
     // 保存配置表单
-    async saveConfigForm() {
+    async saveConfigForm(options = {}) {
+        const { skipReload = false } = options || {};
         const name = dom.configNameInput.value.trim();
-        if (!name) return showToast("请输入配置名称", 'error');
+        if (!name) {
+            showToast("请输入配置名称", 'error');
+            return false;
+        }
 
         // 获取并映射身份：旧身份 → 新身份
         let tags = dom.configTagsInput.value.split(',').map(t => t.trim()).filter(t => t);
@@ -452,10 +456,11 @@ export class ConfigManager {
                 );
 
                 if (conflictConfig) {
-                    return showToast(
+                    showToast(
                         `身份 "${tag}" 已被模型 "${conflictConfig.name}" 使用，每个身份只能绑定一个模型`,
                         'error'
                     );
+                    return false;
                 }
             }
         }
@@ -475,7 +480,8 @@ export class ConfigManager {
             if (idx >= 0) {
                 // 如果改了名字，检查新名字是否冲突
                 if (name !== this.editingConfigName && this.configs.some(c => c.name === name)) {
-                    return showToast(`配置名称 "${name}" 已存在`, 'error');
+                    showToast(`配置名称 "${name}" 已存在`, 'error');
+                    return false;
                 }
 
                 // 更新配置
@@ -501,7 +507,8 @@ export class ConfigManager {
             } else {
                 // 异常情况：编辑的配置找不到（可能被删了），当作新建
                 if (this.configs.some(c => c.name === name)) {
-                    return showToast(`配置名称 "${name}" 已存在`, 'error');
+                    showToast(`配置名称 "${name}" 已存在`, 'error');
+                    return false;
                 }
                 this.configs.push(newConfig);
                 this.editingConfigName = name;
@@ -509,7 +516,8 @@ export class ConfigManager {
         } else {
             // 新建配置
             if (this.configs.some(c => c.name === name)) {
-                return showToast(`配置名称 "${name}" 已存在`, 'error');
+                showToast(`配置名称 "${name}" 已存在`, 'error');
+                return false;
             }
             this.configs.push(newConfig);
             this.editingConfigName = name;
@@ -528,9 +536,10 @@ export class ConfigManager {
         }
 
         const success = await this.saveConfigs();
-        if (success) {
+        if (success && !skipReload) {
             await this.loadConfigs();
         }
+        return success;
     }
 
     // 删除配置
@@ -694,29 +703,53 @@ export class ConfigManager {
         }
     }
 
-    // 保存智能分析配置
+    // 保存智能分析配置 (统一保存智能分析和意图识别配置)
     async saveAgentConfig() {
         try {
-            const modelType = dom.agentModelTypeSelect.value;
+            // 1. 获取智能分析配置
+            const modelType = dom.agentModelTypeSelect ? dom.agentModelTypeSelect.value : 'local';
             let modelName = '';
 
             if (modelType === 'local') {
                 // 本地模式下，模型名保持不变（或者从配置中读取）
                 modelName = window.agentConfig?.model_name || 'Qwen3-0.6B';
             } else {
-                modelName = dom.agentModelSelect.value;
-                if (!modelName) {
-                    showToast('请选择API模型', 'error');
+                modelName = dom.agentModelSelect ? dom.agentModelSelect.value : '';
+                // 只有当该部分可见时才校验必填
+                if (!modelName && dom.agentModelTypeSelect && dom.agentModelTypeSelect.offsetParent) {
+                    showToast('请选择智能分析API模型', 'error');
+                    return false;
+                }
+            }
+
+            // 2. 获取意图识别配置
+            const intentModelType = dom.intentRecognitionModelTypeSelect ? dom.intentRecognitionModelTypeSelect.value : 'local';
+            let intentModelName = '';
+
+            if (intentModelType === 'local') {
+                intentModelName = window.intentRecognitionConfig?.model_name || 'Qwen3-0.6B';
+            } else {
+                intentModelName = dom.intentRecognitionModelSelect ? dom.intentRecognitionModelSelect.value : '';
+                // 只有当该部分可见时才校验必填
+                if (!intentModelName && dom.intentRecognitionModelTypeSelect && dom.intentRecognitionModelTypeSelect.offsetParent) {
+                    showToast('请选择意图识别API模型', 'error');
                     return false;
                 }
             }
 
             const config = {
+                // 智能分析参数
                 model_type: modelType,
                 model_name: modelName,
-                min_chars_threshold: parseInt(dom.agentMinCharsInput.value) || 10,
-                silence_threshold: parseFloat(dom.agentSilenceThresholdInput.value) || 2.0,
-                max_history_messages: parseInt(dom.agentMaxMessagesInput.value) || 50
+                min_chars_threshold: parseInt(dom.agentMinCharsInput?.value) || 10,
+                silence_threshold: parseFloat(dom.agentSilenceThresholdInput?.value) || 2.0,
+                max_history_messages: parseInt(dom.agentMaxMessagesInput?.value) || 50,
+
+                // 意图识别参数
+                intent_model_type: intentModelType,
+                intent_model_name: intentModelName,
+                // 保持当前的启用状态
+                intent_recognition_enabled: window.intentRecognitionEnabled
             };
 
             const response = await fetch('/api/agent/config', {
@@ -726,15 +759,19 @@ export class ConfigManager {
             });
 
             const result = await response.json();
-            if (result.success) {
+            if (result.status === "success") {
                 // 更新本地缓存的配置
                 window.agentConfig = { ...window.agentConfig, ...config };
+                window.intentRecognitionConfig = {
+                    model_type: intentModelType,
+                    model_name: intentModelName
+                };
                 return true;
             } else {
                 return false;
             }
         } catch (e) {
-            console.error('保存智能分析配置失败:', e);
+            console.error('保存智能配置失败:', e);
             return false;
         }
     }
@@ -925,57 +962,6 @@ export class ConfigManager {
 
         } catch (e) {
             console.error('加载意图识别配置失败:', e);
-        }
-    }
-
-    // 保存意图识别配置
-    async saveIntentRecognitionConfig() {
-        try {
-            const typeSelect = document.getElementById('intent-recognition-model-type-select');
-            if (!typeSelect) return false;
-
-            const modelType = typeSelect.value;
-            let modelName = '';
-
-            if (modelType === 'local') {
-                // 本地模式下，模型名保持不变
-                modelName = window.intentRecognitionConfig?.model_name || 'Qwen3-0.6B';
-            } else {
-                const modelSelect = document.getElementById('intent-recognition-model-select');
-                modelName = modelSelect.value;
-                if (!modelName) {
-                    showToast('请选择API模型', 'error');
-                    return false;
-                }
-            }
-
-            const config = {
-                intent_recognition_enabled: true,
-                intent_model_type: modelType,
-                intent_model_name: modelName
-            };
-
-            // 使用与智能分析相同的保存路径
-            const response = await fetch('/api/agent/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
-            });
-
-            const result = await response.json();
-            if (result.status === "success") {
-                // 更新本地缓存的配置
-                window.intentRecognitionConfig = {
-                    model_type: modelType,
-                    model_name: modelName
-                };
-                return true;
-            } else {
-                return false;
-            }
-        } catch (e) {
-            console.error('保存意图识别配置失败:', e);
-            return false;
         }
     }
 

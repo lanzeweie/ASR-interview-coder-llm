@@ -152,29 +152,39 @@ async def agent_analysis_callback(result, messages, speaker_name):
                 recent_messages = messages[-10:] if len(messages) > 10 else messages
                 print(f"[智能分析] 准备发送 {len(recent_messages)} 条消息给AI")
 
-                # 添加系统提示
-                formatted_messages = [
-                    {"role": "system", "content": f"你是AI助手，帮助{speaker_name}分析以下对话。{speaker_name}是主人公。"}
-                ]
-
-                # 添加对话历史
-                for msg in recent_messages:
-                    role = 'user' if msg.get('speaker') else 'assistant'
-                    formatted_messages.append({
-                        "role": role,
-                        "content": msg.get('content', '')
-                    })
-
-                print(f"[智能分析] 格式化后的消息数量: {len(formatted_messages)}")
-                print(f"[智能分析] 消息内容预览:")
-                for i, msg in enumerate(formatted_messages):
-                    print(f"  [{i}] {msg['role']}: {msg['content'][:50]}{'...' if len(msg['content']) > 50 else ''}")
-
                 # 获取分发配置
                 distribution_result = result.get('distribution', {})
                 distribution_mode = distribution_result.get('mode', 'single')
                 targets = distribution_result.get('targets', [])
                 intent_result = distribution_result.get('intent')
+
+                # 构造发送给下一阶段AI的消息
+                system_prompt = f"你是AI助手，帮助{speaker_name}提供技术支持。"
+                if intent_result and intent_result.get("summary_xml"):
+                    intent_summary = format_intent_analysis(intent_result)
+                    formatted_messages = [
+                        {"role": "system", "content": system_prompt + "请根据意图识别结果直接给出建议。"},
+                        {"role": "user", "content": intent_summary}
+                    ]
+                    print("[智能分析] 使用意图识别结果作为唯一上下文发送给下一阶段AI")
+                else:
+                    formatted_messages = [
+                        {"role": "system", "content": f"你是AI助手，帮助{speaker_name}分析以下对话。{speaker_name}是主人公。"}
+                    ]
+                    for msg in recent_messages:
+                        role = 'user' if msg.get('speaker') else 'assistant'
+                        content = msg.get('content', '')
+                        formatted_messages.append({
+                            "role": role,
+                            "content": content
+                        })
+                    print(f"[智能分析] 使用完整对话上下文发送，共 {len(formatted_messages)} 条消息")
+
+                print(f"[智能分析] 消息内容预览:")
+                for i, msg in enumerate(formatted_messages):
+                    preview = msg['content'][:50]
+                    suffix = '...' if len(msg['content']) > 50 else ''
+                    print(f"  [{i}] {msg['role']}: {preview}{suffix}")
 
                 # 根据分发模式决定处理方式
                 is_multi_llm = (distribution_mode == 'think_tank')
@@ -659,37 +669,50 @@ async def update_agent_config(data: dict = Body(...)):
     """更新智能 Agent 配置"""
     if not AGENT_AVAILABLE:
         raise HTTPException(status_code=503, detail="智能 Agent 模块不可用")
-
-    min_characters = data.get("min_characters", 10)
-    silence_threshold = data.get("silence_threshold", 2)
-    max_messages = data.get("max_messages", 50)
-    model_name = data.get("model_name")
-    model_type = data.get("model_type", "api")
-    intent_recognition_enabled = data.get("intent_recognition_enabled", False)
-    intent_model_name = data.get("intent_model_name", "")
-    intent_model_type = data.get("intent_model_type", "local")
-
-    # Update thresholds
-    trigger_manager.set_thresholds(min_characters, silence_threshold)
-    trigger_manager.set_max_history(max_messages)
-
+    print(f"DEBUG: Received update_agent_config data: {data}")
+    
     # Update config file
     config_data = load_config()
     agent_config = config_data.get("agent_config", {})
-    agent_config.update({
-        "min_characters": min_characters,
-        "silence_threshold": silence_threshold,
-        "max_messages": max_messages,
-        "model_name": model_name,
-        "model_type": model_type,
-        "intent_recognition_enabled": intent_recognition_enabled,
-        "intent_model_name": intent_model_name,
-        "intent_model_type": intent_model_type
-    })
+    
+    # Only update fields that are present in data
+    if "min_characters" in data:
+        agent_config["min_characters"] = data["min_characters"]
+        
+    if "silence_threshold" in data:
+        agent_config["silence_threshold"] = data["silence_threshold"]
+        
+    if "max_messages" in data:
+        agent_config["max_messages"] = data["max_messages"]
+        
+    if "model_name" in data:
+        agent_config["model_name"] = data["model_name"]
+        
+    if "model_type" in data:
+        agent_config["model_type"] = data["model_type"]
+        
+    if "intent_recognition_enabled" in data:
+        agent_config["intent_recognition_enabled"] = data["intent_recognition_enabled"]
+        
+    if "intent_model_name" in data:
+        agent_config["intent_model_name"] = data["intent_model_name"]
+        
+    if "intent_model_type" in data:
+        agent_config["intent_model_type"] = data["intent_model_type"]
+
+    # Update trigger manager thresholds if changed
+    min_chars = agent_config.get("min_characters", 10)
+    silence_thresh = agent_config.get("silence_threshold", 2)
+    max_msgs = agent_config.get("max_messages", 50)
+    
+    trigger_manager.set_thresholds(min_chars, silence_thresh)
+    trigger_manager.set_max_history(max_msgs)
+
     config_data["agent_config"] = agent_config
     save_config(config_data)
 
     # Reload agent if model changed
+    model_name = agent_config.get("model_name")
     if model_name and AGENT_AVAILABLE:
         model_config = next(
             (c for c in config_data.get("configs", []) if c["name"] == model_name),
@@ -710,18 +733,16 @@ async def manual_analyze(data: dict = Body(...)):
     messages = data.get("messages", [])
     speaker_name = data.get("speaker_name", "用户")
     request_type = data.get("request_type", "agent_analysis")  # 区分是智能分析还是意图识别
+    modules_param = data.get("modules")
+    print(f"[AgentAPI] 收到 /api/agent/analyze 请求 -> type={request_type}, speaker={speaker_name}, messages={len(messages)}")
 
-    # 如果是意图识别请求，先获取配置的意图识别模型，然后重新加载agent
-    if request_type == "intent_recognition":
-        intent_config = data.get("intent_recognition_config", {})
-        model_type = intent_config.get("model_type", "local")
-        model_name = intent_config.get("model_name", "Qwen3-0.6B")
-
-        # 获取配置数据
+    def load_intent_agent(intent_cfg: dict):
         config_data = load_config()
-        model_config = None
+        model_type = intent_cfg.get("model_type", "local")
+        model_name = intent_cfg.get("model_name", "Qwen3-0.6B")
+        print(f"[AgentAPI] 意图识别模型配置: type={model_type}, name={model_name}")
 
-        # 如果是API模式，从configs中查找模型配置
+        model_config = None
         if model_type == "api":
             model_config = next(
                 (c for c in config_data.get("configs", []) if c["name"] == model_name),
@@ -729,30 +750,95 @@ async def manual_analyze(data: dict = Body(...)):
             )
             if model_config:
                 model_config['model_type'] = 'api'
+                print(f"[意图识别] 已加载API模型: {model_name}")
             else:
-                # 如果没找到，降级到本地模式
                 print(f"[意图识别] 未找到API模型 '{model_name}'，降级到本地模式")
                 model_type = "local"
                 model_name = "Qwen3-0.6B"
+                model_config = None
 
-        # 准备agent配置
-        agent_config = {
-            "model_type": model_type,
-            "model_name": model_name
-        }
+        agent_manager.configure_intent_agent(
+            {
+                "model_type": model_type,
+                "model_name": model_name
+            },
+            model_config
+        )
+        if model_type == "local":
+            print(f"[意图识别] 已加载本地模型: {model_name}")
 
-        # 如果找到了模型配置，使用它
-        if model_config:
-            agent_manager.load_agent(agent_config, model_config)
+    def normalize_modules(value):
+        if not value:
+            return None
+        if isinstance(value, str):
+            candidates = [value]
         else:
-            # 本地模式，使用默认配置
-            agent_manager.load_agent(agent_config, {
-                "model_type": "local",
-                "model": model_name
-            })
+            candidates = list(value)
+        normalized = {'analysis': False, 'intent': False, 'think_tank': False}
+        for item in candidates:
+            name = str(item).strip().lower()
+            if name in ("analysis", "smart", "smart_analysis"):
+                normalized['analysis'] = True
+            elif name in ("intent", "intent_recognition"):
+                normalized['intent'] = True
+            elif name in ("think_tank", "thinktank", "distribution"):
+                normalized['think_tank'] = True
+        return normalized if any(normalized.values()) else None
 
-    # 调用分析
+    modules_request = normalize_modules(modules_param)
+    if not modules_request and request_type == "intent_recognition":
+        modules_request = {'analysis': False, 'intent': True, 'think_tank': False}
+
+    if modules_request:
+        print(f"[AgentAPI] modules_request={modules_request}, request_type={request_type}")
+
+        if modules_request['intent']:
+            intent_config = data.get("intent_recognition_config", {})
+            load_intent_agent(intent_config)
+
+        print(
+            "[AgentAPI] 运行模块 -> "
+            f"analysis={modules_request['analysis']} | "
+            f"intent={modules_request['intent']} | "
+            f"think_tank={modules_request['think_tank']}"
+        )
+
+        result = await agent_manager.run_pipeline(
+            messages,
+            speaker_name,
+            use_analysis=modules_request['analysis'],
+            use_intent=modules_request['intent'],
+            use_think_tank=modules_request['think_tank'],
+            bypass_enabled=True,
+            force_modules=True
+        )
+
+        intent_success = bool(result.get("phase2", {}).get("success")) if modules_request['intent'] else None
+        print(
+            "[AgentAPI] pipeline完成 -> "
+            f"phase1_reason={result.get('phase1', {}).get('reason')} | "
+            f"intent_success={intent_success}"
+        )
+
+        if modules_request['intent'] and not modules_request['analysis']:
+            phase2_result = result.get("phase2", {})
+            success = bool(phase2_result and phase2_result.get("success"))
+            reason = "意图识别完成" if success else phase2_result.get("error", "意图识别失败")
+            result["phase1"] = {
+                "is": False,
+                "reason": reason,
+                "confidence": 0.0,
+                "intent_only": True,
+                "intent_success": success
+            }
+
+        return result
+
+    # 默认执行阶段1分析
     result = await agent_manager.analyze_conversation(messages, speaker_name)
+    summary_flag = result.get("is")
+    summary_reason = result.get("reason", "")
+    print(f"[AgentAPI] 分析完成 -> need_ai={summary_flag}, reason={summary_reason}")
     return result
 
 @app.get("/api/protagonist")
@@ -1337,3 +1423,28 @@ if __name__ == "__main__":
     print("")
 
     uvicorn.run(app, host=args.host, port=args.port)
+def format_intent_analysis(intent_result: dict) -> str:
+    """将意图识别结果格式化为系统消息"""
+    summary_xml = intent_result.get("summary_xml", "")
+    if not summary_xml:
+        return "【意图识别】未生成结构化结果"
+
+    def _extract(tag):
+        import re
+        match = re.search(rf"<{tag}>([\s\S]*?)</{tag}>", summary_xml, re.IGNORECASE)
+        return match.group(1).strip() if match else ""
+
+    summary = _extract("summary")
+    question = _extract("true_question")
+    steps = re.findall(r"<step>([\s\S]*?)</step>", summary_xml, re.IGNORECASE)
+    steps = [s.strip() for s in steps if s.strip()]
+
+    parts = ["【Leader Agent 意图分析】"]
+    if summary:
+        parts.append(f"意图总结：{summary}")
+    if question:
+        parts.append(f"真实问题：{question}")
+    if steps:
+        parts.append("下一步行动：")
+        parts.extend(f"- {step}" for step in steps)
+    return "\n".join(parts)
