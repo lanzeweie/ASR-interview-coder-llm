@@ -127,12 +127,16 @@ async def agent_analysis_callback(result, messages, speaker_name):
         is_needed = phase1_result.get('is', False)
         analysis_id = result.get('analysis_id')
         reason = phase1_result.get('reason', '')
+        summary = result.get('analysis_summary')
+        count = result.get('analysis_count')
+        preview = result.get('analysis_preview')
 
-        status_text = "✅ 分析完成"
+        summary_label = summary or f"[{speaker_name}]"
+        status_text = f"{summary_label} · 分析完成"
         if is_needed:
-            status_text = "✅ 分析完成 · 助手介入"
+            status_text = f"{summary_label} · 助手介入"
         elif reason:
-            status_text = f"✅ 分析完成 · {reason}"
+            status_text = f"{summary_label} · {reason}"
 
         # 分析完成，发送结束消息到ASR面板
         await manager.broadcast({
@@ -142,7 +146,10 @@ async def agent_analysis_callback(result, messages, speaker_name):
             "analysis_status": "completed",
             "analysis_need_ai": is_needed,
             "analysis_id": analysis_id,
-            "analysis_reason": reason
+            "analysis_reason": reason,
+            "analysis_summary": summary,
+            "analysis_count": count,
+            "analysis_preview": preview
         })
 
         if is_needed:

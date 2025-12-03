@@ -14,9 +14,7 @@ export class WebSocketManager {
             llm: false
         };
         this.agentStatusHandler = null;
-        this.analysisCards = new Map();
-        this.analysisCardTimers = new Map();
-        this.lastAnalysisCardKey = null;
+        this.analysisFlags = new Map();
     }
 
     // ASR WebSocket连接
@@ -130,16 +128,16 @@ export class WebSocketManager {
                     status: data.analysis_status,
                     needAI: data.analysis_need_ai === true,
                     reason: data.analysis_reason || '',
+                    summary: data.analysis_summary || '',
+                    count: data.analysis_count || 0,
+                    preview: data.analysis_preview || '',
                     analysisId: data.analysis_id || null
                 });
             }
-            const card = this.getOrCreateAnalysisCard(data.analysis_id);
-            this.updateAnalysisCard(card, data);
+            const flag = this.getOrCreateAnalysisFlag(data.analysis_id);
+            this.updateAnalysisFlag(flag, data);
             if (dom.asrWindow) {
                 dom.asrWindow.scrollTop = dom.asrWindow.scrollHeight;
-            }
-            if (data.analysis_status === 'completed') {
-                this.scheduleAnalysisCardCleanup(data.analysis_id);
             }
             return;
         }
@@ -194,81 +192,63 @@ export class WebSocketManager {
         this.agentStatusHandler = handler;
     }
 
-    getOrCreateAnalysisCard(analysisId) {
-        const fallbackKey = analysisId || this.lastAnalysisCardKey || `analysis-${Date.now()}`;
-        const key = fallbackKey;
-        this.lastAnalysisCardKey = key;
-        if (this.analysisCards.has(key)) {
-            return this.analysisCards.get(key);
+    getOrCreateAnalysisFlag(analysisId) {
+        const key = analysisId || `analysis-${Date.now()}`;
+        if (this.analysisFlags.has(key)) {
+            return this.analysisFlags.get(key);
         }
-        const wrapper = document.createElement('div');
-        wrapper.className = 'message system-message agent-analysis-card';
-        wrapper.dataset.analysisId = key;
-        wrapper.innerHTML = `
-            <div class="agent-analysis-card">
-                <div class="analysis-card-header">
-                    <span class="analysis-pill">智能分析</span>
-                    <span class="analysis-status-pill status-progress">分析中</span>
-                </div>
-                <div class="analysis-card-body">
-                    <div class="analysis-detail">🤔 语音分析中...</div>
-                    <div class="analysis-subtext"></div>
-                </div>
+        const flagDiv = document.createElement('div');
+        flagDiv.className = 'message system-message agent-analysis-flag';
+        flagDiv.dataset.analysisId = key;
+        flagDiv.innerHTML = `
+            <div class="analysis-flag-badge">
+                <span class="analysis-flag-summary">[智能分析]</span>
+                <span class="analysis-flag-status">分析中</span>
             </div>
+            <div class="analysis-flag-note"></div>
         `;
         if (dom.asrWindow) {
-            dom.asrWindow.appendChild(wrapper);
+            dom.asrWindow.appendChild(flagDiv);
         }
-        this.analysisCards.set(key, wrapper);
-        return wrapper;
+        this.analysisFlags.set(key, flagDiv);
+        return flagDiv;
     }
 
-    updateAnalysisCard(card, data) {
-        if (!card) return;
-        const statusPill = card.querySelector('.analysis-status-pill');
-        const detailEl = card.querySelector('.analysis-detail');
-        const subtextEl = card.querySelector('.analysis-subtext');
+    updateAnalysisFlag(flag, data) {
+        if (!flag) return;
+        const badge = flag.querySelector('.analysis-flag-badge');
+        const summaryEl = flag.querySelector('.analysis-flag-summary');
+        const statusEl = flag.querySelector('.analysis-flag-status');
+        const noteEl = flag.querySelector('.analysis-flag-note');
 
-        if (detailEl && data.text) {
-            detailEl.textContent = data.text;
+        const summaryText = data.analysis_summary || `[智能分析]`;
+        const noteText = data.analysis_reason || data.analysis_preview || '';
+
+        if (summaryEl) {
+            summaryEl.textContent = summaryText;
         }
-        if (subtextEl) {
-            const reasonText = data.analysis_reason || '';
-            subtextEl.textContent = reasonText;
-            subtextEl.style.display = reasonText ? 'block' : 'none';
-            subtextEl.title = reasonText || '';
-        }
-        if (statusPill) {
-            statusPill.classList.remove('status-progress', 'status-complete', 'status-helper');
+        if (statusEl) {
             if (data.analysis_status === 'in_progress') {
-                statusPill.textContent = '分析中';
-                statusPill.classList.add('status-progress');
+                statusEl.textContent = '分析中';
+                flag.classList.remove('flag-complete', 'flag-helper');
+                flag.classList.add('flag-progress');
             } else if (data.analysis_need_ai) {
-                statusPill.textContent = '助手介入';
-                statusPill.classList.add('status-helper');
+                statusEl.textContent = '助手介入';
+                flag.classList.remove('flag-progress', 'flag-complete');
+                flag.classList.add('flag-helper');
             } else {
-                statusPill.textContent = '分析完成';
-                statusPill.classList.add('status-complete');
+                statusEl.textContent = '分析完成';
+                flag.classList.remove('flag-progress', 'flag-helper');
+                flag.classList.add('flag-complete');
             }
         }
-    }
-
-    scheduleAnalysisCardCleanup(analysisId) {
-        const key = analysisId || this.lastAnalysisCardKey;
-        if (!key) return;
-        if (this.analysisCardTimers.has(key)) {
-            clearTimeout(this.analysisCardTimers.get(key));
+        if (badge) {
+            badge.title = summaryText;
         }
-        const timer = setTimeout(() => {
-            const card = this.analysisCards.get(key);
-            if (card) {
-                card.classList.add('fade-out');
-                setTimeout(() => card.remove(), 300);
-            }
-            this.analysisCards.delete(key);
-            this.analysisCardTimers.delete(key);
-        }, 8000);
-        this.analysisCardTimers.set(key, timer);
+        if (noteEl) {
+            noteEl.textContent = noteText;
+            noteEl.style.display = noteText ? 'block' : 'none';
+        }
     }
 }
 
