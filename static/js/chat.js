@@ -11,6 +11,32 @@ export class ChatManager {
     constructor() {
         this.currentChatId = null;
         this.llmHistory = [];
+        this.llmManager = null;
+    }
+
+    setLLMManager(llmManager) {
+        this.llmManager = llmManager;
+        if (!this.llmManager) return;
+        if (this.currentChatId) {
+            this.llmManager.setCurrentChatId(this.currentChatId);
+        }
+        if (typeof this.llmManager.replaceHistory === 'function') {
+            this.llmManager.replaceHistory(this.llmHistory);
+        }
+    }
+
+    _setActiveChat(chatId) {
+        this.currentChatId = chatId;
+        if (this.llmManager) {
+            this.llmManager.setCurrentChatId(chatId);
+        }
+    }
+
+    _syncLLMHistory(history = this.llmHistory) {
+        if (this.llmManager && typeof this.llmManager.replaceHistory === 'function') {
+            const safeHistory = Array.isArray(history) ? history : [];
+            this.llmManager.replaceHistory(safeHistory);
+        }
     }
 
     // 加载聊天列表
@@ -20,10 +46,10 @@ export class ChatManager {
             const data = await res.json();
 
             if (!this.currentChatId && data.current_chat_id) {
-                this.currentChatId = data.current_chat_id;
+                this._setActiveChat(data.current_chat_id);
                 this.loadChatMessages(this.currentChatId);
             } else if (!this.currentChatId && data.chats.length > 0) {
-                this.currentChatId = data.chats[0].id;
+                this._setActiveChat(data.chats[0].id);
                 this.loadChatMessages(this.currentChatId);
             } else if (!this.currentChatId && data.chats.length === 0) {
                 await this.createNewChat();
@@ -67,7 +93,7 @@ export class ChatManager {
 
     // 切换到指定聊天
     async switchToChat(chatId) {
-        this.currentChatId = chatId;
+        this._setActiveChat(chatId);
         await this.loadChatMessages(chatId);
         await this.loadChatList(); // 刷新列表以更新活动状态
     }
@@ -84,8 +110,9 @@ export class ChatManager {
             });
             const newChat = await res.json();
 
-            this.currentChatId = newChat.id;
+            this._setActiveChat(newChat.id);
             this.llmHistory = [];
+            this._syncLLMHistory([]);
 
             if (dom.llmWindow) {
                 dom.llmWindow.innerHTML = '';
@@ -103,8 +130,9 @@ export class ChatManager {
         await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
 
         if (this.currentChatId === chatId) {
-            this.currentChatId = null;
+            this._setActiveChat(null);
             this.llmHistory = [];
+            this._syncLLMHistory([]);
             if (dom.llmWindow) {
                 dom.llmWindow.innerHTML = '';
             }
@@ -118,7 +146,9 @@ export class ChatManager {
         const res = await fetch(`/api/chats/${chatId}`);
         const chat = await res.json();
 
+        this._setActiveChat(chatId);
         this.llmHistory = [];
+        this._syncLLMHistory([]);
 
         if (dom.llmWindow) {
             dom.llmWindow.innerHTML = '';
@@ -132,6 +162,7 @@ export class ChatManager {
                 this.renderMessage(msg);
             });
         }
+        this._syncLLMHistory(this.llmHistory);
 
         // 无论是否有历史消息，都添加欢迎语以反映当前功能状态
         this.addSystemWelcome();
@@ -236,6 +267,7 @@ export class ChatManager {
         try {
             await fetch(`/api/chats/${this.currentChatId}/clear`, { method: 'POST' });
             this.llmHistory = [];
+            this._syncLLMHistory([]);
 
             if (dom.llmWindow) {
                 dom.llmWindow.innerHTML = '';
@@ -254,11 +286,15 @@ export class ChatManager {
 
         const userDiv = document.createElement('div');
         userDiv.className = 'message user';
-        userDiv.innerHTML = `<div class="message-content">${text}</div>`;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = text;
+        userDiv.appendChild(contentDiv);
         dom.llmWindow.appendChild(userDiv);
         dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
 
         this.llmHistory.push({ role: "user", content: text });
+        this._syncLLMHistory();
     }
 
     // 添加助手消息
@@ -288,6 +324,7 @@ export class ChatManager {
         // 添加到历史记录
         const content = modelName ? `**${modelName}**:\n${text}` : text;
         this.llmHistory.push({ role: "assistant", content });
+        this._syncLLMHistory();
     }
 
     // 获取当前聊天ID
@@ -303,6 +340,7 @@ export class ChatManager {
     // 清空聊天历史
     clearHistory() {
         this.llmHistory = [];
+        this._syncLLMHistory([]);
     }
 
     // 发送语音记录到AI

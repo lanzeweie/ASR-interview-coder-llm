@@ -8,6 +8,7 @@ import time
 import asyncio
 import json
 import os
+import uuid
 from typing import List, Dict, Optional, Callable
 from dataclasses import dataclass
 from intelligent_agent import agent_manager
@@ -33,6 +34,7 @@ class TriggerState:
     pending_analysis: bool = False
     silence_start_time: Optional[float] = None
     last_analysis_index: int = -1  # 记录上次分析的消息索引位置
+    current_analysis_id: Optional[str] = None  # 当前分析批次ID
 
 
 class TriggerManager:
@@ -201,6 +203,8 @@ class TriggerManager:
 
         self.state.pending_analysis = True
         self.state.silence_start_time = None
+        analysis_id = str(uuid.uuid4())
+        self.state.current_analysis_id = analysis_id
 
         # 发送分析开始消息
         if self.broadcast_callback:
@@ -209,7 +213,10 @@ class TriggerManager:
                 self.broadcast_callback({
                     "time": time.strftime("%H:%M:%S"),
                     "speaker": "智能分析",
-                    "text": "🤔 语音分析中..."
+                    "text": "🤔 语音分析中...",
+                    "analysis_status": "in_progress",
+                    "analysis_need_ai": False,
+                    "analysis_id": analysis_id
                 })
             except Exception as e:
                 print(f"[触发机制] 发送分析开始消息失败: {e}")
@@ -237,14 +244,14 @@ class TriggerManager:
 
             # 异步执行分析 - 使用保存的event loop
             if self.event_loop and self.event_loop.is_running():
-                asyncio.run_coroutine_threadsafe(self._run_analysis(messages, speaker_name, start_index), self.event_loop)
+                asyncio.run_coroutine_threadsafe(self._run_analysis(messages, speaker_name, start_index, analysis_id), self.event_loop)
                 print("[触发机制] ✅ 分析任务已提交到主event loop")
             else:
                 print("[触发机制] ⚠️ Event loop未设置或未运行，分析任务未启动")
                 print("[触发机制] 💡 提示: 请在server启动时调用trigger_manager.set_event_loop(loop)")
                 self.state.pending_analysis = False
 
-    async def _run_analysis(self, messages: List[Dict], speaker_name: str, start_index: int):
+    async def _run_analysis(self, messages: List[Dict], speaker_name: str, start_index: int, analysis_id: Optional[str] = None):
         """运行智能分析"""
         try:
             print(f"[触发机制] 🤖 开始调用本地模型分析...")
@@ -260,6 +267,7 @@ class TriggerManager:
                 speaker_name,
                 intent_recognition=intent_recognition_enabled
             )
+            result['analysis_id'] = analysis_id or self.state.current_analysis_id
 
             # 从三阶段结果中提取阶段1的结果
             phase1_result = result.get('phase1', {})
@@ -310,6 +318,7 @@ class TriggerManager:
             # 重置累积文本
             self.state.accumulated_text = ""
             self.state.pending_analysis = False
+            self.state.current_analysis_id = None
             print(f"[触发机制] 🔄 已重置触发状态")
 
     def add_callback(self, callback: Callable):

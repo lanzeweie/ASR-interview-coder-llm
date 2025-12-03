@@ -251,6 +251,114 @@
     }
 }
 
+/* 语音厅智能分析指示器 */
+.analysis-status-indicator {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+    padding: 4px 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(79, 70, 229, 0.07));
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+    transition: all 0.25s ease;
+}
+
+.analysis-status-indicator.active {
+    display: flex;
+}
+
+.analysis-status-indicator.analysis-progress {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(14, 165, 233, 0.08));
+}
+
+.analysis-status-indicator.analysis-complete {
+    border-color: rgba(34, 197, 94, 0.45);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.08));
+}
+
+.analysis-status-indicator.analysis-helper {
+    border-color: rgba(245, 158, 11, 0.5);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.08));
+}
+
+.analysis-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #6d28d9;
+    box-shadow: 0 0 8px rgba(109, 40, 217, 0.65);
+    animation: analysis-dot-pulse 2s ease-in-out infinite;
+}
+
+.analysis-status-indicator.analysis-complete .analysis-dot {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+.analysis-status-indicator.analysis-helper .analysis-dot {
+    background: #f97316;
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
+}
+
+.analysis-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.1;
+}
+
+.analysis-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.analysis-status-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.analysis-reason-text {
+    display: none;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 1px;
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.analysis-status-indicator.analysis-progress .analysis-status-text {
+    color: #0ea5e9;
+}
+
+.analysis-status-indicator.analysis-complete .analysis-status-text {
+    color: #22c55e;
+}
+
+.analysis-status-indicator.analysis-helper .analysis-status-text {
+    color: #f97316;
+}
+
+@keyframes analysis-dot-pulse {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.4);
+        opacity: 0.6;
+    }
+}
+
 /* 意图识别状态指示器 */
 .intent-recognition-indicator {
     display: none;

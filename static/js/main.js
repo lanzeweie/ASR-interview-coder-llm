@@ -73,6 +73,11 @@ async function initializeManagers() {
     if (typeof managers.llm.setChatManager === 'function') {
         managers.llm.setChatManager(managers.chat);
     }
+    if (typeof managers.websocket.setAgentStatusHandler === 'function') {
+        managers.websocket.setAgentStatusHandler((state) => {
+            managers.agent.updateAnalysisState(state);
+        });
+    }
 
     // 设置WebSocket消息处理
     managers.websocket.handleLLMMessage = (data) => {

@@ -13,6 +13,10 @@ export class WebSocketManager {
             asr: false,
             llm: false
         };
+        this.agentStatusHandler = null;
+        this.analysisCards = new Map();
+        this.analysisCardTimers = new Map();
+        this.lastAnalysisCardKey = null;
     }
 
     // ASR WebSocket连接
@@ -120,22 +124,32 @@ export class WebSocketManager {
             return;
         }
 
-        const messageDiv = document.createElement('div');
-
-        // 智能分析消息使用特殊样式
-        if (data.speaker === '智能分析') {
-            messageDiv.className = 'message system-message agent-analysis';
-            messageDiv.innerHTML = `
-                <div class="message-content">${data.text}</div>
-            `;
-        } else {
-            // 普通ASR消息
-            messageDiv.className = 'message';
-            messageDiv.innerHTML = `
-                <div class="message-header"><span class="speaker-name">${data.speaker}</span><span class="timestamp">${data.time}</span></div>
-                <div class="content">${data.text}</div>
-            `;
+        if (data.analysis_status) {
+            if (this.agentStatusHandler) {
+                this.agentStatusHandler({
+                    status: data.analysis_status,
+                    needAI: data.analysis_need_ai === true,
+                    reason: data.analysis_reason || '',
+                    analysisId: data.analysis_id || null
+                });
+            }
+            const card = this.getOrCreateAnalysisCard(data.analysis_id);
+            this.updateAnalysisCard(card, data);
+            if (dom.asrWindow) {
+                dom.asrWindow.scrollTop = dom.asrWindow.scrollHeight;
+            }
+            if (data.analysis_status === 'completed') {
+                this.scheduleAnalysisCardCleanup(data.analysis_id);
+            }
+            return;
         }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        messageDiv.innerHTML = `
+            <div class="message-header"><span class="speaker-name">${data.speaker}</span><span class="timestamp">${data.time}</span></div>
+            <div class="content">${data.text}</div>
+        `;
 
         if (dom.asrWindow) {
             dom.asrWindow.appendChild(messageDiv);
@@ -174,6 +188,87 @@ export class WebSocketManager {
         if (this.llmSocket) {
             this.llmSocket.close();
         }
+    }
+
+    setAgentStatusHandler(handler) {
+        this.agentStatusHandler = handler;
+    }
+
+    getOrCreateAnalysisCard(analysisId) {
+        const fallbackKey = analysisId || this.lastAnalysisCardKey || `analysis-${Date.now()}`;
+        const key = fallbackKey;
+        this.lastAnalysisCardKey = key;
+        if (this.analysisCards.has(key)) {
+            return this.analysisCards.get(key);
+        }
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message system-message agent-analysis-card';
+        wrapper.dataset.analysisId = key;
+        wrapper.innerHTML = `
+            <div class="agent-analysis-card">
+                <div class="analysis-card-header">
+                    <span class="analysis-pill">智能分析</span>
+                    <span class="analysis-status-pill status-progress">分析中</span>
+                </div>
+                <div class="analysis-card-body">
+                    <div class="analysis-detail">🤔 语音分析中...</div>
+                    <div class="analysis-subtext"></div>
+                </div>
+            </div>
+        `;
+        if (dom.asrWindow) {
+            dom.asrWindow.appendChild(wrapper);
+        }
+        this.analysisCards.set(key, wrapper);
+        return wrapper;
+    }
+
+    updateAnalysisCard(card, data) {
+        if (!card) return;
+        const statusPill = card.querySelector('.analysis-status-pill');
+        const detailEl = card.querySelector('.analysis-detail');
+        const subtextEl = card.querySelector('.analysis-subtext');
+
+        if (detailEl && data.text) {
+            detailEl.textContent = data.text;
+        }
+        if (subtextEl) {
+            const reasonText = data.analysis_reason || '';
+            subtextEl.textContent = reasonText;
+            subtextEl.style.display = reasonText ? 'block' : 'none';
+            subtextEl.title = reasonText || '';
+        }
+        if (statusPill) {
+            statusPill.classList.remove('status-progress', 'status-complete', 'status-helper');
+            if (data.analysis_status === 'in_progress') {
+                statusPill.textContent = '分析中';
+                statusPill.classList.add('status-progress');
+            } else if (data.analysis_need_ai) {
+                statusPill.textContent = '助手介入';
+                statusPill.classList.add('status-helper');
+            } else {
+                statusPill.textContent = '分析完成';
+                statusPill.classList.add('status-complete');
+            }
+        }
+    }
+
+    scheduleAnalysisCardCleanup(analysisId) {
+        const key = analysisId || this.lastAnalysisCardKey;
+        if (!key) return;
+        if (this.analysisCardTimers.has(key)) {
+            clearTimeout(this.analysisCardTimers.get(key));
+        }
+        const timer = setTimeout(() => {
+            const card = this.analysisCards.get(key);
+            if (card) {
+                card.classList.add('fade-out');
+                setTimeout(() => card.remove(), 300);
+            }
+            this.analysisCards.delete(key);
+            this.analysisCardTimers.delete(key);
+        }, 8000);
+        this.analysisCardTimers.set(key, timer);
     }
 }
 

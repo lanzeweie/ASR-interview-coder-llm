@@ -39,6 +39,7 @@ export const dom = {
     
     // 智能分析 DOM
     agentToggleBtn: document.getElementById('agent-toggle'),
+    agentAnalysisIndicator: document.getElementById('agent-analysis-indicator'),
 
     // 意图识别 DOM
     intentRecognitionToggle: document.getElementById('intent-recognition-toggle'),

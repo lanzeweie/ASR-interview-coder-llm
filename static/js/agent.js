@@ -11,6 +11,10 @@ export class AgentManager {
     constructor() {
         this.enabled = false;
         this.status = null;
+        this.analysisState = 'idle';
+        this.analysisNeedAI = false;
+        this.analysisReason = '';
+        this.analysisResetTimer = null;
     }
 
     // 初始化智能分析状态
@@ -29,6 +33,7 @@ export class AgentManager {
                     this.enabled = data.enabled || false;
                     this.updateAgentToggleUI();
                     this.updateAgentStatusIndicator();
+                    this.resetAnalysisIndicator();
                     if (dom.agentToggleBtn) {
                         dom.agentToggleBtn.title = this.enabled ? '智能分析已开启，点击关闭' : '智能分析已关闭，点击开启';
                     }
@@ -44,6 +49,8 @@ export class AgentManager {
                 }
                 const indicator = document.getElementById('agent-status-indicator');
                 if (indicator) indicator.style.display = 'none';
+                const asrIndicator = dom.agentAnalysisIndicator;
+                if (asrIndicator) asrIndicator.style.display = 'none';
             }
         } catch (e) {
             console.error('Failed to load agent status:', e);
@@ -52,6 +59,8 @@ export class AgentManager {
             }
             const indicator = document.getElementById('agent-status-indicator');
             if (indicator) indicator.style.display = 'none';
+            const asrIndicator = dom.agentAnalysisIndicator;
+            if (asrIndicator) asrIndicator.style.display = 'none';
         }
     }
 
@@ -78,6 +87,17 @@ export class AgentManager {
         } else {
             indicator.classList.remove('active');
         }
+        const asrIndicator = dom.agentAnalysisIndicator;
+        if (asrIndicator) {
+            if (this.enabled) {
+                asrIndicator.classList.add('active');
+                asrIndicator.style.display = 'flex';
+            } else {
+                asrIndicator.classList.remove('active');
+                asrIndicator.style.display = 'none';
+            }
+        }
+        this.applyAnalysisIndicatorState();
     }
 
     // 切换智能分析开关
@@ -115,6 +135,11 @@ export class AgentManager {
                 this.enabled = newEnabled;
                 this.updateAgentToggleUI();
                 this.updateAgentStatusIndicator();
+                if (!newEnabled) {
+                    this.resetAnalysisIndicator();
+                } else {
+                    this.applyAnalysisIndicatorState();
+                }
 
                 // 保存UI状态（开关按钮的状态）
                 if (dom.agentToggleBtn) {
@@ -164,6 +189,97 @@ export class AgentManager {
     isEnabled() {
         return this.enabled;
     }
+
+    updateAnalysisState(state = {}) {
+        if (!this.enabled) {
+            this.resetAnalysisIndicator();
+            return;
+        }
+        if (state.status) {
+            this.analysisState = state.status;
+        }
+        if (typeof state.needAI === 'boolean') {
+            this.analysisNeedAI = state.needAI;
+        }
+        this.analysisReason = state.reason || '';
+        if (this.analysisResetTimer) {
+            clearTimeout(this.analysisResetTimer);
+            this.analysisResetTimer = null;
+        }
+        this.applyAnalysisIndicatorState();
+        if (this.analysisState === 'completed') {
+            this.analysisResetTimer = setTimeout(() => this.resetAnalysisIndicator(), 6000);
+        }
+    }
+
+    resetAnalysisIndicator() {
+        this.analysisState = 'idle';
+        this.analysisNeedAI = false;
+        this.analysisReason = '';
+        if (this.analysisResetTimer) {
+            clearTimeout(this.analysisResetTimer);
+            this.analysisResetTimer = null;
+        }
+        this.applyAnalysisIndicatorState();
+    }
+
+    applyAnalysisIndicatorState() {
+        const indicator = dom.agentAnalysisIndicator;
+        if (!indicator) return;
+
+        if (!this.enabled) {
+            indicator.style.display = 'none';
+            return;
+        }
+
+        indicator.style.display = 'flex';
+        indicator.classList.add('active');
+        indicator.classList.remove('analysis-progress', 'analysis-complete', 'analysis-helper');
+
+        const statusEl = indicator.querySelector('.analysis-status-text');
+        const reasonEl = indicator.querySelector('.analysis-reason-text');
+
+        if (this.analysisState === 'in_progress') {
+            indicator.classList.add('analysis-progress');
+            if (statusEl) statusEl.textContent = '分析中';
+            indicator.removeAttribute('title');
+            if (reasonEl) {
+                reasonEl.style.display = 'none';
+                reasonEl.textContent = '';
+            }
+        } else if (this.analysisState === 'completed' && this.analysisNeedAI) {
+            indicator.classList.add('analysis-helper');
+            if (statusEl) statusEl.textContent = '分析完成 · 助手介入';
+            if (reasonEl && this.analysisReason) {
+                reasonEl.textContent = this.analysisReason;
+                reasonEl.style.display = 'block';
+                indicator.title = this.analysisReason;
+            } else if (reasonEl) {
+                reasonEl.style.display = 'none';
+                reasonEl.textContent = '';
+                indicator.removeAttribute('title');
+            }
+        } else if (this.analysisState === 'completed') {
+            indicator.classList.add('analysis-complete');
+            if (statusEl) statusEl.textContent = '分析完成';
+            if (reasonEl && this.analysisReason) {
+                reasonEl.textContent = this.analysisReason;
+                reasonEl.style.display = 'block';
+                indicator.title = this.analysisReason;
+            } else if (reasonEl) {
+                reasonEl.style.display = 'none';
+                reasonEl.textContent = '';
+                indicator.removeAttribute('title');
+            }
+        } else {
+            if (statusEl) statusEl.textContent = '待命';
+            indicator.removeAttribute('title');
+            if (reasonEl) {
+                reasonEl.style.display = 'none';
+                reasonEl.textContent = '';
+            }
+        }
+    }
 }
 
 // ===== 意图识别管理类 =====
@@ -210,6 +326,7 @@ export class LLMManager {
         this.currentChatId = null;
         this.isProcessing = false;
         this.streamManager = null;
+        this.chatManager = null;
     }
 
     // 设置流管理器
@@ -220,6 +337,28 @@ export class LLMManager {
     // 设置WebSocket管理器
     setWebSocketManager(wsManager) {
         this.wsManager = wsManager;
+    }
+
+    // 连接聊天管理器以同步聊天ID与历史
+    setChatManager(chatManager) {
+        this.chatManager = chatManager;
+        if (chatManager && typeof chatManager.setLLMManager === 'function') {
+            chatManager.setLLMManager(this);
+        }
+        if (chatManager && typeof chatManager.getCurrentChatId === 'function') {
+            this.currentChatId = chatManager.getCurrentChatId();
+        }
+        if (chatManager && typeof chatManager.getChatHistory === 'function') {
+            this.replaceHistory(chatManager.getChatHistory());
+        }
+    }
+
+    replaceHistory(messages = []) {
+        if (!Array.isArray(messages)) {
+            this.chatHistory = [];
+            return;
+        }
+        this.chatHistory = messages.map(msg => ({ ...msg }));
     }
 
     // 处理LLM消息
@@ -354,6 +493,11 @@ export class LLMManager {
         this.isProcessing = true;
 
         try {
+            this.chatHistory.push({ role: "user", content: text });
+            if (this.chatManager && typeof this.chatManager.getCurrentChatId === 'function') {
+                this.setCurrentChatId(this.chatManager.getCurrentChatId());
+            }
+
             // 检查是否启用了意图识别
             const intentRecognitionEnabled = window.intentRecognitionEnabled === true;
             console.log('[LLM] 意图识别状态:', intentRecognitionEnabled);
@@ -378,10 +522,6 @@ export class LLMManager {
     async processWithIntentRecognition(wsManager, text) {
         let analyzingDiv = null;
         try {
-            // 1. 更新本地聊天历史，供后续流程使用
-            this.chatHistory.push({ role: "user", content: text });
-
-            // 2. 准备对话历史（用于意图识别）
             const messages = [...this.chatHistory];
 
             // 3. 显示意图识别中...
