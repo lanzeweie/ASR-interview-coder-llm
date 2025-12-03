@@ -17,6 +17,7 @@ export class AgentManager {
         this.analysisSummary = '';
         this.analysisCount = 0;
         this.analysisPreview = '';
+        this.analysisModel = '';
         this.analysisResetTimer = null;
     }
 
@@ -216,6 +217,9 @@ export class AgentManager {
         if (typeof state.preview === 'string' && state.preview) {
             this.analysisPreview = state.preview;
         }
+        if ('model' in state) {
+            this.analysisModel = state.model || '';
+        }
         if (this.analysisResetTimer) {
             clearTimeout(this.analysisResetTimer);
             this.analysisResetTimer = null;
@@ -233,6 +237,7 @@ export class AgentManager {
         this.analysisSummary = '';
         this.analysisCount = 0;
         this.analysisPreview = '';
+        this.analysisModel = '';
         if (this.analysisResetTimer) {
             clearTimeout(this.analysisResetTimer);
             this.analysisResetTimer = null;
@@ -258,39 +263,41 @@ export class AgentManager {
         const summaryLine = this.analysisSummary || '';
         const tooltipText = this.analysisReason || this.analysisPreview || summaryLine;
         const baseLabel = summaryLine || '智能分析';
+        const applyReasonText = (text) => {
+            if (!reasonEl) return;
+            const formatted = this.formatReasonWithModel(text);
+            reasonEl.textContent = formatted || '';
+            reasonEl.style.display = formatted ? 'block' : 'none';
+        };
 
         if (this.analysisState === 'in_progress') {
             indicator.classList.add('analysis-progress');
             if (statusEl) statusEl.textContent = `${baseLabel} · 分析中`;
             indicator.title = tooltipText || '';
-            if (reasonEl) {
-                reasonEl.textContent = this.analysisPreview || '';
-                reasonEl.style.display = this.analysisPreview ? 'block' : 'none';
-            }
+            applyReasonText(this.analysisPreview || '');
         } else if (this.analysisState === 'completed' && this.analysisNeedAI) {
             indicator.classList.add('analysis-helper');
             if (statusEl) statusEl.textContent = `${baseLabel} · 助手介入`;
             indicator.title = tooltipText || '';
-            if (reasonEl) {
-                reasonEl.textContent = this.analysisReason || this.analysisPreview || '';
-                reasonEl.style.display = (this.analysisReason || this.analysisPreview) ? 'block' : 'none';
-            }
+            applyReasonText(this.analysisReason || this.analysisPreview || '');
         } else if (this.analysisState === 'completed') {
             indicator.classList.add('analysis-complete');
             if (statusEl) statusEl.textContent = `${baseLabel} · 分析完成`;
             indicator.title = tooltipText || '';
-            if (reasonEl) {
-                reasonEl.textContent = this.analysisReason || '';
-                reasonEl.style.display = this.analysisReason ? 'block' : 'none';
-            }
+            applyReasonText(this.analysisReason || '');
         } else {
             if (statusEl) statusEl.textContent = '待命';
             indicator.removeAttribute('title');
-            if (reasonEl) {
-                reasonEl.style.display = 'none';
-                reasonEl.textContent = '';
-            }
+            applyReasonText('');
         }
+    }
+
+    formatReasonWithModel(text = '') {
+        const modelLabel = this.analysisModel ? `[${this.analysisModel}]` : '';
+        if (modelLabel && text) {
+            return `${modelLabel} ${text}`;
+        }
+        return modelLabel || text || '';
     }
 }
 

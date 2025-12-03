@@ -16,8 +16,8 @@ from llm_client import LLMClient
 
 # 尝试导入 transformers 和 torch
 try:
-    from transformers import AutoModelForCausalLM, AutoTokenizer
     import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
@@ -169,28 +169,33 @@ class SmartAnalysisAgent(BaseLLMAgent):
         dialogue = format_messages_compact(messages)
         print(f"[智能分析] 构建Prompt，消息数: {len(messages)}，长度: {len(dialogue)}")
         prompt = """
-        你是一个软件工程对话分析器。请严格根据以下规则分析提供的对话内容，并仅输出一个标准 JSON 对象，不得包含任何额外文本、解释、格式符号或换行。
-        **输入：**
-        {dialogue}
-        **判断规则：**
-        1. {speaker_name} 是对话中的主人公。
-        2. 仅当对话中明确涉及 **软件开发相关** 的以下任一内容时，返回 {{"is": true}}：
-        - 编程语言、框架、库的使用问题（如 Python、React、TensorFlow）
-        - 调试、报错排查、性能优化
-        - 系统架构、API 设计、数据库设计
-        - 开发工具链（如 Git、Docker、CI/CD）
-        - 算法、数据结构、代码审查
-        - 软件工程实践（如测试、部署、DevOps）
-        3. 以下情况**一律返回 {{"is": false}}**：
-        - 非软件类技术话题（如电路设计、生物信息学、量化金融——即使有代码也不算）
-        - 日常聊天、问候、情感表达
-        - 泛泛而谈的科技观点
-        - 仅提及"写代码"但无实质技术内容
-        - 使用自然语言描述非编程任务
+        你是一个软件工程对话分析器，专门用于判断语音转文字后的对话片段是否明确涉及相关技术内容。请严格遵循以下规则，并仅输出一个标准 JSON 对象，不得包含任何额外文本、解释、格式符号或换行。
 
-        **输出要求：**
-        - 严格输出：{{"is": true}} 或 {{"is": false}}
-        - 必须是合法 JSON，不包裹在 Markdown、反引号或代码块中
+        输入：
+        {dialogue}
+
+        处理原则：
+
+        主人公为 {speaker_name}。
+        语音转文字可能存在术语截断、错别字或不完整表达（如“Dock”、“调接口超时”、“React 的 useE”），你可基于上下文合理推测其指代的常见软件工程术语（如 Docker、API、useEffect）。
+        但必须采取保守策略：仅当有较强证据表明对话明确涉及技术主题时，才返回 {{"is": true}}：
+        例如：
+        • 编程语言、框架或库的具体使用问题（如 Python 装包失败、React 状态管理、TensorFlow 模型加载）
+        • 调试、错误排查、性能瓶颈分析
+        • 系统架构设计、API 规范、数据库 schema 或查询优化
+        • 开发工具链操作（如 Git 分支冲突、Docker 镜像构建、CI/CD 流水线配置）
+        • 算法实现、数据结构选择、代码可读性或审查反馈
+        • 软件工程实践（如单元测试覆盖、部署回滚、日志监控）
+        以下情况一律返回 {{"is": false}}
+
+        话题属于非软件领域（如硬件、生物、金融），即使含代码片段
+        仅泛泛提及“写代码”“搞开发”而无具体技术细节
+        表达模糊、缺乏可识别技术关键词，或推测依据不足
+        日常寒暄、情绪表达、非技术性计划讨论
+        输出要求：
+
+        严格输出：{{"is": true}} 或 {{"is": false}}
+        必须是合法 JSON，不包裹在 Markdown、反引号、代码块或任何额外字符中
         """.format(dialogue=dialogue, speaker_name=speaker_name)
         return prompt
 
@@ -207,6 +212,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
         return False, None
 
     async def analyze(self, messages: List[Dict], speaker_name: str) -> Dict:
+        model_name = self.config.get('model_name') or self.config.get('model') or '未知模型'
         try:
             prompt = self.build_analysis_prompt(messages, speaker_name)
             print(f"[智能分析] 开始分析，主人公: {speaker_name}")
@@ -230,25 +236,29 @@ class SmartAnalysisAgent(BaseLLMAgent):
                 return {
                     'is': is_needed,
                     'reason': reason,
-                    'raw_response': response_text
+                    'raw_response': response_text,
+                    'model_name': model_name
                 }
             return {
                 'is': False,
                 'reason': '模型响应无效',
-                'raw_response': response_text
+                'raw_response': response_text,
+                'model_name': model_name
             }
         except RuntimeError as exc:
             return {
                 'is': False,
                 'reason': f'分析失败: {str(exc)}',
-                'raw_response': ''
+                'raw_response': '',
+                'model_name': model_name
             }
         except Exception as exc:
             print(f"[智能分析] 分析过程出错: {exc}")
             return {
                 'is': False,
                 'reason': f'分析失败: {str(exc)}',
-                'raw_response': ''
+                'raw_response': '',
+                'model_name': model_name
             }
 
     def process_message(self, message: Dict, conversation_history: List[Dict]) -> Tuple[bool, Optional[str]]:

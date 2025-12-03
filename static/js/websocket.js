@@ -131,7 +131,8 @@ export class WebSocketManager {
                     summary: data.analysis_summary || '',
                     count: data.analysis_count || 0,
                     preview: data.analysis_preview || '',
-                    analysisId: data.analysis_id || null
+                    analysisId: data.analysis_id || null,
+                    model: data.analysis_model || ''
                 });
             }
             const flag = this.getOrCreateAnalysisFlag(data.analysis_id);
@@ -222,7 +223,11 @@ export class WebSocketManager {
         const noteEl = flag.querySelector('.analysis-flag-note');
 
         const summaryText = data.analysis_summary || `[智能分析]`;
-        const noteText = data.analysis_reason || data.analysis_preview || '';
+        const modelLabel = data.analysis_model ? `[${data.analysis_model}]` : '';
+        let noteText = data.analysis_reason || data.analysis_preview || '';
+        if (modelLabel) {
+            noteText = noteText ? `${modelLabel} ${noteText}` : modelLabel;
+        }
 
         if (summaryEl) {
             summaryEl.textContent = summaryText;

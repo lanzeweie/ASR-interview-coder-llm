@@ -130,6 +130,7 @@ async def agent_analysis_callback(result, messages, speaker_name):
         summary = result.get('analysis_summary')
         count = result.get('analysis_count')
         preview = result.get('analysis_preview')
+        model_name = phase1_result.get('model_name')
 
         summary_label = summary or f"[{speaker_name}]"
         status_text = f"{summary_label} · 分析完成"
@@ -149,7 +150,8 @@ async def agent_analysis_callback(result, messages, speaker_name):
             "analysis_reason": reason,
             "analysis_summary": summary,
             "analysis_count": count,
-            "analysis_preview": preview
+            "analysis_preview": preview,
+            "analysis_model": model_name
         })
 
         if is_needed:
