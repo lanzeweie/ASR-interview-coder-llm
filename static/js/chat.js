@@ -4,6 +4,7 @@
 
 import { dom } from './dom.js';
 import { showToast } from './utils.js';
+import { renderMarkdown } from './markdown.js';
 
 // ===== 聊天管理类 =====
 export class ChatManager {
@@ -161,11 +162,19 @@ export class ChatManager {
             // 使用当前模型配置名称显示
             // 智囊团时使用modelName，单模型时使用当前配置
             const speakerName = modelName || 'AI 助手';
-            const headerHtml = modelName
-                ? `<div class="message-header"><span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span></div>`
-                : `<div class="message-header"><span class="speaker-name">${speakerName}</span></div>`;
 
-            msgDiv.innerHTML = `${headerHtml}<div class="message-content">${content}</div>`;
+            const header = document.createElement('div');
+            header.className = 'message-header';
+            header.innerHTML = modelName
+                ? `<span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span>`
+                : `<span class="speaker-name">${speakerName}</span>`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content llm-markdown';
+            renderMarkdown(contentDiv, content);
+
+            msgDiv.appendChild(header);
+            msgDiv.appendChild(contentDiv);
         } else {
             msgDiv.innerHTML = `<div class="message-content">${msg.content}</div>`;
         }
@@ -260,14 +269,18 @@ export class ChatManager {
         msgDiv.className = 'message ai';
 
         const speakerName = modelName || 'AI 助手';
-        const headerHtml = modelName
-            ? `<div class="message-header"><span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span></div>`
-            : `<div class="message-header"><span class="speaker-name">${speakerName}</span></div>`;
+        const header = document.createElement('div');
+        header.className = 'message-header';
+        header.innerHTML = modelName
+            ? `<span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span>`
+            : `<span class="speaker-name">${speakerName}</span>`;
 
-        msgDiv.innerHTML = `
-            ${headerHtml}
-            <div class="message-content">${text}</div>
-        `;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content llm-markdown';
+        renderMarkdown(contentDiv, text);
+
+        msgDiv.appendChild(header);
+        msgDiv.appendChild(contentDiv);
 
         dom.llmWindow.appendChild(msgDiv);
         dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;

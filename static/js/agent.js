@@ -4,6 +4,7 @@
 
 import { dom } from './dom.js';
 import { showToast } from './utils.js';
+import { renderMarkdown } from './markdown.js';
 
 // ===== 智能分析管理类 =====
 export class AgentManager {
@@ -227,8 +228,12 @@ export class LLMManager {
 
         if (data.type === 'chunk') {
             const model = data.model || 'default';
-            const div = this.streamManager.getOrCreateResponseDiv(model, window.currentDisplayName || window.currentConfigName);
-            const contentDiv = div.querySelector('.content');
+            const div = this.streamManager.getOrCreateResponseDiv(
+                model,
+                window.currentDisplayName || window.currentConfigName
+            );
+            const contentDiv = div.querySelector('.message-content, .content');
+            if (!contentDiv) return;
 
             // 如果是预响应提示，需要先清除"正在输入"文本
             if (contentDiv.dataset.isPreResponse === 'true') {
@@ -238,13 +243,13 @@ export class LLMManager {
                 contentDiv.classList.remove('thinking');
             }
 
-            contentDiv.textContent += data.content;
-
             // Update buffer
             if (!this.streamManager.activeResponseBuffers[model]) {
-                this.streamManager.activeResponseBuffers[model] = "";
+                this.streamManager.activeResponseBuffers[model] = '';
             }
             this.streamManager.activeResponseBuffers[model] += data.content;
+
+            renderMarkdown(contentDiv, this.streamManager.activeResponseBuffers[model]);
 
             if (dom.llmWindow) {
                 dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
@@ -382,37 +387,29 @@ export class LLMManager {
             // 3. 显示意图识别中...
             analyzingDiv = document.createElement('div');
             analyzingDiv.className = 'message system-message intent-analysis';
-            const analysisId = `intent-analysis-${Date.now()}`;
-            analyzingDiv.dataset.analysisId = analysisId;
+            analyzingDiv.dataset.analysisId = `intent-analysis-${Date.now()}`;
             analyzingDiv.innerHTML = `
-                <div class="message-content intent-analysis-card">
-                    <div class="intent-header">
-                        <div class="intent-status-text">🤔 正在进行意图识别...</div>
-                        <div class="intent-progress-dot pulse"></div>
+                <div class="message-content intent-analysis-card compact">
+                    <div class="intent-meta">
+                        <div class="intent-model">调用模型：待定</div>
+                        <div class="intent-status-text intent-status-progress">正在收集上下文...</div>
                     </div>
-                    <div class="intent-steps">
-                        ${this.renderIntentStep('collect', '1. 收集上下文', true)}
-                        ${this.renderIntentStep('analyze', '2. 调用模型')}
-                        ${this.renderIntentStep('summarize', '3. 生成结论')}
-                    </div>
-                    <div class="intent-log"></div>
-                    <div class="intent-result" style="display: none;"></div>
+                    <div class="intent-summary" style="display: none;"></div>
                 </div>
             `;
             if (dom.llmWindow) {
                 dom.llmWindow.appendChild(analyzingDiv);
                 dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
             }
-            this.setIntentAnalysisStep(analyzingDiv, 'collect');
-            this.appendIntentAnalysisLog(analyzingDiv, `上下文收集完成（${messages.length} 条消息）`);
+            this.updateIntentStatus(analyzingDiv, `正在收集上下文（${messages.length} 条消息）`, 'progress');
 
             // 4. 调用意图识别API（使用后端的 /api/agent/analyze 端点）
             console.log('[LLM] 调用智能分析API...');
             // 获取意图识别配置
             const intentConfig = window.intentRecognitionConfig || { model_type: 'local', model_name: 'Qwen3-0.6B' };
             console.log('[LLM] 意图识别配置:', intentConfig);
-            this.setIntentAnalysisStep(analyzingDiv, 'analyze');
-            this.appendIntentAnalysisLog(analyzingDiv, `准备调用模型：${intentConfig.model_type}/${intentConfig.model_name}`);
+            this.updateIntentModelInfo(analyzingDiv, intentConfig);
+            this.updateIntentStatus(analyzingDiv, '正在调用模型，生成结论中...', 'progress');
 
             const response = await fetch('/api/agent/analyze', {
                 method: 'POST',
@@ -440,8 +437,7 @@ export class LLMManager {
 
             const analysisResult = await response.json();
             console.log('[LLM] 意图识别结果:', analysisResult);
-             this.setIntentAnalysisStep(analyzingDiv, 'summarize');
-             this.appendIntentAnalysisLog(analyzingDiv, '模型返回结果，正在生成结论...');
+            this.updateIntentStatus(analyzingDiv, '模型返回结果，正在生成结论...', 'progress');
 
             // 5. 显示意图识别结果
             this.displayIntentAnalysisResult(analysisResult, analyzingDiv);
@@ -468,80 +464,31 @@ export class LLMManager {
     displayIntentAnalysisResult(result, containerDiv) {
         if (!containerDiv || !dom.llmWindow) return;
 
-        // 提取结果信息
         const phase1Result = result.phase1 || result || {};
         const phase2Result = result.phase2 || result || {};
         const summaryInfo = this.parseIntentSummary(phase2Result);
         const analysisSuccess = phase2Result.success !== false;
-        const summaryDetected = summaryInfo.summary && summaryInfo.summary !== '未检测到技术问题';
         const reason = phase1Result.reason || (phase2Result.error || '意图识别完成');
 
         const summarySegments = [];
         if (summaryInfo.summary) {
-            summarySegments.push(`意图总结：${summaryInfo.summary}`);
+            summarySegments.push(summaryInfo.summary);
         }
         if (summaryInfo.question) {
-            summarySegments.push(`用户真正的问题：${summaryInfo.question}`);
+            summarySegments.push(`用户问题：${summaryInfo.question}`);
         }
         if (summaryInfo.steps.length > 0) {
-            summarySegments.push(`下一步行动：${summaryInfo.steps.join(' / ')}`);
+            summarySegments.push(`下一步：${summaryInfo.steps.join(' / ')}`);
         }
-        if (summaryInfo.error) {
+        if (summaryInfo.error && analysisSuccess) {
             summarySegments.push(`提示：${summaryInfo.error}`);
         }
         const combinedSummary = summarySegments.length > 0 ? summarySegments.join('\n') : reason;
+        const statusState = analysisSuccess ? 'success' : 'error';
+        const statusLabel = analysisSuccess ? '✅ 意图识别完成' : '⚠️ 意图识别失败';
 
-        let icon = 'ℹ️';
-        let statusClass = 'intent-neutral';
-        if (!analysisSuccess) {
-            icon = '⚠️';
-            statusClass = 'intent-error';
-        } else if (summaryDetected) {
-            icon = '✅';
-            statusClass = 'intent-positive';
-        }
-
-        if (containerDiv) {
-            const headerText = containerDiv.querySelector('.intent-status-text');
-            const progressDot = containerDiv.querySelector('.intent-progress-dot');
-            if (headerText) {
-                headerText.textContent = icon === '⚠️' ? '⚠️ 意图识别失败' : `${icon} 意图识别完成`;
-                headerText.classList.add(statusClass);
-            }
-            if (progressDot) {
-                progressDot.classList.remove('pulse');
-                progressDot.classList.add('completed');
-            }
-
-            const resultSection = containerDiv.querySelector('.intent-result');
-            if (resultSection) {
-                const detailsId = `${containerDiv.dataset.analysisId || 'intent'}-details`;
-                resultSection.style.display = 'block';
-                resultSection.innerHTML = `
-                    <div class="intent-summary ${statusClass}">
-                        <div class="intent-summary-text">${combinedSummary}</div>
-                        <button class="intent-toggle-btn" data-expanded="false" aria-expanded="false">展开分析</button>
-                    </div>
-                    <div class="intent-details collapsed" id="${detailsId}">
-                        ${this.buildIntentDetailContent(phase1Result, summaryInfo)}
-                    </div>
-                `;
-
-                const toggleBtn = resultSection.querySelector('.intent-toggle-btn');
-                const detailsEl = resultSection.querySelector('.intent-details');
-                if (toggleBtn && detailsEl) {
-                    toggleBtn.addEventListener('click', () => {
-                        const expanded = toggleBtn.getAttribute('data-expanded') === 'true';
-                        toggleBtn.setAttribute('data-expanded', (!expanded).toString());
-                        toggleBtn.setAttribute('aria-expanded', (!expanded).toString());
-                        detailsEl.classList.toggle('collapsed', expanded);
-                        toggleBtn.textContent = expanded ? '展开分析' : '收起分析';
-                    });
-                }
-            }
-
-            this.markIntentAnalysisDone(containerDiv);
-        }
+        this.updateIntentStatus(containerDiv, statusLabel, statusState);
+        this.updateIntentSummary(containerDiv, combinedSummary, statusState);
 
         dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
     }
@@ -567,116 +514,11 @@ export class LLMManager {
         };
     }
 
-    renderIntentStep(step, label, active = false) {
-        return `
-            <div class="intent-step ${active ? 'active' : ''}" data-step="${step}">
-                <span class="intent-step-label">${label}</span>
-            </div>
-        `;
-    }
-
-    setIntentAnalysisStep(containerDiv, stage) {
-        if (!containerDiv) return;
-        const stages = ['collect', 'analyze', 'summarize'];
-        const targetIndex = stages.indexOf(stage);
-        const steps = containerDiv.querySelectorAll('.intent-step');
-        steps.forEach(stepEl => {
-            const idx = stages.indexOf(stepEl.dataset.step);
-            stepEl.classList.remove('active', 'completed');
-            if (idx < targetIndex) {
-                stepEl.classList.add('completed');
-            } else if (idx === targetIndex) {
-                stepEl.classList.add('active');
-            }
-        });
-    }
-
-    markIntentAnalysisDone(containerDiv) {
-        if (!containerDiv) return;
-        const steps = containerDiv.querySelectorAll('.intent-step');
-        steps.forEach(stepEl => {
-            stepEl.classList.remove('active');
-            stepEl.classList.add('completed');
-        });
-    }
-
-    appendIntentAnalysisLog(containerDiv, text) {
-        if (!containerDiv) return;
-        const logContainer = containerDiv.querySelector('.intent-log');
-        if (!logContainer) return;
-        const entry = document.createElement('div');
-        entry.className = 'intent-log-entry';
-        entry.textContent = text;
-        logContainer.appendChild(entry);
-        logContainer.scrollTop = logContainer.scrollHeight;
-    }
-
-    buildIntentDetailContent(phase1Result, summaryInfo) {
-        const rows = [];
-        const hidePhase1 = phase1Result.intent_only === true;
-        if (!hidePhase1) {
-            const statusText = phase1Result.is ? '需要 AI 介入' : '普通对话';
-            rows.push(this.renderIntentDetailRow('判定', statusText));
-            if (phase1Result.reason) {
-                rows.push(this.renderIntentDetailRow('理由', phase1Result.reason));
-            }
-            if (typeof phase1Result.confidence === 'number') {
-                rows.push(this.renderIntentDetailRow('置信度', `${Math.round(phase1Result.confidence * 100)}%`));
-            }
-        }
-        if (summaryInfo.summary) {
-            rows.push(this.renderIntentDetailRow('意图总结', summaryInfo.summary));
-        }
-        if (summaryInfo.question) {
-            rows.push(this.renderIntentDetailRow('真实问题', summaryInfo.question));
-        }
-        if (summaryInfo.steps.length > 0) {
-            const stepsHtml = summaryInfo.steps.map(item => `<li>${item}</li>`).join('');
-            rows.push(`
-                <div class="intent-detail-row">
-                    <div class="intent-detail-label">下一步行动</div>
-                    <ul class="intent-outline">${stepsHtml}</ul>
-                </div>
-            `);
-        }
-        if (summaryInfo.error) {
-            rows.push(this.renderIntentDetailRow('提示', summaryInfo.error));
-        }
-        return rows.join('') || '<div class="intent-detail-row">暂无额外信息</div>';
-    }
-
-    renderIntentDetailRow(label, value) {
-        return `
-            <div class="intent-detail-row">
-                <div class="intent-detail-label">${label}</div>
-                <div class="intent-detail-value">${value}</div>
-            </div>
-        `;
-    }
 
     displayIntentAnalysisError(containerDiv, message) {
         if (!containerDiv) return;
-        const headerText = containerDiv.querySelector('.intent-status-text');
-        const progressDot = containerDiv.querySelector('.intent-progress-dot');
-        if (headerText) {
-            headerText.textContent = '⚠️ 意图识别失败';
-            headerText.classList.add('intent-error');
-        }
-        if (progressDot) {
-            progressDot.classList.remove('pulse');
-            progressDot.classList.add('completed');
-        }
-        this.appendIntentAnalysisLog(containerDiv, `失败原因：${message}`);
-        const resultSection = containerDiv.querySelector('.intent-result');
-        if (resultSection) {
-            resultSection.style.display = 'block';
-            resultSection.innerHTML = `
-                <div class="intent-summary intent-error">
-                    <div class="intent-summary-text">${message}</div>
-                </div>
-            `;
-        }
-        this.markIntentAnalysisDone(containerDiv);
+        this.updateIntentStatus(containerDiv, '⚠️ 意图识别失败', 'error');
+        this.updateIntentSummary(containerDiv, message || '未知错误', 'error');
     }
 
     // 直接发送到LLM（不经过意图识别）
@@ -770,6 +612,45 @@ export class LLMManager {
             return intentData.summary_xml || intentData.raw_response || '';
         }
         return segments.join('\n');
+    }
+
+    updateIntentModelInfo(containerDiv, intentConfig) {
+        if (!containerDiv) return;
+        const modelEl = containerDiv.querySelector('.intent-model');
+        if (!modelEl) return;
+        if (!intentConfig) {
+            modelEl.textContent = '调用模型：未指定';
+            return;
+        }
+        modelEl.textContent = `调用模型：${intentConfig.model_type}/${intentConfig.model_name}`;
+    }
+
+    updateIntentStatus(containerDiv, text, state = 'progress') {
+        if (!containerDiv) return;
+        const statusEl = containerDiv.querySelector('.intent-status-text');
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.classList.remove(
+            'intent-status-progress',
+            'intent-status-success',
+            'intent-status-error'
+        );
+        statusEl.classList.add(`intent-status-${state}`);
+    }
+
+    updateIntentSummary(containerDiv, text, state = 'success') {
+        if (!containerDiv) return;
+        const summaryEl = containerDiv.querySelector('.intent-summary');
+        if (!summaryEl) return;
+        const safeText = text && text.trim() ? text : '未获取到意图总结';
+        summaryEl.style.display = 'block';
+        summaryEl.classList.remove(
+            'intent-summary-progress',
+            'intent-summary-success',
+            'intent-summary-error'
+        );
+        summaryEl.classList.add(`intent-summary-${state}`);
+        summaryEl.innerHTML = `<div class="intent-summary-text">意图总结：${safeText}</div>`;
     }
 
     // 添加用户消息

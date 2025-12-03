@@ -217,7 +217,7 @@ export class LLMStreamManager {
 
             msgDiv.innerHTML = `
                 ${headerHtml}
-                <div class="content"></div>
+                <div class="message-content llm-markdown"></div>
             `;
         }
 
@@ -245,7 +245,7 @@ export class LLMStreamManager {
                         <span class="speaker-name">${speakerName}</span>
                         <span class="model-tag">${modelName}</span>
                     </div>
-                    <div class="content thinking" data-is-pre-response="true">
+                    <div class="message-content llm-markdown thinking" data-is-pre-response="true">
                         正在输入<span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
                     </div>
                 `;
@@ -265,7 +265,7 @@ export class LLMStreamManager {
                 <div class="message-header">
                     <span class="speaker-name">${speakerName}</span>
                 </div>
-                <div class="content thinking" data-is-pre-response="true">
+                <div class="message-content llm-markdown thinking" data-is-pre-response="true">
                     正在输入<span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>
                 </div>
             `;
