@@ -6,14 +6,6 @@
         padding: var(--gap-sm);
     }
 
-    .input-hint {
-        font-size: 10px;
-    }
-
-    .hint-key {
-        padding: 1px 4px;
-    }
-
     .unified-input-bar {
         padding: var(--gap-xs);
         gap: 6px;
@@ -85,14 +77,6 @@
         padding: var(--gap-sm);
     }
 
-    .input-hint {
-        font-size: 10px;
-    }
-
-    .hint-key {
-        padding: 1px 4px;
-    }
-
     .input-container {
         padding: var(--gap-sm);
     }
@@ -135,9 +119,6 @@
         padding: var(--gap-xs);
     }
 
-    .input-hint {
-        display: none;
-    }
 }
 
 /* ========================================
