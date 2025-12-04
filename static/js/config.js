@@ -667,6 +667,10 @@ export class ConfigManager {
             // 保存配置到全局变量
             window.agentConfig = data.config || {};
 
+            // 同步意图识别开关状态
+            const intentEnabled = window.agentConfig.intent_recognition_enabled === true;
+            window.intentRecognitionEnabled = intentEnabled;
+
             // 填充模型类型选择框
             dom.agentModelTypeSelect.innerHTML = `
                 <option value="local">本地模型</option>
@@ -772,6 +776,32 @@ export class ConfigManager {
             }
         } catch (e) {
             console.error('保存智能配置失败:', e);
+            return false;
+        }
+    }
+
+    // 更新意图识别启用状态
+    async updateIntentRecognitionState(isEnabled) {
+        try {
+            const payload = { intent_recognition_enabled: !!isEnabled };
+            const response = await fetch('/api/agent/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (result.status === 'success') {
+                if (!window.agentConfig) {
+                    window.agentConfig = {};
+                }
+                window.agentConfig.intent_recognition_enabled = payload.intent_recognition_enabled;
+                window.intentRecognitionEnabled = payload.intent_recognition_enabled;
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('同步意图识别状态失败:', error);
             return false;
         }
     }

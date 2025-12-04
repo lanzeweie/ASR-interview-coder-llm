@@ -297,6 +297,7 @@ export class UIManager {
                 saveUIState({
                     multiLLMActive: dom.multiLLMToggle?.classList.contains('active') || false,
                     agentToggleActive: newState,
+                    intentRecognitionActive: this.managers.intentRecognition.isEnabled(),
                     currentChatId: this.managers.chat.getCurrentChatId()
                 });
             });
@@ -325,6 +326,7 @@ export class UIManager {
                 saveUIState({
                     multiLLMActive: isMulti,
                     agentToggleActive: this.managers.agent.isEnabled(),
+                    intentRecognitionActive: this.managers.intentRecognition.isEnabled(),
                     currentChatId: this.managers.chat.getCurrentChatId()
                 });
             });
@@ -333,21 +335,21 @@ export class UIManager {
         // 意图识别开关
         if (dom.intentRecognitionToggle) {
             dom.intentRecognitionToggle.addEventListener('click', async () => {
-                const isEnabled = dom.intentRecognitionToggle.classList.toggle('active');
-                dom.intentRecognitionToggle.title = isEnabled ? '意图识别已开启，点击关闭' : '意图识别已关闭，点击开启';
-                showToast(`意图识别功能已${isEnabled ? '开启' : '关闭'}`, 'info');
-                // 更新管理器状态
-                this.managers.intentRecognition.enabled = isEnabled;
-                this.managers.intentRecognition.updateIntentRecognitionIndicator();
-                // 更新全局变量和UI
-                window.intentRecognitionEnabled = isEnabled;
-                this.managers.chat.updateWelcomeMessage();
-                saveUIState({
-                    multiLLMActive: dom.multiLLMToggle?.classList.contains('active') || false,
-                    agentToggleActive: this.managers.agent.isEnabled(),
-                    intentRecognitionActive: isEnabled,
-                    currentChatId: this.managers.chat.getCurrentChatId()
-                });
+                const previousState = this.managers.intentRecognition.isEnabled();
+                const targetState = !previousState;
+
+                // 预先更新UI反馈
+                this.applyIntentRecognitionState(targetState, { skipSave: true });
+
+                const synced = await this.managers.config.updateIntentRecognitionState(targetState);
+                if (!synced) {
+                    this.applyIntentRecognitionState(previousState, { skipSave: true });
+                    showToast('意图识别状态同步失败，请重试', 'error');
+                    return;
+                }
+
+                this.applyIntentRecognitionState(targetState);
+                showToast(`意图识别功能已${targetState ? '开启' : '关闭'}`, 'info');
             });
         }
     }
@@ -482,18 +484,7 @@ export class UIManager {
 
         // 恢复意图识别UI状态
         if (typeof savedState.intentRecognitionActive === 'boolean') {
-            if (savedState.intentRecognitionActive && dom.intentRecognitionToggle && !dom.intentRecognitionToggle.classList.contains('active')) {
-                dom.intentRecognitionToggle.classList.add('active');
-                dom.intentRecognitionToggle.title = '意图识别已开启，点击关闭';
-            } else if (!savedState.intentRecognitionActive && dom.intentRecognitionToggle && dom.intentRecognitionToggle.classList.contains('active')) {
-                dom.intentRecognitionToggle.classList.remove('active');
-                dom.intentRecognitionToggle.title = '意图识别已关闭，点击开启';
-            }
-            // 更新IntentRecognitionManager状态
-            this.managers.intentRecognition.enabled = savedState.intentRecognitionActive;
-            this.managers.intentRecognition.updateIntentRecognitionIndicator();
-            // 更新全局变量
-            window.intentRecognitionEnabled = savedState.intentRecognitionActive;
+            this.applyIntentRecognitionState(savedState.intentRecognitionActive, { skipSave: true });
         }
 
         // 恢复当前聊天ID（需要检查是否存在）
@@ -522,6 +513,32 @@ export class UIManager {
         window.multiLLMActiveNames = this.managers.config.multiLLMActiveNames;
         window.agentEnabled = this.managers.agent.isEnabled();
         window.intentRecognitionEnabled = this.managers.intentRecognition.isEnabled();
+    }
+
+    applyIntentRecognitionState(isEnabled, options = {}) {
+        const { skipSave = false } = options;
+        const normalized = !!isEnabled;
+
+        if (dom.intentRecognitionToggle) {
+            dom.intentRecognitionToggle.classList.toggle('active', normalized);
+            dom.intentRecognitionToggle.title = normalized ? '意图识别已开启，点击关闭' : '意图识别已关闭，点击开启';
+        }
+
+        if (this.managers.intentRecognition && typeof this.managers.intentRecognition.setEnabled === 'function') {
+            this.managers.intentRecognition.setEnabled(normalized);
+        }
+
+        window.intentRecognitionEnabled = normalized;
+        this.managers.chat.updateWelcomeMessage();
+
+        if (!skipSave) {
+            saveUIState({
+                multiLLMActive: dom.multiLLMToggle?.classList.contains('active') || false,
+                agentToggleActive: this.managers.agent.isEnabled(),
+                intentRecognitionActive: normalized,
+                currentChatId: this.managers.chat.getCurrentChatId()
+            });
+        }
     }
 
     echoUserMessage(content) {

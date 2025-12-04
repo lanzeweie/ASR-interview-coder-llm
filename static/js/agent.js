@@ -312,11 +312,16 @@ export class IntentRecognitionManager {
         return this.enabled;
     }
 
-    // 切换意图识别状态
-    async toggle() {
-        this.enabled = !this.enabled;
+    // 显式设置状态，保持指示器同步
+    setEnabled(enabled) {
+        this.enabled = !!enabled;
         this.updateIntentRecognitionIndicator();
         return this.enabled;
+    }
+
+    // 切换意图识别状态
+    async toggle() {
+        return this.setEnabled(!this.enabled);
     }
 
     // 更新意图识别状态指示器
@@ -333,8 +338,7 @@ export class IntentRecognitionManager {
     // 初始化意图识别状态
     initIntentRecognitionStatus() {
         // 默认状态为关闭
-        this.enabled = false;
-        this.updateIntentRecognitionIndicator();
+        this.setEnabled(false);
     }
 }
 

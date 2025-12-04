@@ -579,20 +579,25 @@
     /* 最高收缩优先级 */
 }
 
-/* 容器查询：面板过窄时，隐藏部分按钮 */
-@container (max-width: 320px) {
-    .control-btn[title="发送全部到AI"] {
+/* 容器查询：面板过窄时，优先隐藏次要控制按钮 */
+@container (max-width: 360px) {
+    .control-btn[title="声纹管理"] {
         display: none;
-        /* 隐藏发送全部按钮 */
+        /* 先隐藏声纹管理，保留发送全部 */
+    }
+}
+
+@container (max-width: 320px) {
+    .control-btn[title="清空记录"] {
+        display: none;
+        /* 进一步缩小时再隐藏清空按钮 */
     }
 }
 
 @container (max-width: 280px) {
-
-    .control-btn[title="发送全部到AI"],
-    .control-btn[title="清空记录"] {
+    .control-btn[title="发送全部到AI"] {
         display: none;
-        /* 隐藏发送全部和清空按钮 */
+        /* 最后才隐藏发送全部 */
     }
 }
 

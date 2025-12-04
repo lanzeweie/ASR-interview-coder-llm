@@ -135,6 +135,8 @@ async function loadInitialState() {
 
         // 6. 初始化意图识别状态
         managers.intentRecognition.initIntentRecognitionStatus();
+        const backendIntentEnabled = window.intentRecognitionEnabled === true;
+        managers.ui.applyIntentRecognitionState(backendIntentEnabled, { skipSave: false });
 
         // 7. 更新全局变量
         managers.ui.updateGlobalVariables();
