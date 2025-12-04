@@ -1174,6 +1174,25 @@ export class ConfigManager {
         return baseName;
     }
 
+    getConfigDisplayName(configName, preferIdentity = false) {
+        if (!configName) return '';
+        const config = this.configs.find(c => c.name === configName);
+        if (!config) return configName;
+
+        if (preferIdentity && config.tags && config.tags.length > 0) {
+            const tag = this.normalizeIdentityTag(config.tags[0]);
+            if (tag) {
+                const identity = this.identities.find(i => i.id === tag);
+                if (identity && identity.enabled !== false && identity.name) {
+                    return identity.name;
+                }
+                return tag;
+            }
+        }
+
+        return config.name;
+    }
+
     // 更新全局显示名称（根据智囊团状态动态决定）
     updateCurrentDisplayName() {
         const displayName = this.getCurrentDisplayName();

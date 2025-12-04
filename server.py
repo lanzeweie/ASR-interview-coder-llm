@@ -464,12 +464,6 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
         await websocket.send_json({"type": "error", "content": "未选择任何模型加入集群 (请在设置中勾选)"})
         return
 
-    # 发送触发通知
-    await websocket.send_json({
-        "type": "agent_notification",
-        "content": f"🤖 智能分析已启动，将同时调用 {len(active_configs)} 个模型为您提供建议"
-    })
-
     # Prepare tasks
     async def stream_one(conf):
         name = conf["name"]

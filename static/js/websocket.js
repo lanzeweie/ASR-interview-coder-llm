@@ -274,26 +274,27 @@ export class LLMStreamManager {
     }
 
     // 获取或创建响应div
-    getOrCreateResponseDiv(modelName, currentConfigName) {
-        if (this.activeResponseDivs[modelName]) {
-            return this.activeResponseDivs[modelName];
+    getOrCreateResponseDiv(modelName, speakerName) {
+        const key = modelName || 'default';
+        if (this.activeResponseDivs[key]) {
+            return this.activeResponseDivs[key];
         }
 
         // 如果有预响应提示，先使用它，然后清除预响应引用
         let msgDiv;
-        if (this.preResponseDivs[modelName]) {
-            msgDiv = this.preResponseDivs[modelName];
-            delete this.preResponseDivs[modelName];
+        if (this.preResponseDivs[key]) {
+            msgDiv = this.preResponseDivs[key];
+            delete this.preResponseDivs[key];
         } else {
             // 创建新的响应div
             msgDiv = document.createElement('div');
             msgDiv.className = 'message ai';
 
             // Header with Model Tag - 使用当前模型配置名称
-            const speakerName = currentConfigName || 'AI 助手';
+            const safeName = speakerName || 'AI 助手';
             const headerHtml = modelName
-                ? `<div class="message-header"><span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span></div>`
-                : `<div class="message-header"><span class="speaker-name">${speakerName}</span></div>`;
+                ? `<div class="message-header"><span class="speaker-name">${safeName}</span><span class="model-tag">${modelName}</span></div>`
+                : `<div class="message-header"><span class="speaker-name">${safeName}</span></div>`;
 
             msgDiv.innerHTML = `
                 ${headerHtml}
@@ -303,23 +304,41 @@ export class LLMStreamManager {
 
         if (dom.llmWindow) {
             dom.llmWindow.appendChild(msgDiv);
-            this.activeResponseDivs[modelName || 'default'] = msgDiv;
+            this.activeResponseDivs[key] = msgDiv;
         }
         return msgDiv;
     }
 
     // 创建预响应提示
-    createPreResponse(isMulti, multiLLMActiveNames, currentConfigName) {
+    createPreResponse(isMulti, multiLLMActiveNames, { currentConfigName = '', resolveDisplayName } = {}) {
         // 清理旧的预响应提示
         this.preResponseDivs = {};
 
-        if (isMulti) {
+        const baseSpeaker = currentConfigName || window.currentDisplayName || 'AI 助手';
+        const resolveName = (configName, preferIdentity) => {
+            if (typeof resolveDisplayName === 'function' && configName) {
+                const resolved = resolveDisplayName(configName, preferIdentity);
+                if (resolved) return resolved;
+            }
+            if (configName && !preferIdentity) {
+                return configName;
+            }
+            return baseSpeaker;
+        };
+
+        const activeNames = multiLLMActiveNames instanceof Set
+            ? Array.from(multiLLMActiveNames)
+            : Array.isArray(multiLLMActiveNames)
+                ? multiLLMActiveNames
+                : [];
+
+        if (isMulti && activeNames.length > 0) {
             // 多模型模式：为每个活跃的模型创建预响应提示
-            multiLLMActiveNames.forEach(modelName => {
+            activeNames.forEach(modelName => {
                 const preDiv = document.createElement('div');
                 preDiv.className = 'message ai';
 
-                const speakerName = currentConfigName || 'AI 助手';
+                const speakerName = resolveName(modelName, true);
                 preDiv.innerHTML = `
                     <div class="message-header">
                         <span class="speaker-name">${speakerName}</span>
@@ -336,11 +355,11 @@ export class LLMStreamManager {
                 }
             });
         } else {
-            // 单模型模式：创建一个预响应提示
+            // 单模型模式或没有特定模型信息：创建一个预响应提示
             const preDiv = document.createElement('div');
             preDiv.className = 'message ai';
 
-            const speakerName = currentConfigName || 'AI 助手';
+            const speakerName = resolveName(currentConfigName || '', false);
             preDiv.innerHTML = `
                 <div class="message-header">
                     <span class="speaker-name">${speakerName}</span>

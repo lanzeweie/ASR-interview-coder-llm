@@ -390,9 +390,20 @@ export class LLMManager {
 
         if (data.type === 'chunk') {
             const model = data.model || 'default';
+            const preferIdentity = dom.multiLLMToggle?.classList.contains('active');
+            const isSpecificModel = model && model !== 'default';
+            let resolvedSpeaker = null;
+            if (typeof window.resolveConfigDisplayName === 'function' && isSpecificModel) {
+                resolvedSpeaker = window.resolveConfigDisplayName(model, preferIdentity);
+            }
+            const fallbackSpeaker = resolvedSpeaker
+                || window.currentDisplayName
+                || window.currentConfigName
+                || (isSpecificModel ? model : 'AI 助手');
+
             const div = this.streamManager.getOrCreateResponseDiv(
                 model,
-                window.currentDisplayName || window.currentConfigName
+                fallbackSpeaker
             );
             const contentDiv = div.querySelector('.message-content, .content');
             if (!contentDiv) return;
@@ -489,7 +500,10 @@ export class LLMManager {
                     this.streamManager.createPreResponse(
                         isMulti,
                         window.multiLLMActiveNames || new Set(),
-                        window.currentDisplayName || window.currentConfigName || ''
+                        {
+                            currentConfigName: window.currentConfigName || '',
+                            resolveDisplayName: window.resolveConfigDisplayName
+                        }
                     );
                 }
 
@@ -699,7 +713,14 @@ export class LLMManager {
 
                 // 创建预响应提示
                 if (this.streamManager) {
-                    this.streamManager.createPreResponse(isMulti, window.multiLLMActiveNames || new Set(), window.currentDisplayName || window.currentConfigName || '');
+                    this.streamManager.createPreResponse(
+                        isMulti,
+                        window.multiLLMActiveNames || new Set(),
+                        {
+                            currentConfigName: window.currentConfigName || '',
+                            resolveDisplayName: window.resolveConfigDisplayName
+                        }
+                    );
                 }
 
                 const payload = this.buildLLMPayload(isMulti);

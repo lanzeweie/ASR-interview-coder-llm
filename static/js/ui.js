@@ -508,6 +508,10 @@ export class UIManager {
         window.multiLLMActiveNames = this.managers.config.multiLLMActiveNames;
         window.agentEnabled = this.managers.agent.isEnabled();
         window.intentRecognitionEnabled = this.managers.intentRecognition.isEnabled();
+        window.resolveConfigDisplayName = (configName, preferIdentity = false) => {
+            if (!this.managers || !this.managers.config) return configName;
+            return this.managers.config.getConfigDisplayName(configName, preferIdentity);
+        };
     }
 
     persistUIState(extra = {}) {
