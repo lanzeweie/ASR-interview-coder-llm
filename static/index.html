@@ -363,6 +363,13 @@
                         <div id="tab-multi" class="tab-content">
                             <div class="multi-model-cluster">
                                 <div class="cluster-header">智囊团</div>
+                                <div class="cluster-subactions">
+                                    <button id="identity-manager-btn" class="btn btn-secondary">身份管理</button>
+                                </div>
+                                <p class="cluster-hint">
+                                    勾选下方模型即表示加入智囊团，开启智囊团模式后所有已勾选模型会并行协作、同步输出意见；
+                                    请确保每个模型都绑定了合适的身份提示词，以便协作时各司其职。
+                                </p>
                                 <div id="multi-model-list" class="multi-model-options"></div>
                             </div>
                         </div>
@@ -637,6 +644,47 @@
                             <!-- 声纹列表将在这里显示 -->
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 身份管理模态框 -->
+    <div id="identity-manager-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2 class="modal-title">身份管理</h2>
+                <button class="close-btn" aria-label="关闭" id="identity-manager-close-btn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M4 4L16 16M16 4L4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body identity-manager-body">
+                <div class="identity-form-panel">
+                    <div class="form-group">
+                        <label>身份 ID</label>
+                        <input type="text" id="identity-id-input" placeholder="例如: tech_assistant">
+                        <div class="form-hint">仅限字母、数字、下划线或连字符</div>
+                    </div>
+                    <div class="form-group">
+                        <label>身份名称</label>
+                        <input type="text" id="identity-name-input" placeholder="显示名称，如 技术辅助者">
+                    </div>
+                    <div class="form-group">
+                        <label>身份提示词</label>
+                        <textarea id="identity-prompt-input" rows="4"
+                            placeholder="描述该身份的角色设定，智囊团会优先使用此提示词"></textarea>
+                    </div>
+                    <div class="identity-form-actions">
+                        <button id="identity-modal-reset" class="btn btn-secondary">新建</button>
+                        <button id="identity-modal-save" class="btn btn-primary">保存</button>
+                    </div>
+                </div>
+                <div class="identity-list-panel">
+                    <h3>已创建身份</h3>
+                    <div id="identity-modal-list" class="identity-modal-list"></div>
                 </div>
             </div>
         </div>

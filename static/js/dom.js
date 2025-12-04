@@ -29,6 +29,15 @@ export const dom = {
     modelNameInput: document.getElementById('model-name'),
     systemPromptInput: document.getElementById('system-prompt'),
     systemPromptHint: document.getElementById('system-prompt-hint'),
+    identityManagerBtn: document.getElementById('identity-manager-btn'),
+    identityManagerModal: document.getElementById('identity-manager-modal'),
+    identityManagerCloseBtn: document.getElementById('identity-manager-close-btn'),
+    identityModalList: document.getElementById('identity-modal-list'),
+    identityModalSaveBtn: document.getElementById('identity-modal-save'),
+    identityModalResetBtn: document.getElementById('identity-modal-reset'),
+    identityIdInput: document.getElementById('identity-id-input'),
+    identityNameInput: document.getElementById('identity-name-input'),
+    identityPromptInput: document.getElementById('identity-prompt-input'),
 
     // Close modal buttons
     settingsCloseBtn: document.getElementById('settings-close-btn'),

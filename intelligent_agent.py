@@ -23,6 +23,34 @@ except ImportError:
     TRANSFORMERS_AVAILABLE = False
     print("[智能Agent] 未安装 transformers/torch，本地模型功能不可用")
 
+LEGACY_IDENTITY_MAP = {
+    "思考": "tech_assistant",
+    "快速": "concise_assistant",
+    "引导": "guide",
+    "技术辅助者": "tech_assistant",
+    "精简辅助者": "concise_assistant",
+    "资深求职着": "guide"
+}
+
+
+def normalize_identity_identifier(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    identifier = value.strip()
+    if not identifier:
+        return ""
+    identifier = re.sub(r"\s+", "_", identifier)
+    mapped = LEGACY_IDENTITY_MAP.get(identifier)
+    if mapped:
+        return mapped
+    identifier = identifier.lower()
+    mapped = LEGACY_IDENTITY_MAP.get(identifier)
+    if mapped:
+        return mapped
+    if identifier.endswith("_tag"):
+        identifier = identifier[:-4]
+    return identifier
+
 
 def format_messages_compact(messages: List[Dict]) -> str:
     """将消息压缩为XML格式，减少token消耗"""
@@ -471,24 +499,41 @@ class ThinkTankAgent:
             }
 
         role_data = self._safe_load_json(self.role_config_path)
-        roles = role_data.get('think_tank_roles', [])
+        raw_roles = role_data.get('think_tank_roles', [])
+        roles = []
+        for role in raw_roles:
+            role_id = normalize_identity_identifier(role.get('id') or role.get('tag_key'))
+            if not role_id:
+                continue
+            roles.append({
+                "id": role_id,
+                "name": role.get("name", role_id),
+                "prompt": role.get("prompt", ""),
+                "enabled": bool(role.get("enabled", True))
+            })
 
         config_data = self._safe_load_json(self.agent_config_path)
         active_names = set(config_data.get('multi_llm_active_names', []))
         configs = config_data.get('configs', [])
+        config_tag_map = {
+            c['name']: [
+                normalize_identity_identifier(tag)
+                for tag in c.get('tags', []) if tag
+            ]
+            for c in configs
+        }
 
         role_targets = {}
         for role in roles:
+            if not role.get("enabled", True):
+                continue
             role_id = role.get('id')
-            tag_key = role.get('tag_key')
             matching_configs = [
-                c for c in configs
-                if c['name'] in active_names
-                and c.get('tags')
-                and tag_key in c['tags']
+                name for name, tags in config_tag_map.items()
+                if name in active_names and role_id in tags
             ]
             if matching_configs:
-                role_targets[role_id] = matching_configs[0]['name']
+                role_targets[role_id] = matching_configs[0]
 
         if role_targets:
             print(f"[智囊团] 匹配到 {len(role_targets)} 个角色目标")

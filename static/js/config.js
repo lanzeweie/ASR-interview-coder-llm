@@ -5,6 +5,15 @@
 import { dom, domUtils } from './dom.js';
 import { showToast } from './utils.js';
 
+const LEGACY_IDENTITY_MAP = {
+    '思考': 'tech_assistant',
+    '快速': 'concise_assistant',
+    '引导': 'guide',
+    '技术辅助者': 'tech_assistant',
+    '精简辅助者': 'concise_assistant',
+    '资深求职着': 'guide'
+};
+
 // ===== 配置管理类 =====
 export class ConfigManager {
     constructor() {
@@ -13,6 +22,43 @@ export class ConfigManager {
         this.multiLLMActiveNames = new Set();
         this.editingConfigName = null; // Track which config is being edited in the form
         this.identities = []; // Store loaded identities
+        this.identityEventsInitialized = false;
+        this.editingIdentityId = null;
+    }
+
+    normalizeIdentityTag(value = '') {
+        if (!value) return '';
+        let normalized = value.trim();
+        if (!normalized) return '';
+        if (LEGACY_IDENTITY_MAP[normalized]) {
+            return LEGACY_IDENTITY_MAP[normalized];
+        }
+        const lowered = normalized.toLowerCase();
+        if (LEGACY_IDENTITY_MAP[lowered]) {
+            return LEGACY_IDENTITY_MAP[lowered];
+        }
+        normalized = lowered.replace(/\s+/g, '_');
+        if (normalized.endsWith('_tag')) {
+            normalized = normalized.slice(0, -4);
+        }
+        return normalized;
+    }
+
+    normalizeConfigTags(config = {}) {
+        if (config && Array.isArray(config.tags)) {
+            config.tags = config.tags
+                .map(tag => this.normalizeIdentityTag(tag))
+                .filter(Boolean);
+        } else if (config) {
+            config.tags = [];
+        }
+        return config;
+    }
+
+    getIdentityDisplayName(tag) {
+        const normalized = this.normalizeIdentityTag(tag);
+        const identity = this.identities.find(i => i.id === normalized);
+        return identity ? identity.name : normalized;
     }
 
     // 加载配置
@@ -21,7 +67,7 @@ export class ConfigManager {
             const res = await fetch('/api/config');
             const data = await res.json();
 
-            this.configs = (data.configs || []);
+            this.configs = (data.configs || []).map(config => this.normalizeConfigTags({ ...config }));
             this.currentConfigName = data.current_config;
             this.multiLLMActiveNames = new Set(data.multi_llm_active_names || []);
 
@@ -51,6 +97,7 @@ export class ConfigManager {
 
             // 加载意图识别配置
             await this.loadIntentRecognitionConfig();
+            this.initIdentityManagementEvents();
 
             return {
                 currentConfigName: this.currentConfigName,
@@ -68,32 +115,34 @@ export class ConfigManager {
             const res = await fetch('/api/identities');
             const data = await res.json();
 
-            // 身份映射：旧身份 → 新身份 (for backward compatibility during loading)
-            const tagMapping = {
-                '思考': 'tech_assistant_tag',
-                '快速': 'concise_assistant_tag',
-                '引导': 'guide_tag'
-            };
-
-            // Apply migration to loaded identities if they are old format
-            this.identities = (data || []).map(identity => {
-                if (tagMapping[identity.name]) {
-                    identity.name = tagMapping[identity.name];
-                }
-                return identity;
+            const normalizedIdentities = (data || []).map(identity => {
+                const normalizedId = this.normalizeIdentityTag(identity.id || identity.tag_key || identity.name);
+                return {
+                    id: normalizedId,
+                    name: identity.name || normalizedId,
+                    prompt: identity.prompt || '',
+                    enabled: identity.enabled !== false
+                };
             });
 
-            // Also apply migration to existing configs' tags
-            this.configs = this.configs.map(config => {
-                if (config.tags) {
-                    config.tags = config.tags.map(tag => tagMapping[tag] || tag);
+            // 去除重复ID（保留最后一次定义）
+            const uniqueMap = new Map();
+            normalizedIdentities.forEach(identity => {
+                if (identity.id) {
+                    uniqueMap.set(identity.id, identity);
                 }
-                return config;
             });
 
+            this.identities = Array.from(uniqueMap.values());
+            this.configs = this.configs.map(config => this.normalizeConfigTags(config));
+            const selectedTag = this.normalizeIdentityTag(dom.configTagsInput?.value || '');
+            this.renderIdentityOptions(selectedTag);
+            this.renderIdentityModalList();
         } catch (e) {
             console.error("Failed to load identities:", e);
             this.identities = [];
+            this.renderIdentityOptions('');
+            this.renderIdentityModalList();
         }
     }
 
@@ -112,6 +161,8 @@ export class ConfigManager {
             return;
         }
 
+        const normalizedSelected = this.normalizeIdentityTag(selectedTag);
+
         this.identities.forEach((identity, index) => {
             const option = document.createElement('div');
             option.className = 'tag-option';
@@ -120,13 +171,12 @@ export class ConfigManager {
             input.type = 'radio';
             input.name = 'identity_option';
             input.id = `identity-${index}`;
-            // Use tag_key as the value if available, otherwise name
-            const tagValue = identity.tag_key || identity.name;
+            const tagValue = identity.id;
             input.value = tagValue;
             input.dataset.prompt = identity.prompt || "";
 
             // Check if this is the selected tag
-            if (selectedTag && (selectedTag === tagValue || selectedTag === identity.name)) {
+            if (normalizedSelected && normalizedSelected === tagValue) {
                 input.checked = true;
                 input.dataset.wasChecked = "true";
                 // Lock system prompt if identity is selected
@@ -139,6 +189,12 @@ export class ConfigManager {
             label.htmlFor = `identity-${index}`;
             label.className = 'tag-label'; // Add styling class
             label.textContent = identity.name;
+            if (identity.enabled === false) {
+                const badge = document.createElement('span');
+                badge.className = 'identity-tag-disabled';
+                badge.textContent = '未启用';
+                label.appendChild(badge);
+            }
 
             // Click event for toggle logic and auto-fill
             input.onclick = (e) => {
@@ -174,6 +230,247 @@ export class ConfigManager {
             option.appendChild(label);
             container.appendChild(option);
         });
+    }
+
+    renderIdentityModalList() {
+        const list = document.getElementById('identity-modal-list');
+        if (!list) return;
+
+        list.innerHTML = '';
+        if (this.identities.length === 0) {
+            list.innerHTML = '<div class="no-identities">暂无身份，请先添加</div>';
+            return;
+        }
+
+        this.identities.forEach(identity => {
+            const card = document.createElement('div');
+            card.className = 'identity-card';
+
+            const info = document.createElement('div');
+            info.className = 'identity-info';
+            info.innerHTML = `
+                <div class="identity-name">${identity.name}</div>
+                <div class="identity-meta">ID: ${identity.id}</div>
+                <div class="identity-prompt">${identity.prompt || '（未设置提示词）'}</div>
+            `;
+
+            const actions = document.createElement('div');
+            actions.className = 'identity-actions';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = `identity-toggle ${identity.enabled ? 'active' : ''}`;
+            toggleBtn.textContent = identity.enabled ? '已启用' : '未启用';
+            toggleBtn.onclick = async () => {
+                const targetState = !identity.enabled;
+                toggleBtn.disabled = true;
+                const currentSelection = dom.configTagsInput?.value || '';
+                const success = await this.updateIdentity(identity.id, { enabled: targetState });
+                toggleBtn.disabled = false;
+                if (success) {
+                    showToast(`身份「${identity.name}」已${targetState ? '启用' : '停用'}`, 'info');
+                    await this.loadIdentities();
+                    this.renderIdentityOptions(this.normalizeIdentityTag(currentSelection));
+                }
+            };
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-secondary';
+            editBtn.textContent = '编辑';
+            editBtn.onclick = () => this.startIdentityEdit(identity.id);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-danger';
+            deleteBtn.textContent = '删除';
+            deleteBtn.onclick = async () => {
+                const confirmDelete = confirm(`确定删除身份「${identity.name}」吗？`);
+                if (!confirmDelete) return;
+                const success = await this.deleteIdentity(identity.id);
+                if (success) {
+                    if (this.editingIdentityId === identity.id) {
+                        this.resetIdentityForm();
+                    }
+                    const selectedTag = dom.configTagsInput?.value || '';
+                    await this.loadIdentities();
+                    this.renderIdentityOptions(this.normalizeIdentityTag(selectedTag));
+                }
+            };
+
+            actions.appendChild(toggleBtn);
+            actions.appendChild(editBtn);
+            actions.appendChild(deleteBtn);
+            card.appendChild(info);
+            card.appendChild(actions);
+            list.appendChild(card);
+        });
+    }
+
+    initIdentityManagementEvents() {
+        if (this.identityEventsInitialized) return;
+        this.identityEventsInitialized = true;
+
+        domUtils.addEvent('identity-manager-btn', 'click', () => {
+            this.openIdentityManager();
+        });
+
+        const closeModal = () => this.closeIdentityManager();
+        domUtils.addEvent('identity-manager-close-btn', 'click', closeModal);
+        const overlay = document.querySelector('#identity-manager-modal .modal-overlay');
+        if (overlay) {
+            overlay.addEventListener('click', closeModal);
+        }
+
+        domUtils.addEvent('identity-modal-save', 'click', async () => {
+            await this.handleIdentitySubmit();
+        });
+        domUtils.addEvent('identity-modal-reset', 'click', () => {
+            this.resetIdentityForm();
+        });
+    }
+
+    openIdentityManager() {
+        if (!dom.identityManagerModal) return;
+        dom.identityManagerModal.classList.add('active');
+        this.resetIdentityForm({ keepValues: false });
+        this.renderIdentityModalList();
+    }
+
+    closeIdentityManager() {
+        if (!dom.identityManagerModal) return;
+        dom.identityManagerModal.classList.remove('active');
+        this.resetIdentityForm({ keepValues: true });
+    }
+
+    startIdentityEdit(identityId) {
+        const identity = this.identities.find(i => i.id === identityId);
+        if (!identity) return;
+        this.editingIdentityId = identityId;
+        if (dom.identityIdInput) {
+            dom.identityIdInput.value = identity.id;
+            dom.identityIdInput.disabled = true;
+        }
+        if (dom.identityNameInput) dom.identityNameInput.value = identity.name;
+        if (dom.identityPromptInput) dom.identityPromptInput.value = identity.prompt || '';
+        const saveBtn = document.getElementById('identity-modal-save');
+        if (saveBtn) {
+            saveBtn.textContent = '保存修改';
+        }
+    }
+
+    resetIdentityForm(options = {}) {
+        const { keepValues = false } = options;
+        this.editingIdentityId = null;
+        if (dom.identityIdInput) {
+            dom.identityIdInput.disabled = false;
+            if (!keepValues) dom.identityIdInput.value = '';
+        }
+        if (dom.identityNameInput && !keepValues) dom.identityNameInput.value = '';
+        if (dom.identityPromptInput && !keepValues) dom.identityPromptInput.value = '';
+        const saveBtn = document.getElementById('identity-modal-save');
+        if (saveBtn) {
+            saveBtn.textContent = '保存';
+        }
+    }
+
+    async handleIdentitySubmit() {
+        const rawId = dom.identityIdInput?.value || this.editingIdentityId || '';
+        const normalizedId = this.normalizeIdentityTag(rawId);
+        const name = (dom.identityNameInput?.value || '').trim();
+        const prompt = (dom.identityPromptInput?.value || '').trim();
+
+        if (!normalizedId) {
+            showToast('请输入合法的身份ID（仅限字母、数字、下划线或连字符）', 'error');
+            return;
+        }
+        if (!name) {
+            showToast('请输入身份名称', 'error');
+            return;
+        }
+        if (!prompt) {
+            showToast('请输入身份提示词', 'error');
+            return;
+        }
+
+        let success = false;
+        if (this.editingIdentityId) {
+            success = await this.updateIdentity(this.editingIdentityId, { name, prompt });
+        } else {
+            success = await this.createIdentity({
+                id: normalizedId,
+                name,
+                prompt,
+                enabled: true
+            });
+        }
+
+        if (success) {
+            const selectedTag = dom.configTagsInput?.value || '';
+            await this.loadIdentities();
+            this.renderIdentityOptions(this.normalizeIdentityTag(selectedTag));
+            this.resetIdentityForm();
+        }
+    }
+
+    async createIdentity(payload) {
+        try {
+            const response = await fetch('/api/identities', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') {
+                const message = result.detail || '创建身份失败';
+                showToast(message, 'error');
+                return false;
+            }
+            showToast('身份已创建', 'success');
+            return true;
+        } catch (error) {
+            console.error('创建身份失败:', error);
+            showToast('创建身份失败', 'error');
+            return false;
+        }
+    }
+
+    async updateIdentity(roleId, payload) {
+        try {
+            const response = await fetch(`/api/identities/${roleId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') {
+                const message = result.detail || '更新身份失败';
+                showToast(message, 'error');
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('更新身份失败:', error);
+            showToast('更新身份失败', 'error');
+            return false;
+        }
+    }
+
+    async deleteIdentity(roleId) {
+        try {
+            const response = await fetch(`/api/identities/${roleId}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                const result = await response.json().catch(() => ({}));
+                const message = result.detail || '删除身份失败';
+                showToast(message, 'error');
+                return false;
+            }
+            showToast('身份已删除', 'success');
+            return true;
+        } catch (error) {
+            console.error('删除身份失败:', error);
+            showToast('删除身份失败', 'error');
+            return false;
+        }
     }
 
     // 渲染配置列表
@@ -291,18 +588,7 @@ export class ConfigManager {
 
             // 加载身份到快速选择（支持旧身份兼容）
             let selectedTag = config.tags && config.tags.length > 0 ? config.tags[0] : '';
-
-            // 向后兼容：旧身份映射到新身份
-            const tagMapping = {
-                '思考': 'tech_assistant_tag',
-                '快速': 'concise_assistant_tag',
-                '引导': 'guide_tag'
-            };
-
-            // 如果是旧身份，转换为新身份
-            if (tagMapping[selectedTag]) {
-                selectedTag = tagMapping[selectedTag];
-            }
+            selectedTag = this.normalizeIdentityTag(selectedTag);
 
             // Render identities with selection
             this.renderIdentityOptions(selectedTag);
@@ -369,9 +655,10 @@ export class ConfigManager {
                     };
                     return tagMap[tag] || tag;
                 });
+                const displayTags = config.tags.map(tag => this.getIdentityDisplayName(tag));
                 label.innerHTML = `
                     <span>${config.name}</span>
-                    <span class="model-tag-small">${chineseTags.join(', ')}</span>
+                    <span class="model-tag-small">${displayTags.join(', ')}</span>
                 `;
 
                 option.appendChild(checkbox);
@@ -399,7 +686,7 @@ export class ConfigManager {
     updateTagsInput() {
         const selectedRadio = document.querySelector('.tags-quick-select input[type="radio"]:checked');
         if (selectedRadio) {
-            dom.configTagsInput.value = selectedRadio.value;
+            dom.configTagsInput.value = this.normalizeIdentityTag(selectedRadio.value);
         } else {
             dom.configTagsInput.value = '';
         }
@@ -433,17 +720,10 @@ export class ConfigManager {
         }
 
         // 获取并映射身份：旧身份 → 新身份
-        let tags = dom.configTagsInput.value.split(',').map(t => t.trim()).filter(t => t);
-
-        // 身份映射：旧身份 → 新身份 (for backward compatibility during saving)
-        const tagMapping = {
-            '思考': 'tech_assistant_tag',
-            '快速': 'concise_assistant_tag',
-            '引导': 'guide_tag'
-        };
-
-        // Convert to new identity format if old identity name is used
-        tags = tags.map(tag => tagMapping[tag] || tag);
+        let tags = dom.configTagsInput.value
+            .split(',')
+            .map(t => this.normalizeIdentityTag(t))
+            .filter(t => t);
 
         // ===== 身份唯一性验证 =====
         // 检查新配置的身份是否与其他配置冲突
@@ -456,8 +736,9 @@ export class ConfigManager {
                 );
 
                 if (conflictConfig) {
+                    const displayName = this.getIdentityDisplayName(tag);
                     showToast(
-                        `身份 "${tag}" 已被模型 "${conflictConfig.name}" 使用，每个身份只能绑定一个模型`,
+                        `身份 "${displayName}" 已被模型 "${conflictConfig.name}" 使用，每个身份只能绑定一个模型`,
                         'error'
                     );
                     return false;
@@ -871,18 +1152,10 @@ export class ConfigManager {
 
         // 只有开启智囊团模式时，才显示身份标签名
         if (this.multiLLMActiveNames.size > 0 && config.tags && config.tags.length > 0) {
-            const tag = config.tags[0];
-            // Find identity with this tag
-            const identity = this.identities.find(i => i.tag_key === tag || i.name === tag);
+            const tag = this.normalizeIdentityTag(config.tags[0]);
+            const identity = this.identities.find(i => i.id === tag);
             if (identity) return identity.name;
-
-            // Fallback map
-            const tagMap = {
-                'tech_assistant_tag': '技术辅助者',
-                'concise_assistant_tag': '精简辅助者',
-                'guide_tag': '引导者'
-            };
-            if (tagMap[tag]) return tagMap[tag];
+            if (tag) return tag;
         }
 
         // 默认显示配置名称
@@ -913,21 +1186,13 @@ export class ConfigManager {
         let displayName = this.currentConfigName;
 
         // 只有开启智囊团开关且有身份标签时，才显示身份标签名
-        if (isMultiToggleActive && config.tags && config.tags.length > 0) {
-            const tag = config.tags[0];
-            const identity = this.identities.find(i => i.tag_key === tag || i.name === tag);
+        if (isMultiToggleActive && config && config.tags && config.tags.length > 0) {
+            const tag = this.normalizeIdentityTag(config.tags[0]);
+            const identity = this.identities.find(i => i.id === tag);
             if (identity) {
                 displayName = identity.name;
-            } else {
-                // Fallback map
-                const tagMap = {
-                    'tech_assistant_tag': '技术辅助者',
-                    'concise_assistant_tag': '精简辅助者',
-                    'guide_tag': '引导者'
-                };
-                if (tagMap[tag]) {
-                    displayName = tagMap[tag];
-                }
+            } else if (tag) {
+                displayName = tag;
             }
         }
 

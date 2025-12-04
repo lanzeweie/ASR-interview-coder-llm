@@ -2,6 +2,7 @@ import threading
 import asyncio
 import json
 import os
+import re
 import time
 import argparse
 import wave
@@ -51,14 +52,93 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- Config Management ---
 CONFIG_FILE = "api_config.json"
+AGENT_ROLE_FILE = "data/agent.json"
+
+LEGACY_IDENTITY_MAP = {
+    "思考": "tech_assistant",
+    "快速": "concise_assistant",
+    "引导": "guide",
+    "技术辅助者": "tech_assistant",
+    "精简辅助者": "concise_assistant",
+    "资深求职着": "guide"
+}
+
+
+def normalize_identity_identifier(value: str | None) -> str:
+    if not value:
+        return ""
+    identifier = value.strip()
+    if not identifier:
+        return ""
+    identifier = re.sub(r"\s+", "_", identifier)
+    # 优先匹配中文/别名
+    mapped = LEGACY_IDENTITY_MAP.get(identifier)
+    if mapped:
+        return mapped
+
+    identifier = identifier.lower()
+    mapped = LEGACY_IDENTITY_MAP.get(identifier)
+    if mapped:
+        return mapped
+
+    if identifier.endswith("_tag"):
+        identifier = identifier[:-4]
+    return identifier
+
+
+def load_think_tank_roles() -> list[dict]:
+    if not os.path.exists(AGENT_ROLE_FILE):
+        return []
+    try:
+        with open(AGENT_ROLE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        print(f"[智囊团] 加载身份失败: {exc}")
+        return []
+
+    roles = []
+    for role in data.get("think_tank_roles", []):
+        role_id = normalize_identity_identifier(role.get("id") or role.get("tag_key"))
+        if not role_id:
+            continue
+        roles.append({
+            "id": role_id,
+            "name": role.get("name", role_id),
+            "prompt": role.get("prompt", ""),
+            "enabled": bool(role.get("enabled", True))
+        })
+    return roles
+
+
+def save_think_tank_roles(roles: list[dict]):
+    os.makedirs(os.path.dirname(AGENT_ROLE_FILE), exist_ok=True)
+    payload = {"think_tank_roles": roles}
+    with open(AGENT_ROLE_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+def normalize_config_tags(config: dict) -> dict:
+    tags = config.get("tags") or []
+    normalized_tags = []
+    for tag in tags:
+        normalized = normalize_identity_identifier(tag)
+        if normalized:
+            normalized_tags.append(normalized)
+    config["tags"] = normalized_tags
+    return config
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            configs = data.get("configs", [])
+            data["configs"] = [normalize_config_tags(dict(config)) for config in configs]
+            return data
     return {"configs": [], "current_config": ""}
 
 def save_config(config):
+    configs = config.get("configs", [])
+    config["configs"] = [normalize_config_tags(dict(conf)) for conf in configs]
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4)
 
@@ -539,16 +619,87 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/identities")
 async def get_identities():
-    """Get available identities from data/agent.json"""
-    try:
-        if os.path.exists("data/agent.json"):
-            with open("data/agent.json", "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("think_tank_roles", [])
-        return []
-    except Exception as e:
-        print(f"Error loading identities: {e}")
-        return []
+    """获取可用身份"""
+    return load_think_tank_roles()
+
+
+def validate_identity_payload(role_id: str, name: str, prompt: str):
+    if not role_id:
+        raise HTTPException(status_code=400, detail="请提供唯一的身份ID")
+    if not re.match(r"^[a-z0-9_-]+$", role_id):
+        raise HTTPException(status_code=400, detail="ID 仅能包含字母、数字、下划线或连字符")
+    if not name:
+        raise HTTPException(status_code=400, detail="请输入身份名称")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="请输入身份提示词")
+
+
+@app.post("/api/identities")
+async def create_identity(data: dict = Body(...)):
+    raw_id = data.get("id", "")
+    normalized_id = normalize_identity_identifier(raw_id)
+    name = (data.get("name") or "").strip()
+    prompt = (data.get("prompt") or "").strip()
+    enabled = bool(data.get("enabled", True))
+
+    validate_identity_payload(normalized_id, name, prompt)
+
+    roles = load_think_tank_roles()
+    if any(normalize_identity_identifier(role.get("id")) == normalized_id for role in roles):
+        raise HTTPException(status_code=400, detail="该身份ID已存在")
+
+    new_role = {
+        "id": normalized_id,
+        "name": name,
+        "prompt": prompt,
+        "enabled": enabled
+    }
+    roles.append(new_role)
+    save_think_tank_roles(roles)
+    return {"status": "success", "role": new_role}
+
+
+@app.put("/api/identities/{role_id}")
+async def update_identity(role_id: str, data: dict = Body(...)):
+    normalized_id = normalize_identity_identifier(role_id)
+    roles = load_think_tank_roles()
+    target = next((role for role in roles if normalize_identity_identifier(role.get("id")) == normalized_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="身份不存在")
+
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="身份名称不能为空")
+        target["name"] = name
+
+    if "prompt" in data:
+        prompt = (data.get("prompt") or "").strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail="提示词不能为空")
+        target["prompt"] = prompt
+
+    if "enabled" in data:
+        target["enabled"] = bool(data.get("enabled"))
+
+    save_think_tank_roles(roles)
+    return {"status": "success", "role": target}
+
+
+@app.delete("/api/identities/{role_id}")
+async def delete_identity(role_id: str):
+    normalized_id = normalize_identity_identifier(role_id)
+    roles = load_think_tank_roles()
+    index = next(
+        (idx for idx, role in enumerate(roles) if normalize_identity_identifier(role.get("id")) == normalized_id),
+        None
+    )
+    if index is None:
+        raise HTTPException(status_code=404, detail="身份不存在")
+
+    removed = roles.pop(index)
+    save_think_tank_roles(roles)
+    return {"status": "success", "removed": removed}
 
 @app.get("/api/config")
 async def get_config():
@@ -1183,8 +1334,9 @@ async def llm_websocket(websocket: WebSocket):
                     config_prompt = curr_conf.get("system_prompt", "") if curr_conf else ""
 
                     # 检查是否选择了身份标签 - 如果选择了，禁用 system prompt
-                    tags = curr_conf.get("tags", []) if curr_conf else []
-                    has_tags = len(tags) > 0
+                    raw_tags = curr_conf.get("tags", []) if curr_conf else []
+                    normalized_tags = [normalize_identity_identifier(tag) for tag in raw_tags if tag]
+                    has_tags = len(normalized_tags) > 0
 
                     # 应用 System Prompt
                     if config_prompt and not has_tags:
@@ -1197,27 +1349,22 @@ async def llm_websocket(websocket: WebSocket):
                     elif has_tags:
                         # 如果有身份标签，尝试加载对应的 Prompt
                         try:
-                            agent_json_path = "data/agent.json"
-                            if os.path.exists(agent_json_path):
-                                with open(agent_json_path, "r", encoding="utf-8") as f:
-                                    agent_data = json.load(f)
-                                    roles = agent_data.get("think_tank_roles", [])
-                                    # 查找匹配的标签 (使用第一个标签)
-                                    active_tag = tags[0]
-                                    role = next((r for r in roles if r["tag_key"] == active_tag), None)
-                                    
-                                    if role and role.get("prompt"):
-                                        tag_prompt = role["prompt"]
-                                        print(f"[智能分析] 应用身份标签 Prompt: {role['name']}")
-                                        
-                                        # 替换或插入 system prompt
-                                        sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
-                                        if sys_idx != -1:
-                                            current_messages[sys_idx]["content"] = tag_prompt
-                                        else:
-                                            current_messages.insert(0, {"role": "system", "content": tag_prompt})
-                                    else:
-                                        print(f"[智能分析] 未找到标签 '{active_tag}' 的 Prompt 定义")
+                            roles = load_think_tank_roles()
+                            active_tag = normalized_tags[0]
+                            role = next((r for r in roles if normalize_identity_identifier(r.get("id")) == active_tag), None)
+
+                            if role and role.get("prompt"):
+                                tag_prompt = role["prompt"]
+                                print(f"[智能分析] 应用身份标签 Prompt: {role['name']}")
+
+                                # 替换或插入 system prompt
+                                sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
+                                if sys_idx != -1:
+                                    current_messages[sys_idx]["content"] = tag_prompt
+                                else:
+                                    current_messages.insert(0, {"role": "system", "content": tag_prompt})
+                            else:
+                                print(f"[智能分析] 未找到标签 '{active_tag}' 的 Prompt 定义")
                         except Exception as e:
                             print(f"[错误] 加载身份标签 Prompt 失败: {e}")
 
@@ -1228,7 +1375,7 @@ async def llm_websocket(websocket: WebSocket):
                     print(f"[调试] [智能分析] 当前配置: {curr_conf.get('name', 'Unknown')}")
                     print(f"[调试] [智能分析] 使用 System Prompt: {config_prompt if (config_prompt and not has_tags) else '否'}")
                     if has_tags:
-                        print(f"[调试] [智能分析] 身份标签: {tags} (System Prompt 被禁用)")
+                        print(f"[调试] [智能分析] 身份标签: {normalized_tags} (System Prompt 被禁用)")
                     print(f"[调试] [智能分析] 消息总数: {len(current_messages)}")
                     print(f"{'-'*80}")
                     print("[调试] [智能分析] 完整 Prompt 内容:")

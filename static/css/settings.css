@@ -415,6 +415,26 @@
     font-weight: 400;
 }
 
+.cluster-subactions {
+    margin-bottom: var(--gap-md);
+}
+
+.cluster-subactions .btn {
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
+.cluster-hint {
+    margin-bottom: var(--gap-md);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: var(--gap-md);
+}
+
 /* 无配置提示 */
 .no-config-message {
     padding: var(--gap-xl);
@@ -1187,6 +1207,8 @@
    ======================================== */
 
 /* 平板端优化 */
+
+
 @media (max-width: 1024px) {
     .modal-content {
         max-width: 95%;
@@ -1397,8 +1419,107 @@
         padding: 10px 12px;
         font-size: 11px;
     }
+}
 
-    .help-icon {
-        font-size: 20px;
-    }
+.help-icon {
+    font-size: 20px;
+}
+
+/* ================= 身份管理模态 ================= */
+.identity-manager-body {
+    display: flex;
+    gap: var(--gap-lg);
+    flex-wrap: wrap;
+}
+
+.identity-form-panel,
+.identity-list-panel {
+    flex: 1 1 320px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: var(--gap-lg);
+    min-width: 0;
+}
+
+.identity-list-panel h3 {
+    margin-top: 0;
+    margin-bottom: var(--gap-md);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.identity-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.identity-card {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--gap-md);
+    padding: var(--gap-md);
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+}
+
+.identity-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.identity-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.identity-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin: 4px 0;
+}
+
+.identity-prompt {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.identity-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+.identity-toggle {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.identity-toggle.active {
+    background: rgba(79, 70, 229, 0.12);
+    border-color: rgba(79, 70, 229, 0.4);
+    color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+}
+
+.identity-tag-disabled {
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    background: var(--bg-primary);
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+}
 }
