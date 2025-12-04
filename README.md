@@ -1,110 +1,58 @@
 # 总流程
+第一层是 智能分析或用户手动发送消息
+第二层是 意图识别 
+第三层是 用户个性化 
+第四层是 智囊团或直接回答
+
 ```mermaid
 flowchart TD
+
+    %% --- 系统入口 ---
     subgraph Entrances [系统入口]
-        ASR([ASR消息输入<br/>包含说话人和文本])
-        Manual([用户手动提交消息])
+        ASR([ASR消息输入])
+        Manual([手动输入消息])
     end
 
-    subgraph ASRDetails [ASR系统详解]
-        direction TB
-        ASRFeatures[ASR核心功能：<br/>• 实时语音转文字<br/>• 声纹识别系统<br/>• 说话人身份区分<br/>• 语音内容记录]
+    %% 第一层入口：ASR自动触发 或 手动消息
+    ASR --> SmartCheck{智能分析开启？}
+    Manual --> L1_Manual[手动进入第一层]
 
-        VoiceEnroll[声纹录入流程：<br/>1. 用户提前录入声纹<br/>2. 系统学习语音特征<br/>3. 建立个人声纹档案]
+    %% 第一层：智能分析（可关闭）
+    SmartCheck -- 否 --> L1_Manual
+    SmartCheck -- 是 --> SmartTrigger[第一层：智能分析 Agent]
+    SmartTrigger --> SmartResult{智能分析返回？}
 
-        ContentTransfer[内容转移机制：<br/>• 选择转移条数（可配置）<br/>• 批量转移ASR历史<br/>• 智能筛选关键内容]
+    SmartResult -- false --> ContinueListen[继续监听]
+    SmartResult -- true --> L1_Out[第一层完成]
+
+    L1_Manual --> IntentCheck
+    L1_Out --> IntentCheck
+
+    %% 第二层：意图识别（可关闭）
+    IntentCheck{意图识别开启？} -->|否| L3_Start
+    IntentCheck -->|是| IntentAgent[第二层：意图识别 Agent]
+    IntentAgent --> L2_Out[意图结果]
+    L2_Out --> L3_Start
+
+    %% 第三层：用户个性化（可关闭）
+    L3_Start --> PersonalCheck{用户个性化开启？}
+    PersonalCheck -- 否 --> L4_Start
+    PersonalCheck -- 是 --> Personal[第三层：用户个性化]
+    Personal --> L4_Start
+
+    %% 第四层：回答生成（必选）
+    subgraph Answering [第四层：回答生成]
+        L4_Start --> ModeCheck{智囊团模式？}
+
+        ModeCheck -- 是 --> ThinkTank[智囊团并行模型回答]
+        ModeCheck -- 否 --> SingleModel[单模型回答]
+
+        ThinkTank --> Collect[输出]
+        SingleModel --> Collect
+
+
     end
 
-    ASR --> TriggerCheck{智能分析<br/>已开启？}
-    Manual --> CreateChat[创建/获取聊天会话]
-    CreateChat --> ProcessMessage[处理消息内容]
-
-    subgraph TriggerProcess [触发机制]
-        TriggerCheck -- 是 --> CheckLength[检查消息长度<br/>≥ 3字符？]
-        CheckLength -- 否 --> WaitForMore[等待更多音频]
-        CheckLength -- 是 --> CheckSpeaker[检查说话人<br/>累积文本]
-
-        CheckSpeaker --> Accumulate{累积字符<br/>≥ 10？}
-        Accumulate -- 否 --> WaitForMore
-        Accumulate -- 是 --> MonitorSilence[启动静音检测<br/>监听2秒静音]
-
-        MonitorSilence --> CheckTimeout{静音 ≥ 阈值？<br/>文本 ≥ 30字符？<br/>静音 ≥ 4秒？}
-        CheckTimeout -- 否 --> WaitForMore
-        CheckTimeout -- 是 --> RunAnalysis[[运行智能分析]]
-    end
-
-    TriggerCheck -- 否 --> SkipAnalysis[跳过智能分析<br/>直接处理消息]
-    WaitForMore --> WaitForMore
-
-    subgraph SmartAnalysis [智能分析阶段（三阶段）]
-        RunAnalysis --> Phase1[阶段1：小模型判定<br/>是否需要AI介入]
-        Phase1 --> Phase1Result{判定结果}
-
-        Phase1Result -- 是 --> Phase2Check{启用意图识别？}
-        Phase1Result -- 否 --> End1[结束：普通对话]
-
-        Phase2Check -- 是 --> Phase2[阶段2：意图识别<br/>提取核心问题与大纲]
-        Phase2Check -- 否 --> Phase3[阶段3：分发准备<br/>智囊团或单模型]
-
-        Phase2 --> Phase3[阶段3：根据配置<br/>选择智囊团或单模型]
-        Phase3 --> PrepareDist[准备分发配置]
-    end
-
-    subgraph Processing [消息处理模块]
-        PrepareDist --> CheckMode{分发模式}
-        CheckMode -- 是 --> ThinkTank[智囊团模式<br/>多模型并行回答]
-        CheckMode -- 否 --> SingleModel[单模型模式<br/>当前配置模型]
-
-        ThinkTank --> CollectResults[收集所有回答]
-        SingleModel --> CollectResults
-
-        CollectResults --> FormatOutput[格式化输出结果]
-        FormatOutput --> SaveHistory[保存到聊天历史]
-    end
-
-    SkipAnalysis --> ProcessMessage
-    ProcessMessage --> FormatOutput
-
-    SaveHistory --> SendToUI[发送到前端界面]
-    SendToUI --> End([分析完成])
-
-    End1 --> SendToUI
-
-    %% 用户配置参数
-    subgraph UserConfig [⚙️ 用户可配置项]
-        direction TB
-        ConfigSmart[智能分析开关：on/off]
-        ConfigIntent[意图识别开关：on/off]
-        ConfigThinkTank[智囊团模型列表]
-        ConfigThresholds[触发阈值：10字/2秒]
-        ConfigProtagonist[主人公身份设置]
-    end
-
-    %% 样式定义
-    style TriggerCheck fill:#e1f5fe
-    style Phase1Result fill:#e1f5fe
-    style CheckMode fill:#e1f5fe
-    style CheckTimeout fill:#e1f5fe
-
-    style End1 fill:#ffcdd2
-    style End fill:#ffcdd2
-    style WaitForMore fill:#fff9c4
-
-    style ASR fill:#c8e6c9
-    style Manual fill:#c8e6c9
-    style ThinkTank fill:#fff3e0
-    style SingleModel fill:#f3e5f5
-    style RunAnalysis fill:#ff9999
-    style Phase1 fill:#8B4513
-    style Phase2 fill:#8B4513
-    style Phase3 fill:#8B4513
-    style TriggerProcess fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
-
-    %% ASR相关样式
-    style ASRDetails fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
-    style ASRFeatures fill:#e8f5e8
-    style VoiceEnroll fill:#f1f8e9
-    style ContentTransfer fill:#e8f5e8
 ```
 
 ## 智能分析流程
@@ -318,4 +266,51 @@ flowchart TD
     style DistributionLogic fill:#f1f8e9,stroke:#4caf50,stroke-width:2px
     style ThinkTankProcess fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
     style SingleModelProcess fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+```
+
+## 用户个性化(简历)
+```
+flowchart TD
+    Start([用户个性化<br/>入口：用户上传或开启简历模式]) --> CheckMode{简历模式开启？}
+
+    CheckMode -- 否 --> NormalFlow[走普通对话流程<br/>不注入简历上下文]
+    CheckMode -- 是 --> CheckFile{本地已有<br/>解析后XML？}
+
+    %% 分支：如果有缓存直接用，没有则开始处理
+    CheckFile -- 是 --> InjectXML[直接读取 user_profile.xml]
+    CheckFile -- 否 --> ExtractProcess[启动简历解析流程]
+
+    %% 文本提取阶段（去OCR）
+    ExtractProcess --> TextExtract[文本提取<br/>PyPDF2 / python-docx]
+    TextExtract --> CallResumeAgent[调用简历分析 Agent<br/>Prompt: 提取关键维度+保留原文]
+
+    %% 核心分析子图
+    subgraph ResumeAnalysis [简历重构与分析]
+        direction TB
+        DimTarget[1. 目标锁定<br/>提取目标职业与求职意向]
+        DimLife[2. 生活画像<br/>提取性格、生活状态、价值观]
+        DimExp[3. 经历精炼<br/>提取核心项目与工作流]
+        DimStack[4. 技术栈提取<br/>⚠️ 关键规则：相关技术栈经历保留原文原话]
+    end
+
+    CallResumeAgent --> DimTarget
+    DimTarget --> DimLife
+    DimLife --> DimExp
+    DimExp --> DimStack
+    DimStack --> FormatXML[格式化为 XML 结构]
+
+    %% 格式化子图
+    subgraph OutputFormat [XML 结构化输出]
+        direction TB
+        TagInfo[&lt;basic_info&gt;<br/>基本画像]
+        TagTech[&lt;tech_stack&gt;<br/>原文技术栈]
+        TagExp[&lt;experience&gt;<br/>精炼经历]
+    end
+
+    FormatXML --> TagInfo
+    TagInfo --> SaveData[持久化存储<br/>data/user/resume.xml]
+    SaveData --> InjectXML
+
+    %% 注入与最终输出
+    InjectXML
 ```
