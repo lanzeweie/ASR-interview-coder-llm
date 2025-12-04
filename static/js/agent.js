@@ -450,6 +450,7 @@ export class LLMManager {
             // Reset state
             this.streamManager.clearLLMState();
             window.latestIntentAnalysis = null;
+            this.finishProcessing();
 
             // Refresh chat list preview if needed
             if (typeof window.loadChatList === 'function') {
@@ -466,6 +467,7 @@ export class LLMManager {
                 dom.llmWindow.appendChild(errorDiv);
                 dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
             }
+            this.finishProcessing();
         }
         else if (data.type === 'agent_notification') {
             // 智能分析通知消息
@@ -886,6 +888,7 @@ export class LLMManager {
     // 清空聊天历史
     clearHistory() {
         this.chatHistory = [];
+        this.finishProcessing();
     }
 
     // 完成处理
