@@ -128,6 +128,11 @@ export class PanelResizer {
 
         asrPanel.style.width = `${newAsrWidth}px`;
         llmPanel.style.width = `${newLlmWidth}px`;
+
+        adjustPanelLayout({
+            asrWidth: newAsrWidth,
+            llmWidth: newLlmWidth
+        });
     }
 
     static panelMouseUp(state, resizer, asrPanel) {
@@ -137,6 +142,10 @@ export class PanelResizer {
         document.body.style.userSelect = '';
         // 保存 ASR 面板宽度（LLM 面板宽度会自适应）
         localStorage.setItem(`ast_asr_width`, asrPanel.offsetWidth);
+        adjustPanelLayout({
+            asrWidth: asrPanel.offsetWidth,
+            llmWidth: document.getElementById('llm-panel')?.offsetWidth
+        });
         if (state.mouseMoveHandler) {
             document.removeEventListener('mousemove', state.mouseMoveHandler);
             state.mouseMoveHandler = null;
@@ -157,9 +166,15 @@ export function loadSavedWidths() {
 
     const asrWidth = localStorage.getItem('ast_asr_width');
     const asrPanel = document.getElementById('asr-panel');
+    const llmPanel = document.getElementById('llm-panel');
     if (asrWidth && asrPanel) {
         asrPanel.style.width = `${asrWidth}px`;
     }
+
+    adjustPanelLayout({
+        asrWidth: asrPanel ? asrPanel.offsetWidth : undefined,
+        llmWidth: llmPanel ? llmPanel.offsetWidth : undefined
+    });
 }
 
 // ===== UI状态持久化 =====
@@ -236,8 +251,8 @@ export function updateModelDisplay(isMultiMode = false, currentConfigName = '') 
     const modelIndicator = dom.currentModelDisplay.querySelector('.model-indicator');
 
     if (isMultiMode) {
-        // 显示智囊团 - 使用当前配置的显示名称（可能是身份标签名）
-        const displayName = window.currentDisplayName || currentConfigName || '智囊团';
+        // 智囊团模式下统一显示“智囊团”
+        const displayName = '智囊团';
         if (modelNameDisplay) modelNameDisplay.textContent = displayName;
         if (modelIndicator) {
             modelIndicator.style.background = 'linear-gradient(135deg, #3b82f6, #60a5fa)';
@@ -245,7 +260,7 @@ export function updateModelDisplay(isMultiMode = false, currentConfigName = '') 
         }
     } else {
         // 显示当前选择的模型 - 使用当前配置的显示名称
-        const displayName = window.currentDisplayName || currentConfigName;
+        const displayName = window.currentDisplayName || currentConfigName || '';
         if (modelNameDisplay) modelNameDisplay.textContent = displayName;
         if (modelIndicator) {
             modelIndicator.style.background = 'var(--accent-primary)';
@@ -255,67 +270,73 @@ export function updateModelDisplay(isMultiMode = false, currentConfigName = '') 
 }
 
 // ===== 布局调整 =====
-export function adjustPanelLayout(width) {
+export function adjustPanelLayout({ asrWidth, llmWidth } = {}) {
     const asrStatus = dom.asrStatusDiv;
+    const currentModelDisplay = dom.currentModelDisplay;
 
-    if (!asrStatus) return;
-
-    // 宽度小于380px时，隐藏状态文字
-    if (width < 380) {
-        if (asrStatus) {
+    if (typeof asrWidth === 'number' && asrStatus) {
+        if (asrWidth < 380) {
             asrStatus.style.maxWidth = '24px';
             asrStatus.style.padding = '6px';
             asrStatus.style.background = 'transparent';
             asrStatus.style.border = 'none';
-        }
-        const statusText = asrStatus.querySelector('.status-text');
-        if (statusText) statusText.style.display = 'none';
-    } else {
-        // 恢复正常显示
-        if (asrStatus) {
+            const statusText = asrStatus.querySelector('.status-text');
+            if (statusText) statusText.style.display = 'none';
+        } else {
             asrStatus.style.maxWidth = '120px';
             asrStatus.style.padding = '6px 10px';
             asrStatus.style.background = '';
             asrStatus.style.border = '';
+            const statusText = asrStatus.querySelector('.status-text');
+            if (statusText) statusText.style.display = '';
         }
-        const statusText = asrStatus.querySelector('.status-text');
-        if (statusText) statusText.style.display = '';
     }
 
-    // 宽度小于320px时，隐藏发送全部按钮
-    if (dom.sendAllBtn) {
-        dom.sendAllBtn.style.display = width < 320 ? 'none' : '';
-    }
-
-    // 宽度小于300px时，隐藏当前模型显示
-    if (dom.currentModelDisplay) {
-        dom.currentModelDisplay.style.display = width < 300 ? 'none' : '';
+    if (typeof llmWidth === 'number' && currentModelDisplay) {
+        currentModelDisplay.style.display = llmWidth < 300 ? 'none' : '';
     }
 }
 
 // ===== 面板宽度监听 - 后备方案 =====
 export function initPanelResizeListener() {
-    // 使用 ResizeObserver 监听面板宽度变化（后备方案）
+    const asrPanel = document.getElementById('asr-panel');
+    const llmPanel = document.getElementById('llm-panel');
+
     if ('ResizeObserver' in window) {
-        const asrPanel = document.getElementById('asr-panel');
         if (asrPanel) {
-            const resizeObserver = new ResizeObserver(entries => {
+            const asrObserver = new ResizeObserver(entries => {
                 for (let entry of entries) {
-                    const width = entry.contentRect.width;
-                    adjustPanelLayout(width);
+                    adjustPanelLayout({ asrWidth: entry.contentRect.width });
                 }
             });
-            resizeObserver.observe(asrPanel);
-            console.log('✅ 面板宽度监听已启用 (ResizeObserver)');
+            asrObserver.observe(asrPanel);
         }
-    } else {
-        // 使用 window resize 事件作为后备
-        window.addEventListener('resize', () => {
-            const asrPanel = document.getElementById('asr-panel');
-            if (asrPanel) {
-                adjustPanelLayout(asrPanel.offsetWidth);
-            }
+
+        if (llmPanel) {
+            const llmObserver = new ResizeObserver(entries => {
+                for (let entry of entries) {
+                    adjustPanelLayout({ llmWidth: entry.contentRect.width });
+                }
+            });
+            llmObserver.observe(llmPanel);
+        }
+
+        adjustPanelLayout({
+            asrWidth: asrPanel?.offsetWidth,
+            llmWidth: llmPanel?.offsetWidth
         });
+        console.log('✅ 面板宽度监听已启用 (ResizeObserver)');
+    } else {
+        const handleResize = () => {
+            const asrCurrent = document.getElementById('asr-panel');
+            const llmCurrent = document.getElementById('llm-panel');
+            adjustPanelLayout({
+                asrWidth: asrCurrent ? asrCurrent.offsetWidth : undefined,
+                llmWidth: llmCurrent ? llmCurrent.offsetWidth : undefined
+            });
+        };
+        window.addEventListener('resize', handleResize);
+        handleResize();
         console.log('⚠️ 面板宽度监听已启用 (window.resize)');
     }
 }

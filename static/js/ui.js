@@ -19,6 +19,7 @@ import {
 export class UIManager {
     constructor(managers) {
         this.managers = managers; // 包含所有管理器实例
+        this.sidebarStoredWidth = null;
     }
 
     // 初始化所有事件监听器
@@ -30,6 +31,7 @@ export class UIManager {
         this.initToggleEvents();
         this.initResizerEvents();
         this.initTextSelectionEvents();
+        this.initSidebarToggle();
     }
 
     // 设置相关事件
@@ -294,12 +296,7 @@ export class UIManager {
                 // 更新全局变量和UI
                 window.agentEnabled = newState;
                 this.managers.chat.updateWelcomeMessage();
-                saveUIState({
-                    multiLLMActive: dom.multiLLMToggle?.classList.contains('active') || false,
-                    agentToggleActive: newState,
-                    intentRecognitionActive: this.managers.intentRecognition.isEnabled(),
-                    currentChatId: this.managers.chat.getCurrentChatId()
-                });
+                this.persistUIState();
             });
         }
 
@@ -323,12 +320,7 @@ export class UIManager {
                 const displayName = await this.managers.config.updateCurrentDisplayNameByToggle(isMulti);
 
                 this.managers.chat.updateWelcomeMessage();
-                saveUIState({
-                    multiLLMActive: isMulti,
-                    agentToggleActive: this.managers.agent.isEnabled(),
-                    intentRecognitionActive: this.managers.intentRecognition.isEnabled(),
-                    currentChatId: this.managers.chat.getCurrentChatId()
-                });
+                this.persistUIState();
             });
         }
 
@@ -412,6 +404,7 @@ export class UIManager {
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
             localStorage.setItem('ast_sidebar_width', sidebarPanel.offsetWidth);
+            this.sidebarStoredWidth = `${sidebarPanel.offsetWidth}px`;
             document.removeEventListener('mousemove', this.handleSidebarMouseMove);
             document.removeEventListener('mouseup', this.handleSidebarMouseUp);
         };
@@ -460,6 +453,8 @@ export class UIManager {
     // 恢复UI状态
     restoreUIState() {
         const savedState = loadUIState();
+        const collapseState = savedState ? !!savedState.sidebarCollapsed : false;
+        this.applySidebarCollapsed(collapseState, { skipSave: true });
         if (!savedState) return;
 
         // 恢复智囊团开关状态
@@ -515,6 +510,64 @@ export class UIManager {
         window.intentRecognitionEnabled = this.managers.intentRecognition.isEnabled();
     }
 
+    persistUIState(extra = {}) {
+        saveUIState({
+            multiLLMActive: dom.multiLLMToggle?.classList.contains('active') || false,
+            agentToggleActive: this.managers.agent.isEnabled(),
+            intentRecognitionActive: this.managers.intentRecognition.isEnabled(),
+            currentChatId: this.managers.chat.getCurrentChatId(),
+            sidebarCollapsed: document.body.classList.contains('sidebar-collapsed'),
+            ...extra
+        });
+    }
+
+    initSidebarToggle() {
+        if (!dom.sidebarToggleBtn) return;
+        this.sidebarStoredWidth = this.getStoredSidebarWidth();
+        dom.sidebarToggleBtn.addEventListener('click', () => {
+            const collapsed = !document.body.classList.contains('sidebar-collapsed');
+            this.applySidebarCollapsed(collapsed);
+        });
+    }
+
+    getStoredSidebarWidth() {
+        const stored = localStorage.getItem('ast_sidebar_width');
+        if (stored && !Number.isNaN(parseInt(stored, 10))) {
+            return `${parseInt(stored, 10)}px`;
+        }
+        const computed = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width');
+        return computed?.trim() || '260px';
+    }
+
+    applySidebarCollapsed(collapsed, options = {}) {
+        const { skipSave = false } = options;
+        document.body.classList.toggle('sidebar-collapsed', collapsed);
+
+        if (collapsed) {
+            if (!this.sidebarStoredWidth || this.sidebarStoredWidth === '0px') {
+                this.sidebarStoredWidth = this.getStoredSidebarWidth();
+            }
+            document.documentElement.style.setProperty('--sidebar-width', '0px');
+            dom.sidebarToggleBtn?.classList.add('collapsed');
+        } else {
+            const fallbackWidth = this.sidebarStoredWidth && this.sidebarStoredWidth !== '0px'
+                ? this.sidebarStoredWidth
+                : this.getStoredSidebarWidth();
+            this.sidebarStoredWidth = fallbackWidth;
+            document.documentElement.style.setProperty('--sidebar-width', fallbackWidth);
+            dom.sidebarToggleBtn?.classList.remove('collapsed');
+        }
+
+        if (dom.sidebarToggleBtn) {
+            dom.sidebarToggleBtn.setAttribute('title', collapsed ? '展开聊天列表' : '收起聊天列表');
+            dom.sidebarToggleBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+        }
+
+        if (!skipSave) {
+            this.persistUIState();
+        }
+    }
+
     applyIntentRecognitionState(isEnabled, options = {}) {
         const { skipSave = false } = options;
         const normalized = !!isEnabled;
@@ -532,12 +585,7 @@ export class UIManager {
         this.managers.chat.updateWelcomeMessage();
 
         if (!skipSave) {
-            saveUIState({
-                multiLLMActive: dom.multiLLMToggle?.classList.contains('active') || false,
-                agentToggleActive: this.managers.agent.isEnabled(),
-                intentRecognitionActive: normalized,
-                currentChatId: this.managers.chat.getCurrentChatId()
-            });
+            this.persistUIState();
         }
     }
 

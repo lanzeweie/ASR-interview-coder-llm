@@ -165,3 +165,57 @@
     background: rgba(239, 68, 68, 0.1);
     color: var(--color-error);
 }
+
+.sidebar-toggle-btn {
+    position: absolute;
+    top: calc(var(--gap-md) + 48px);
+    left: calc(var(--gap-md) + var(--sidebar-width) + 8px);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 20;
+}
+
+.sidebar-toggle-btn svg {
+    transition: transform 0.2s ease;
+}
+
+.sidebar-toggle-btn:hover {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-lg);
+}
+
+.sidebar-toggle-btn.collapsed svg {
+    transform: rotate(180deg);
+}
+
+body.sidebar-collapsed #sidebar {
+    flex: 0 0 0 !important;
+    min-width: 0;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+body.sidebar-collapsed #sidebar .sidebar-header,
+body.sidebar-collapsed #sidebar .chat-list {
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.sidebar-collapsed .sidebar-resizer {
+    display: none;
+}
+
+body.sidebar-collapsed .sidebar-toggle-btn {
+    left: calc(var(--gap-md) + 8px);
+}

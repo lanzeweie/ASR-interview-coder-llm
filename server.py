@@ -86,6 +86,65 @@ def normalize_identity_identifier(value: str | None) -> str:
     return identifier
 
 
+def sanitize_role_definition(role: dict | None) -> dict | None:
+    """Normalize role definitions to a single canonical ID field."""
+    if not isinstance(role, dict):
+        return None
+
+    normalized_id = normalize_identity_identifier(role.get("id") or role.get("tag_key"))
+    if not normalized_id:
+        return None
+
+    name = (role.get("name") or "").strip() or normalized_id
+    prompt = (role.get("prompt") or "").strip()
+    enabled = bool(role.get("enabled", True))
+
+    return {
+        "id": normalized_id,
+        "name": name,
+        "prompt": prompt,
+        "enabled": enabled
+    }
+
+
+def build_identity_lookup(roles: list[dict]) -> dict[str, dict]:
+    """Create a fast lookup table for identity definitions."""
+    lookup: dict[str, dict] = {}
+    for role in roles:
+        normalized_id = normalize_identity_identifier(role.get("id"))
+        if not normalized_id:
+            continue
+        copy = dict(role)
+        copy["id"] = normalized_id
+        lookup[normalized_id] = copy
+    return lookup
+
+
+def select_identity_role(tags: list[str], lookup: dict[str, dict]) -> tuple[str | None, dict | None, list[str]]:
+    """
+    Find the first enabled identity (with prompt) that matches the provided tags.
+    Returns (active_tag, role_dict, disabled_role_names).
+    """
+    disabled_names: list[str] = []
+    for tag in tags:
+        normalized_tag = normalize_identity_identifier(tag)
+        if not normalized_tag:
+            continue
+        role = lookup.get(normalized_tag)
+        if not role:
+            continue
+        if not role.get("enabled", True):
+            disabled_names.append(role.get("name") or normalized_tag)
+            continue
+        prompt_text = (role.get("prompt") or "").strip()
+        if not prompt_text:
+            continue
+        role_copy = dict(role)
+        role_copy["prompt"] = prompt_text
+        return normalized_tag, role_copy, disabled_names
+    return None, None, disabled_names
+
+
 def load_think_tank_roles() -> list[dict]:
     if not os.path.exists(AGENT_ROLE_FILE):
         return []
@@ -96,23 +155,35 @@ def load_think_tank_roles() -> list[dict]:
         print(f"[智囊团] 加载身份失败: {exc}")
         return []
 
-    roles = []
-    for role in data.get("think_tank_roles", []):
-        role_id = normalize_identity_identifier(role.get("id") or role.get("tag_key"))
-        if not role_id:
+    roles: list[dict] = []
+    needs_resave = False
+    for raw_role in data.get("think_tank_roles", []):
+        sanitized = sanitize_role_definition(raw_role)
+        if not sanitized:
             continue
-        roles.append({
-            "id": role_id,
-            "name": role.get("name", role_id),
-            "prompt": role.get("prompt", ""),
-            "enabled": bool(role.get("enabled", True))
-        })
+        roles.append(sanitized)
+        if (
+            raw_role.get("tag_key") is not None
+            or normalize_identity_identifier(raw_role.get("id")) != sanitized["id"]
+            or (raw_role.get("name") or "").strip() != sanitized["name"]
+            or (raw_role.get("prompt") or "").strip() != sanitized["prompt"]
+        ):
+            needs_resave = True
+
+    if needs_resave:
+        save_think_tank_roles(roles)
+
     return roles
 
 
 def save_think_tank_roles(roles: list[dict]):
     os.makedirs(os.path.dirname(AGENT_ROLE_FILE), exist_ok=True)
-    payload = {"think_tank_roles": roles}
+    sanitized_roles = []
+    for role in roles:
+        sanitized = sanitize_role_definition(role)
+        if sanitized:
+            sanitized_roles.append(sanitized)
+    payload = {"think_tank_roles": sanitized_roles}
     with open(AGENT_ROLE_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
@@ -384,6 +455,8 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
     config_data = load_config()
     active_names = config_data.get("multi_llm_active_names", [])
     configs = config_data.get("configs", [])
+    cached_roles = load_think_tank_roles()
+    role_lookup = build_identity_lookup(cached_roles)
 
     active_configs = [c for c in configs if c["name"] in active_names]
 
@@ -405,29 +478,48 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
 
             # Handle separate system prompt
             current_messages = [m.copy() for m in messages]
-            config_prompt = conf.get("system_prompt", "")
+            config_prompt = conf.get("system_prompt", "").strip()
 
-            # Check if any tag is selected - if so, disable system prompt
-            tags = conf.get("tags", [])
-            has_tags = len(tags) > 0
+            # Check identity tags and resolve active role
+            raw_tags = conf.get("tags", [])
+            normalized_tags = [normalize_identity_identifier(tag) for tag in raw_tags if tag]
+            active_tag, active_role, disabled_candidates = select_identity_role(normalized_tags, role_lookup)
 
-            # 应用 System Prompt
-            if config_prompt and not has_tags:
-                # Replace or insert system prompt
+            identity_applied = False
+            if active_role:
+                tag_prompt = active_role["prompt"]
+                sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
+                if sys_idx != -1:
+                    current_messages[sys_idx]["content"] = tag_prompt
+                else:
+                    current_messages.insert(0, {"role": "system", "content": tag_prompt})
+                identity_applied = True
+                print(f"[智囊团] 应用身份标签 Prompt: {active_role['name']} → 模型 {name}")
+            elif config_prompt:
                 sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
                 if sys_idx != -1:
                     current_messages[sys_idx]["content"] = config_prompt
                 else:
                     current_messages.insert(0, {"role": "system", "content": config_prompt})
+            elif normalized_tags:
+                if disabled_candidates:
+                    print(f"[智囊团] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
+                else:
+                    print(f"[智囊团] 未找到可用身份 Prompt: {normalized_tags}")
 
             # [调试] 显示实际发送给模型的完整 prompt
             print(f"\n{'='*80}")
             print(f"[调试] [智囊团] 正在发送请求到模型: {conf.get('model', 'Unknown')} (Stream=True)")
             print(f"{'='*80}")
             print(f"[调试] [智囊团] 模型名称: {name}")
-            print(f"[调试] [智囊团] 使用 System Prompt: {config_prompt if (config_prompt and not has_tags) else '否'}")
-            if has_tags:
-                print(f"[调试] [智囊团] 身份标签: {tags} (System Prompt 被禁用)")
+            print(f"[调试] [智囊团] 使用 System Prompt: {config_prompt if (config_prompt and not identity_applied) else '否'}")
+            if normalized_tags:
+                if identity_applied and active_role:
+                    print(f"[调试] [智囊团] 身份标签: {normalized_tags} → 激活: {active_role['name']} ({active_tag})")
+                elif disabled_candidates:
+                    print(f"[调试] [智囊团] 身份标签: {normalized_tags} (停用: {', '.join(disabled_candidates)})")
+                else:
+                    print(f"[调试] [智囊团] 身份标签: {normalized_tags} (未找到可用身份)")
             print(f"[调试] [智囊团] 消息总数: {len(current_messages)}")
             print(f"{'-'*80}")
             print("[调试] [智囊团] 完整 Prompt 内容:")
@@ -1331,51 +1423,51 @@ async def llm_websocket(websocket: WebSocket):
 
                     # 修复：处理当前配置的 System Prompt
                     current_messages = [m.copy() for m in messages]
-                    config_prompt = curr_conf.get("system_prompt", "") if curr_conf else ""
+                    config_prompt = (curr_conf.get("system_prompt", "") if curr_conf else "").strip()
 
-                    # 检查是否选择了身份标签 - 如果选择了，禁用 system prompt
+                    # 检查是否选择了身份标签
                     raw_tags = curr_conf.get("tags", []) if curr_conf else []
                     normalized_tags = [normalize_identity_identifier(tag) for tag in raw_tags if tag]
-                    has_tags = len(normalized_tags) > 0
+                    roles = load_think_tank_roles()
+                    role_lookup = build_identity_lookup(roles)
+                    active_tag, active_role, disabled_candidates = select_identity_role(normalized_tags, role_lookup)
+                    identity_applied = False
 
                     # 应用 System Prompt
-                    if config_prompt and not has_tags:
-                        # 替换或插入 system prompt
+                    if active_role:
+                        tag_prompt = active_role["prompt"]
+                        identity_applied = True
+                        print(f"[智能分析] 应用身份标签 Prompt: {active_role['name']}")
+                        sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
+                        if sys_idx != -1:
+                            current_messages[sys_idx]["content"] = tag_prompt
+                        else:
+                            current_messages.insert(0, {"role": "system", "content": tag_prompt})
+                    elif config_prompt:
                         sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
                         if sys_idx != -1:
                             current_messages[sys_idx]["content"] = config_prompt
                         else:
                             current_messages.insert(0, {"role": "system", "content": config_prompt})
-                    elif has_tags:
-                        # 如果有身份标签，尝试加载对应的 Prompt
-                        try:
-                            roles = load_think_tank_roles()
-                            active_tag = normalized_tags[0]
-                            role = next((r for r in roles if normalize_identity_identifier(r.get("id")) == active_tag), None)
-
-                            if role and role.get("prompt"):
-                                tag_prompt = role["prompt"]
-                                print(f"[智能分析] 应用身份标签 Prompt: {role['name']}")
-
-                                # 替换或插入 system prompt
-                                sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
-                                if sys_idx != -1:
-                                    current_messages[sys_idx]["content"] = tag_prompt
-                                else:
-                                    current_messages.insert(0, {"role": "system", "content": tag_prompt})
-                            else:
-                                print(f"[智能分析] 未找到标签 '{active_tag}' 的 Prompt 定义")
-                        except Exception as e:
-                            print(f"[错误] 加载身份标签 Prompt 失败: {e}")
+                    elif normalized_tags:
+                        if disabled_candidates:
+                            print(f"[智能分析] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
+                        else:
+                            print(f"[智能分析] 未找到标签 '{normalized_tags[0]}' 的 Prompt 定义")
 
                     # [调试] 显示实际发送给模型的完整 prompt
                     print(f"\n{'='*80}")
                     print(f"[调试] [智能分析] 正在发送请求到模型: {curr_conf.get('model', 'Unknown')} (Stream=True)")
                     print(f"{'='*80}")
                     print(f"[调试] [智能分析] 当前配置: {curr_conf.get('name', 'Unknown')}")
-                    print(f"[调试] [智能分析] 使用 System Prompt: {config_prompt if (config_prompt and not has_tags) else '否'}")
-                    if has_tags:
-                        print(f"[调试] [智能分析] 身份标签: {normalized_tags} (System Prompt 被禁用)")
+                    print(f"[调试] [智能分析] 使用 System Prompt: {config_prompt if (config_prompt and not identity_applied) else '否'}")
+                    if normalized_tags:
+                        if identity_applied and active_role:
+                            print(f"[调试] [智能分析] 身份标签: {normalized_tags} → 激活: {active_role['name']} ({active_tag})")
+                        elif disabled_candidates:
+                            print(f"[调试] [智能分析] 身份标签: {normalized_tags} (停用: {', '.join(disabled_candidates)})")
+                        else:
+                            print(f"[调试] [智能分析] 身份标签: {normalized_tags} (未找到可用身份)")
                     print(f"[调试] [智能分析] 消息总数: {len(current_messages)}")
                     print(f"{'-'*80}")
                     print("[调试] [智能分析] 完整 Prompt 内容:")
@@ -1417,88 +1509,8 @@ async def llm_websocket(websocket: WebSocket):
                  messages.insert(0, {"role": "system", "content": "你是一个Ai助手帮助用户，并且分析聊天记录"})
 
             if is_multi_llm:
-                # --- Multi-LLM Mode ---
-                config_data = load_config()
-                active_names = config_data.get("multi_llm_active_names", [])
-                configs = config_data.get("configs", [])
-                
-                active_configs = [c for c in configs if c["name"] in active_names]
-                
-                if not active_configs:
-                     await websocket.send_json({"type": "error", "content": "未选择任何模型加入集群 (请在设置中勾选)"})
-                     continue
-                
-                # Prepare tasks
-                async def stream_one(conf):
-                    name = conf["name"]
-                    try:
-                        client = LLMClient(conf["api_key"], conf["base_url"], conf["model"])
-
-                        # Handle separate system prompt
-                        current_messages = [m.copy() for m in messages] # Deep copyish
-                        config_prompt = conf.get("system_prompt", "")
-
-                        # Check if any tag is selected - if so, disable system prompt
-                        tags = conf.get("tags", [])
-                        has_tags = len(tags) > 0
-
-                        # 应用 System Prompt
-                        if config_prompt and not has_tags:
-                            # Replace or insert system prompt
-                            sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
-                            if sys_idx != -1:
-                                current_messages[sys_idx]["content"] = config_prompt
-                            else:
-                                current_messages.insert(0, {"role": "system", "content": config_prompt})
-
-                        # [调试] 显示实际发送给模型的完整 prompt
-                        print(f"\n{'='*80}")
-                        print(f"[调试] 正在发送请求到模型: {conf.get('model', 'Unknown')} (Stream=True)")
-                        print(f"{'='*80}")
-                        print(f"[调试] 模型名称: {name}")
-                        print(f"[调试] 使用 System Prompt: {config_prompt if (config_prompt and not has_tags) else '否'}")
-                        if has_tags:
-                            print(f"[调试] 身份标签: {tags} (System Prompt 被禁用)")
-                        print(f"[调试] 消息总数: {len(current_messages)}")
-                        print(f"{'-'*80}")
-                        print("[调试] 完整 Prompt 内容:")
-                        print(f"{'-'*80}")
-                        for i, msg in enumerate(current_messages):
-                            role = msg.get('role', 'unknown')
-                            content = msg.get('content', '')
-                            print(f"\n[消息 {i+1}] 角色: {role}")
-                            print(f"[消息 {i+1}] 内容: {content[:200]}{'...' if len(content) > 200 else ''}")
-                        print(f"\n{'='*80}\n")
-
-                        full_resp = ""
-                        async for chunk in client.chat_stream(current_messages):
-                            await websocket.send_json({
-                                "type": "chunk",
-                                "model": name,
-                                "content": chunk
-                            })
-                            full_resp += chunk
-                        
-                        await websocket.send_json({"type": "done_one", "model": name})
-                        return name, full_resp
-                    except Exception as e:
-                        err_msg = f"Error: {str(e)}"
-                        await websocket.send_json({"type": "error", "content": f"[{name}] {err_msg}"})
-                        return name, f"[Error] {err_msg}"
-
-                # Run all concurrently
-                tasks = [stream_one(c) for c in active_configs]
-                results = await asyncio.gather(*tasks)
-                
-                await websocket.send_json({"type": "done_all"})
-                
-                # Save to history
-                if chat_id:
-                    # Append all responses
-                    for name, text in results:
-                        messages.append({"role": "assistant", "content": f"**{name}**:\n{text}"})
-                    chat_manager.update_chat_messages(chat_id, messages)
-
+                await handle_multi_llm_request(websocket, messages, chat_id)
+                continue
             else:
                 # --- Single LLM Mode (Original Logic) ---
                 response_text = ""

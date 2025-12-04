@@ -594,13 +594,6 @@
     }
 }
 
-@container (max-width: 280px) {
-    .control-btn[title="发送全部到AI"] {
-        display: none;
-        /* 最后才隐藏发送全部 */
-    }
-}
-
 .control-btn:hover {
     background: var(--bg-hover);
     border-color: var(--border-normal);

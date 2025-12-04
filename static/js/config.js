@@ -13,6 +13,7 @@ const LEGACY_IDENTITY_MAP = {
     '精简辅助者': 'concise_assistant',
     '资深求职着': 'guide'
 };
+const THINK_TANK_DISPLAY_NAME = '智囊团';
 
 // ===== 配置管理类 =====
 export class ConfigManager {
@@ -61,6 +62,15 @@ export class ConfigManager {
         return identity ? identity.name : normalized;
     }
 
+    escapeHtml(text = '') {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     // 加载配置
     async loadConfigs() {
         try {
@@ -74,7 +84,7 @@ export class ConfigManager {
             // Load identities first
             await this.loadIdentities();
 
-            // 更新显示名称（根据智囊团开关状态决定显示配置名还是身份标签名）
+            // 更新显示名称（根据智囊团开关状态决定显示配置名还是“智囊团”标签）
             const isMulti = dom.multiLLMToggle?.classList.contains('active') || false;
             await this.updateCurrentDisplayNameByToggle(isMulti);
 
@@ -116,7 +126,7 @@ export class ConfigManager {
             const data = await res.json();
 
             const normalizedIdentities = (data || []).map(identity => {
-                const normalizedId = this.normalizeIdentityTag(identity.id || identity.tag_key || identity.name);
+                const normalizedId = this.normalizeIdentityTag(identity.id || identity.name);
                 return {
                     id: normalizedId,
                     name: identity.name || normalizedId,
@@ -248,10 +258,16 @@ export class ConfigManager {
 
             const info = document.createElement('div');
             info.className = 'identity-info';
+            const promptText = identity.prompt || '（未设置提示词）';
+            const promptPreview = promptText.length > 100 ? `${promptText.slice(0, 100)}...` : promptText;
+            const safeName = this.escapeHtml(identity.name);
+            const safeId = this.escapeHtml(identity.id);
+            const safePrompt = this.escapeHtml(promptPreview);
+            const safePromptFull = this.escapeHtml(promptText);
             info.innerHTML = `
-                <div class="identity-name">${identity.name}</div>
-                <div class="identity-meta">ID: ${identity.id}</div>
-                <div class="identity-prompt">${identity.prompt || '（未设置提示词）'}</div>
+                <div class="identity-name">${safeName}</div>
+                <div class="identity-meta">ID: ${safeId}</div>
+                <div class="identity-prompt" title="${safePromptFull}">${safePrompt}</div>
             `;
 
             const actions = document.createElement('div');
@@ -1148,18 +1164,14 @@ export class ConfigManager {
     // 获取当前配置的显示名称（根据智囊团状态决定）
     getCurrentDisplayName() {
         const config = this.configs.find(c => c.name === this.currentConfigName);
-        if (!config) return this.currentConfigName;
+        const baseName = config ? config.name : this.currentConfigName;
+        const isMultiActive = dom.multiLLMToggle?.classList.contains('active');
 
-        // 只有开启智囊团模式时，才显示身份标签名
-        if (this.multiLLMActiveNames.size > 0 && config.tags && config.tags.length > 0) {
-            const tag = this.normalizeIdentityTag(config.tags[0]);
-            const identity = this.identities.find(i => i.id === tag);
-            if (identity) return identity.name;
-            if (tag) return tag;
+        if (isMultiActive) {
+            return THINK_TANK_DISPLAY_NAME;
         }
 
-        // 默认显示配置名称
-        return this.currentConfigName;
+        return baseName;
     }
 
     // 更新全局显示名称（根据智囊团状态动态决定）
@@ -1183,17 +1195,10 @@ export class ConfigManager {
         }
 
         const config = this.configs.find(c => c.name === this.currentConfigName);
-        let displayName = this.currentConfigName;
+        let displayName = config ? config.name : this.currentConfigName || '';
 
-        // 只有开启智囊团开关且有身份标签时，才显示身份标签名
-        if (isMultiToggleActive && config && config.tags && config.tags.length > 0) {
-            const tag = this.normalizeIdentityTag(config.tags[0]);
-            const identity = this.identities.find(i => i.id === tag);
-            if (identity) {
-                displayName = identity.name;
-            } else if (tag) {
-                displayName = tag;
-            }
+        if (isMultiToggleActive) {
+            displayName = THINK_TANK_DISPLAY_NAME;
         }
 
         window.currentDisplayName = displayName;

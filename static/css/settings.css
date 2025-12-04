@@ -417,11 +417,19 @@
 
 .cluster-subactions {
     margin-bottom: var(--gap-md);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
 }
 
 .cluster-subactions .btn {
     font-size: 13px;
-    padding: 6px 12px;
+    padding: 6px 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    white-space: nowrap;
 }
 
 .cluster-hint {
@@ -1488,6 +1496,12 @@
     font-size: 13px;
     color: var(--text-secondary);
     line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
 }
 
 .identity-actions {
@@ -1521,5 +1535,4 @@
     padding: 2px 6px;
     border-radius: 6px;
     border: 1px solid var(--border-subtle);
-}
 }

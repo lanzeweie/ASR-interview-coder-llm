@@ -52,6 +52,26 @@ def normalize_identity_identifier(value: Optional[str]) -> str:
     return identifier
 
 
+def sanitize_role_definition(role: Optional[Dict]) -> Optional[Dict]:
+    if not isinstance(role, dict):
+        return None
+
+    normalized_id = normalize_identity_identifier(role.get("id") or role.get("tag_key"))
+    if not normalized_id:
+        return None
+
+    name = (role.get("name") or "").strip() or normalized_id
+    prompt = (role.get("prompt") or "").strip()
+    enabled = bool(role.get("enabled", True))
+
+    return {
+        "id": normalized_id,
+        "name": name,
+        "prompt": prompt,
+        "enabled": enabled
+    }
+
+
 def format_messages_compact(messages: List[Dict]) -> str:
     """将消息压缩为XML格式，减少token消耗"""
     xml_lines = ['<conversation>']
@@ -502,15 +522,9 @@ class ThinkTankAgent:
         raw_roles = role_data.get('think_tank_roles', [])
         roles = []
         for role in raw_roles:
-            role_id = normalize_identity_identifier(role.get('id') or role.get('tag_key'))
-            if not role_id:
-                continue
-            roles.append({
-                "id": role_id,
-                "name": role.get("name", role_id),
-                "prompt": role.get("prompt", ""),
-                "enabled": bool(role.get("enabled", True))
-            })
+            sanitized = sanitize_role_definition(role)
+            if sanitized:
+                roles.append(sanitized)
 
         config_data = self._safe_load_json(self.agent_config_path)
         active_names = set(config_data.get('multi_llm_active_names', []))

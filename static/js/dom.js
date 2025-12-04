@@ -29,6 +29,7 @@ export const dom = {
     modelNameInput: document.getElementById('model-name'),
     systemPromptInput: document.getElementById('system-prompt'),
     systemPromptHint: document.getElementById('system-prompt-hint'),
+    sidebarToggleBtn: document.getElementById('sidebar-toggle-btn'),
     identityManagerBtn: document.getElementById('identity-manager-btn'),
     identityManagerModal: document.getElementById('identity-manager-modal'),
     identityManagerCloseBtn: document.getElementById('identity-manager-close-btn'),

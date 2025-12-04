@@ -37,6 +37,12 @@
 
         <!-- 可调节分隔条 - Sidebar Resizer -->
         <div class="resizer sidebar-resizer" data-resizer="sidebar"></div>
+        <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="收起聊天列表" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M9.5 4L6 8l3.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </svg>
+        </button>
 
         <!-- 左侧面板：ASR 实时转写 -->
         <section class="panel asr-panel" id="asr-panel">
@@ -364,11 +370,13 @@
                             <div class="multi-model-cluster">
                                 <div class="cluster-header">智囊团</div>
                                 <div class="cluster-subactions">
-                                    <button id="identity-manager-btn" class="btn btn-secondary">身份管理</button>
+                                    <button id="identity-manager-btn" class="btn btn-secondary" title="创建或管理智囊团身份">
+                                        身份管理 / 添加成员
+                                    </button>
                                 </div>
                                 <p class="cluster-hint">
-                                    勾选下方模型即表示加入智囊团，开启智囊团模式后所有已勾选模型会并行协作、同步输出意见；
-                                    请确保每个模型都绑定了合适的身份提示词，以便协作时各司其职。
+                                    勾选下方模型即表示加入智囊团。开启智囊团模式后，所有已勾选且绑定了'已启用'身份的模型会并行协作并同步输出意见；
+                                    身份可由上方按钮自行创建（ID、名称与提示词），停用身份则不会随智囊团自动触发。
                                 </p>
                                 <div id="multi-model-list" class="multi-model-options"></div>
                             </div>
