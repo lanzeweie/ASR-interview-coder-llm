@@ -143,6 +143,19 @@
                         <div class="intent-recognition-dot"></div>
                         <span class="intent-recognition-text">意图识别</span>
                     </div>
+                    <!-- 简历状态指示器 -->
+                    <div id="resume-status-indicator" class="resume-status-indicator" style="display: none;">
+                        <div class="resume-status-dot"></div>
+                        <span class="resume-status-text">简历就绪</span>
+                    </div>
+                    <button id="upload-resume-btn" class="control-btn" title="上传简历 (PDF)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 12V4M8 4L5 7M8 4L11 7" stroke="currentColor" stroke-width="1.5"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="M3 14H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                        </svg>
+                    </button>
+                    <input type="file" id="resume-upload-input" accept=".pdf" style="display: none;">
                     <button id="settings-btn" class="control-btn" title="设置">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                             <path
@@ -200,6 +213,18 @@
                                     stroke-linecap="round" />
                             </svg>
                             <span class="tooltip-text">启用后进行聊天记录汇总分析，提取大纲</span>
+                        </button>
+
+                        <!-- 简历个性化开关 -->
+                        <button id="resume-toggle" class="icon-control-btn" title="简历个性化">
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                                <path
+                                    d="M14 2H4C2.9 2 2 2.9 2 4V14C2 15.1 2.9 16 4 16H14C15.1 16 16 15.1 16 14V4C16 2.9 15.1 2 14 2Z"
+                                    stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                                <path d="M5 6H13M5 9H13M5 12H9" stroke="currentColor" stroke-width="1.5"
+                                    stroke-linecap="round" />
+                            </svg>
+                            <span class="tooltip-text">开启后将简历信息注入到 AI 上下文中</span>
                         </button>
                     </div>
 
@@ -316,9 +341,7 @@
                                     <path
                                         d="M9 2C6.79 2 5 3.79 5 6V12C5 14.21 6.79 16 9 16C11.21 16 13 14.21 13 12V6C13 3.79 11.21 2 9 2Z"
                                         stroke="currentColor" stroke-width="1.5" />
-                                    <path
-                                        d="M7 9L9 11L13 7"
-                                        stroke="currentColor" stroke-width="1.5"
+                                    <path d="M7 9L9 11L13 7" stroke="currentColor" stroke-width="1.5"
                                         stroke-linecap="round" stroke-linejoin="round" />
                                 </svg>
                                 意图识别
@@ -652,6 +675,62 @@
         </div>
     </div>
 
+    <!-- 简历设置模态框 -->
+    <div id="resume-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content settings-modal-content">
+            <div class="modal-header">
+                <h2>简历设置与上传</h2>
+                <button id="resume-modal-close-btn" class="close-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>简历分析 Agent 配置</h3>
+                    <div class="form-group">
+                        <label>模型类型</label>
+                        <select id="resume-model-type-select" class="form-select">
+                            <option value="api">API 模型</option>
+                            <option value="local">本地模型</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="resume-model-name-group">
+                        <label>选择模型</label>
+                        <select id="resume-model-select" class="form-select">
+                            <option value="default">默认 (跟随主配置)</option>
+                        </select>
+                        <input type="text" id="resume-local-model-input" class="form-input" placeholder="输入本地模型路径/名称"
+                            style="display: none;">
+                    </div>
+                    <div class="form-actions">
+                        <button id="save-resume-config-btn" class="btn btn-primary">保存配置</button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>上传简历</h3>
+                    <div class="upload-area" id="resume-drop-zone">
+                        <div class="upload-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                                <path d="M3 16V18C3 19.1 3.9 20 5 20H19C20.1 20 21 19.1 21 18V16" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" />
+                            </svg>
+                        </div>
+                        <p>点击或拖拽 PDF 文件到此处</p>
+                        <input type="file" id="resume-file-input" accept=".pdf" style="display: none;">
+                    </div>
+                    <div id="resume-upload-status" class="status-message" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 身份管理模态框 -->
     <div id="identity-manager-modal" class="modal">
         <div class="modal-overlay"></div>
@@ -677,8 +756,7 @@
                     </div>
                     <div class="form-group">
                         <label>身份提示词</label>
-                        <textarea id="identity-prompt-input" rows="4"
-                            placeholder="描述该身份的角色设定，智囊团会优先使用此提示词"></textarea>
+                        <textarea id="identity-prompt-input" rows="4" placeholder="描述该身份的角色设定，智囊团会优先使用此提示词"></textarea>
                     </div>
                     <div class="identity-form-actions">
                         <button id="identity-modal-reset" class="btn btn-secondary">新建</button>

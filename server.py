@@ -22,6 +22,7 @@ except ImportError:
 from llm_client import LLMClient
 
 from chat_manager import ChatManager
+from resume_manager import ResumeManager
 
 # Intelligent Agent imports
 try:
@@ -230,6 +231,15 @@ else:
 
 # Initialize Chat Manager
 chat_manager = ChatManager()
+
+# Initialize Resume Manager
+resume_manager = ResumeManager(llm_client=llm_client)
+resume_personalization_enabled = False
+
+# Load initial resume config
+_initial_config = load_config()
+if "resume_config" in _initial_config:
+    resume_manager.update_config(_initial_config["resume_config"])
 
 # --- Connection Manager for ASR ---
 class ConnectionManager:
@@ -809,6 +819,8 @@ async def update_config(data: dict = Body(...)):
             base_url=new_config.get("base_url"),
             model=new_config.get("model")
         )
+        # Update ResumeManager's LLM client as well
+        resume_manager.set_llm_client(llm_client)
     
     return {"status": "success", "message": "Configuration updated"}
 
@@ -880,7 +892,8 @@ async def get_agent_status():
         "enabled": agent_manager.enabled,
         "auto_trigger": agent_manager.auto_trigger,
         "status": trigger_manager.get_status(),
-        "config": agent_config
+        "config": agent_config,
+        "model_local": config_data.get("model_local", ["Qwen3-0.6B"])
     }
 
 @app.get("/api/agent/roles")
@@ -1367,6 +1380,83 @@ async def get_voiceprint_audio(name: str):
         filename=f"{name}.wav"
     )
 
+
+# --- Resume Management Endpoints ---
+
+@app.post("/api/resume/upload")
+async def upload_resume(file: UploadFile = File(...)):
+    """Upload and parse resume PDF."""
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    
+    try:
+        content = await file.read()
+        # Save PDF
+        pdf_path = await resume_manager.save_pdf(content, file.filename)
+        
+        # Extract text (async)
+        text = await resume_manager.extract_text(pdf_path)
+        if not text:
+             return JSONResponse(status_code=400, content={"status": "error", "message": "无法提取文本或文件已加密"})
+
+        # Analyze and convert to XML (async)
+        # Note: In a production app, this should be a background task
+        # Pass current config data to allow resolving API models
+        current_config_data = load_config()
+        xml_content = await resume_manager.analyze_resume(text, config_data=current_config_data)
+        
+        if xml_content:
+            resume_manager.save_xml(xml_content)
+            return {"status": "success", "message": "简历解析成功"}
+        else:
+            return JSONResponse(status_code=500, content={"status": "error", "message": "简历分析失败"})
+            
+    except Exception as e:
+        print(f"Resume upload error: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+@app.get("/api/resume/status")
+async def get_resume_status():
+    """Get resume status and configuration."""
+    status = resume_manager.get_status()
+    status["personalization_enabled"] = resume_personalization_enabled
+    return status
+
+@app.post("/api/resume/toggle")
+async def toggle_resume_personalization(data: dict = Body(...)):
+    """Toggle resume personalization."""
+    global resume_personalization_enabled
+    enabled = data.get("enabled", False)
+    resume_personalization_enabled = enabled
+    return {"status": "success", "enabled": resume_personalization_enabled}
+
+@app.get("/api/resume/xml")
+async def get_resume_xml():
+    """Get the parsed resume XML."""
+    xml = resume_manager.get_resume_xml()
+    if not xml:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    return {"xml": xml}
+
+def inject_resume_to_messages(messages: list[dict]):
+    """Inject resume XML into system prompt if enabled."""
+    if not resume_personalization_enabled:
+        return
+    
+    xml = resume_manager.get_resume_xml()
+    if not xml:
+        return
+
+    prompt = f"\n\n<resume_context>\n{xml}\n</resume_context>\n请根据以上简历信息，个性化你的回答。"
+    
+    # Insert into system prompt if exists, or add new system prompt
+    for msg in messages:
+        if msg.get("role") == "system":
+            msg["content"] += prompt
+            return
+            
+    messages.insert(0, {"role": "system", "content": prompt})
+
 @app.websocket("/ws/llm")
 async def llm_websocket(websocket: WebSocket):
     await llm_manager.connect(websocket)
@@ -1382,6 +1472,7 @@ async def llm_websocket(websocket: WebSocket):
             base_url=curr_conf.get("base_url"),
             model=curr_conf.get("model")
         )
+        resume_manager.set_llm_client(llm_client)
 
     try:
         while True:
@@ -1501,6 +1592,9 @@ async def llm_websocket(websocket: WebSocket):
             # Add system prompt if not present or just ensure it's there
             if not messages or messages[0].get("role") != "system":
                  messages.insert(0, {"role": "system", "content": "你是一个Ai助手帮助用户，并且分析聊天记录"})
+
+            # Inject Resume if enabled
+            inject_resume_to_messages(messages)
 
             if is_multi_llm:
                 await handle_multi_llm_request(websocket, messages, chat_id)

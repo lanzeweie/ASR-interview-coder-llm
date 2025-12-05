@@ -1,0 +1,193 @@
+/* Resume Status Indicator */
+.resume-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    margin-right: 12px;
+    transition: all 0.3s ease;
+}
+
+.resume-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--text-tertiary);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.status-parsing .resume-status-dot {
+    background-color: var(--color-warning);
+    box-shadow: 0 0 8px var(--color-warning);
+    animation: pulse 1.5s infinite;
+}
+
+.status-ready {
+    background: rgba(var(--color-success-rgb), 0.1);
+    border-color: rgba(var(--color-success-rgb), 0.3);
+    color: var(--color-success);
+}
+
+.status-ready .resume-status-dot {
+    background-color: var(--color-success);
+    box-shadow: 0 0 8px var(--color-success);
+}
+
+.status-error {
+    background: rgba(var(--color-error-rgb), 0.1);
+    border-color: rgba(var(--color-error-rgb), 0.3);
+    color: var(--color-error);
+}
+
+.status-error .resume-status-dot {
+    background-color: var(--color-error);
+    box-shadow: 0 0 8px var(--color-error);
+}
+
+/* Disabled toggle */
+.icon-control-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(100%);
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.6;
+        transform: scale(1.2);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Resume Modal Styles */
+.settings-modal-content {
+    max-width: 500px;
+}
+
+.settings-section {
+    margin-bottom: 24px;
+    background: var(--bg-primary);
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.settings-section h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-section h3::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 16px;
+    background: var(--color-primary);
+    border-radius: 2px;
+}
+
+.upload-area {
+    border: 2px dashed var(--border-color);
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--bg-secondary);
+    position: relative;
+    overflow: hidden;
+}
+
+.upload-area:hover,
+.upload-area.drag-over {
+    border-color: var(--color-primary);
+    background: rgba(var(--color-primary-rgb), 0.05);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.upload-icon {
+    margin-bottom: 16px;
+    color: var(--text-tertiary);
+    transition: color 0.3s ease;
+}
+
+.upload-area:hover .upload-icon {
+    color: var(--color-primary);
+}
+
+.upload-area p {
+    color: var(--text-secondary);
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.status-message {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.status-message.success {
+    background: rgba(var(--color-success-rgb), 0.1);
+    color: var(--color-success);
+    border: 1px solid rgba(var(--color-success-rgb), 0.2);
+}
+
+.status-message.error {
+    background: rgba(var(--color-error-rgb), 0.1);
+    color: var(--color-error);
+    border: 1px solid rgba(var(--color-error-rgb), 0.2);
+}
+
+.status-message.uploading {
+    background: rgba(var(--color-primary-rgb), 0.1);
+    color: var(--color-primary);
+    border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 20px;
+}

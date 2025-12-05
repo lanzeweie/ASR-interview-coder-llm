@@ -27,3 +27,5 @@ pydantic==2.5.0
 python-dateutil==2.8.2
 soundfile
 
+
+PyPDF2

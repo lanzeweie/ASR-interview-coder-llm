@@ -32,6 +32,8 @@
 /* 动画效果 */
 @import url('./toast.css');
 /* Toast 通知样式 */
+@import url('./resume.css');
+/* 简历功能样式 */
 
 /* 全局注释：
    这个文件是CSS模块化的主入口文件

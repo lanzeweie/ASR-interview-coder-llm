@@ -271,46 +271,56 @@ flowchart TD
 ## 用户个性化(简历)
 ```
 flowchart TD
-    Start([用户个性化<br/>入口：用户上传或开启简历模式]) --> CheckMode{简历模式开启？}
+    Start([用户入口：上传简历或开启简历解析模式]) --> CheckMode{是否开启简历模式？}
 
-    CheckMode -- 否 --> NormalFlow[走普通对话流程<br/>不注入简历上下文]
-    CheckMode -- 是 --> CheckFile{本地已有<br/>解析后XML？}
+    CheckMode -- 否 --> NormalFlow[进入普通对话模式\n不加载简历画像]
+    CheckMode -- 是 --> CheckCache{是否存在已解析的\nuser_profile.xml？}
 
-    %% 分支：如果有缓存直接用，没有则开始处理
-    CheckFile -- 是 --> InjectXML[直接读取 user_profile.xml]
-    CheckFile -- 否 --> ExtractProcess[启动简历解析流程]
+    %% 缓存逻辑
+    CheckCache -- 是 --> InjectXML[加载并注入\n已存在的用户画像 XML]
+    CheckCache -- 否 --> ExtractPipeline[启动简历解析流程]
 
-    %% 文本提取阶段（去OCR）
-    ExtractProcess --> TextExtract[文本提取<br/>PyPDF2 / python-docx]
-    TextExtract --> CallResumeAgent[调用简历分析 Agent<br/>Prompt: 提取关键维度+保留原文]
+    %% 文本提取
+    ExtractPipeline --> TextExtract[文本提取模块\nPyPDF2 / python-docx / OCR]
+    TextExtract --> CallResumeAgent[调用 Resume Parsing Agent\n输入: TEXT_INPUT\n输出: 画像维度数据]
 
-    %% 核心分析子图
-    subgraph ResumeAnalysis [简历重构与分析]
+    %% 核心解析流程
+    subgraph ResumeAnalysis [简历结构化画像构建流程]
         direction TB
-        DimTarget[1. 目标锁定<br/>提取目标职业与求职意向]
-        DimLife[2. 生活画像<br/>提取性格、生活状态、价值观]
-        DimExp[3. 经历精炼<br/>提取核心项目与工作流]
-        DimStack[4. 技术栈提取<br/>⚠️ 关键规则：相关技术栈经历保留原文原话]
+        DimBasic[1. 基础画像抽取\n角色定位、年限、行业]
+        DimCareer[2. 职业目标抽取\n岗位、行业、动机、成长方向]
+        DimSkills[3. 核心技能抽取\n面试可推理的能力标签]
+        DimExp[4. 工作经历提炼\n职责定位 + 关键成果]
+        DimProjects[5. 项目结构化\n目标 / 角色 / 成果]
+        DimTech[6. 技术栈提取\n保持原文技术词汇]
     end
 
-    CallResumeAgent --> DimTarget
-    DimTarget --> DimLife
-    DimLife --> DimExp
-    DimExp --> DimStack
-    DimStack --> FormatXML[格式化为 XML 结构]
+    CallResumeAgent --> DimBasic
+    DimBasic --> DimCareer
+    DimCareer --> DimSkills
+    DimSkills --> DimExp
+    DimExp --> DimProjects
+    DimProjects --> DimTech
+    DimTech --> FormatXML[合并解析结果\n构建 XML 画像]
 
-    %% 格式化子图
-    subgraph OutputFormat [XML 结构化输出]
+    %% 输出结构展示
+    subgraph OutputFormat [XML 构建与持久化]
         direction TB
-        TagInfo[&lt;basic_info&gt;<br/>基本画像]
-        TagTech[&lt;tech_stack&gt;<br/>原文技术栈]
-        TagExp[&lt;experience&gt;<br/>精炼经历]
+        XMLBasic[basic_info 节点]
+        XMLCareer[career_target 节点]
+        XMLSkills[core_skills 节点]
+        XMLExp[experience_summary 节点]
+        XMLProj[projects 节点]
+        XMLTech[tech_stack_raw 节点]
+        XMLGrowth[growth_plan 节点]
     end
 
-    FormatXML --> TagInfo
-    TagInfo --> SaveData[持久化存储<br/>data/user/resume.xml]
-    SaveData --> InjectXML
+    FormatXML --> XMLBasic
+    XMLBasic --> SaveXML[持久化存储\nuser_profile.xml]
 
-    %% 注入与最终输出
-    InjectXML
+    SaveXML --> InjectXML
+
+    %% 最终注入
+    InjectXML --> End([完成：面试 Agent 可随时使用画像数据])
+
 ```

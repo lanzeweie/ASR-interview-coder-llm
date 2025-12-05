@@ -76,10 +76,12 @@ export class ConfigManager {
         try {
             const res = await fetch('/api/config');
             const data = await res.json();
+            this.configData = data;
 
             this.configs = (data.configs || []).map(config => this.normalizeConfigTags({ ...config }));
             this.currentConfigName = data.current_config;
             this.multiLLMActiveNames = new Set(data.multi_llm_active_names || []);
+            this.modelLocal = data.model_local || ["Qwen3-0.6B"];
 
             // Load identities first
             await this.loadIdentities();
@@ -560,7 +562,8 @@ export class ConfigManager {
                 body: JSON.stringify({
                     configs: this.configs,
                     current_config: this.currentConfigName,
-                    multi_llm_active_names: Array.from(this.multiLLMActiveNames)
+                    multi_llm_active_names: Array.from(this.multiLLMActiveNames),
+                    model_local: this.modelLocal || ["Qwen3-0.6B"]
                 })
             });
             // 保存成功后刷新智囊团显示
@@ -861,7 +864,8 @@ export class ConfigManager {
                 body: JSON.stringify({
                     configs: this.configs,
                     current_config: this.currentConfigName,
-                    multi_llm_active_names: Array.from(this.multiLLMActiveNames)
+                    multi_llm_active_names: Array.from(this.multiLLMActiveNames),
+                    model_local: this.modelLocal || ["Qwen3-0.6B"]
                 })
             });
             showToast("配置已删除", 'success');
@@ -963,6 +967,9 @@ export class ConfigManager {
 
             // 保存配置到全局变量
             window.agentConfig = data.config || {};
+            if (data.model_local) {
+                this.modelLocal = data.model_local;
+            }
 
             // 同步意图识别开关状态
             const intentEnabled = window.agentConfig.intent_recognition_enabled === true;
@@ -1012,8 +1019,11 @@ export class ConfigManager {
             let modelName = '';
 
             if (modelType === 'local') {
-                // 本地模式下，模型名保持不变（或者从配置中读取）
-                modelName = window.agentConfig?.model_name || 'Qwen3-0.6B';
+                // 本地模式下，从下拉框获取选择的模型
+                modelName = dom.agentModelSelect ? dom.agentModelSelect.value : '';
+                if (!modelName) {
+                    modelName = window.agentConfig?.model_name || (this.modelLocal && this.modelLocal[0]) || 'Qwen3-0.6B';
+                }
             } else {
                 modelName = dom.agentModelSelect ? dom.agentModelSelect.value : '';
                 // 只有当该部分可见时才校验必填
@@ -1028,7 +1038,11 @@ export class ConfigManager {
             let intentModelName = '';
 
             if (intentModelType === 'local') {
-                intentModelName = window.intentRecognitionConfig?.model_name || 'Qwen3-0.6B';
+                // 本地模式下，从下拉框获取选择的模型
+                intentModelName = dom.intentRecognitionModelSelect ? dom.intentRecognitionModelSelect.value : '';
+                if (!intentModelName) {
+                    intentModelName = window.intentRecognitionConfig?.model_name || (this.modelLocal && this.modelLocal[0]) || 'Qwen3-0.6B';
+                }
             } else {
                 intentModelName = dom.intentRecognitionModelSelect ? dom.intentRecognitionModelSelect.value : '';
                 // 只有当该部分可见时才校验必填
@@ -1111,15 +1125,24 @@ export class ConfigManager {
         const hintText = apiModelGroup.querySelector('.form-hint');
 
         if (select.value === 'local') {
-            // 本地模型模式 - 从配置文件读取模型名称
-            const agentConfig = window.agentConfig || {};
-            const modelName = agentConfig.model_name || 'Qwen3-0.6B';
+            // 本地模型模式 - 使用 model_local 列表
+            const currentModel = window.agentConfig?.model_name || (this.modelLocal && this.modelLocal[0]) || 'Qwen3-0.6B';
 
             apiModelGroup.style.display = 'block';
             apiModelLabel.textContent = '本地模型';
-            apiModelSelect.innerHTML = `<option value="${modelName}" selected>${modelName}</option>`;
-            apiModelSelect.disabled = true;
-            hintText.textContent = `本地模型：${modelName}`;
+
+            apiModelSelect.innerHTML = '';
+            const localModels = this.modelLocal || ['Qwen3-0.6B'];
+            localModels.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m;
+                option.textContent = m;
+                if (m === currentModel) option.selected = true;
+                apiModelSelect.appendChild(option);
+            });
+
+            apiModelSelect.disabled = false;
+            hintText.textContent = `选择本地模型`;
         } else {
             // API 模型模式
             apiModelGroup.style.display = 'block';
@@ -1134,6 +1157,12 @@ export class ConfigManager {
                 option.textContent = config.name;
                 apiModelSelect.appendChild(option);
             });
+
+            // 如果当前配置是API模式，尝试选中当前配置的模型
+            const agentConfig = window.agentConfig || {};
+            if (agentConfig.model_type === 'api' && agentConfig.model_name) {
+                apiModelSelect.value = agentConfig.model_name;
+            }
 
             hintText.textContent = '选择用于智能判定的小模型（建议使用轻量级模型）';
         }
@@ -1246,6 +1275,10 @@ export class ConfigManager {
                 return;
             }
 
+            if (data.model_local) {
+                this.modelLocal = data.model_local;
+            }
+
             // 从 agent_config 中提取意图识别配置
             const agentConfig = data.config || {};
             window.intentRecognitionConfig = {
@@ -1294,15 +1327,25 @@ export class ConfigManager {
         const hintText = apiModelGroup.querySelector('.form-hint');
 
         if (select.value === 'local') {
-            // 本地模型模式
+            // 本地模型模式 - 使用 model_local 列表
             const config = window.intentRecognitionConfig || {};
-            const modelName = config.model_name || 'Qwen3-0.6B';
+            const currentModel = config.model_name || (this.modelLocal && this.modelLocal[0]) || 'Qwen3-0.6B';
 
             apiModelGroup.style.display = 'block';
             apiModelLabel.textContent = '本地模型';
-            apiModelSelect.innerHTML = `<option value="${modelName}" selected>${modelName}</option>`;
-            apiModelSelect.disabled = true;
-            hintText.textContent = `本地模型：${modelName}`;
+
+            apiModelSelect.innerHTML = '';
+            const localModels = this.modelLocal || ['Qwen3-0.6B'];
+            localModels.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m;
+                option.textContent = m;
+                if (m === currentModel) option.selected = true;
+                apiModelSelect.appendChild(option);
+            });
+
+            apiModelSelect.disabled = false;
+            hintText.textContent = `选择本地模型`;
         } else {
             // API 模型模式
             apiModelGroup.style.display = 'block';
@@ -1317,6 +1360,12 @@ export class ConfigManager {
                 option.textContent = config.name;
                 apiModelSelect.appendChild(option);
             });
+
+            // 如果当前配置是API模式，尝试选中当前配置的模型
+            const config = window.intentRecognitionConfig || {};
+            if (config.model_type === 'api' && config.model_name) {
+                apiModelSelect.value = config.model_name;
+            }
 
             hintText.textContent = '选择用于意图识别的小模型（建议使用轻量级模型）';
         }

@@ -29,6 +29,7 @@ export class UIManager {
         this.initChatEvents();
         this.initLLMEvents();
         this.initToggleEvents();
+        this.checkResumeStatus();
         this.initResizerEvents();
         this.initTextSelectionEvents();
         this.initSidebarToggle();
@@ -297,6 +298,111 @@ export class UIManager {
                 window.agentEnabled = newState;
                 this.managers.chat.updateWelcomeMessage();
                 this.persistUIState();
+            });
+        }
+
+        // Resume Upload Button - Open Modal
+        if (dom.uploadResumeBtn) {
+            dom.uploadResumeBtn.addEventListener('click', () => {
+                this.openResumeModal();
+            });
+        }
+
+        // Resume Modal Events
+        if (dom.resumeModal) {
+            // Close button
+            if (dom.resumeModalCloseBtn) {
+                dom.resumeModalCloseBtn.addEventListener('click', () => {
+                    dom.resumeModal.classList.remove('active');
+                });
+            }
+
+            // Overlay click
+            const overlay = dom.resumeModal.querySelector('.modal-overlay');
+            if (overlay) {
+                overlay.addEventListener('click', () => {
+                    dom.resumeModal.classList.remove('active');
+                });
+            }
+
+            // Model Type Change
+            if (dom.resumeModelTypeSelect) {
+                dom.resumeModelTypeSelect.addEventListener('change', (e) => {
+                    this.handleResumeModelTypeChange(e.target.value);
+                });
+            }
+
+            // Save Config
+            if (dom.saveResumeConfigBtn) {
+                dom.saveResumeConfigBtn.addEventListener('click', () => {
+                    this.saveResumeConfig();
+                });
+            }
+
+            // File Upload
+            if (dom.resumeDropZone && dom.resumeFileInput) {
+                dom.resumeDropZone.addEventListener('click', () => {
+                    dom.resumeFileInput.click();
+                });
+
+                dom.resumeDropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    dom.resumeDropZone.classList.add('drag-over');
+                });
+
+                dom.resumeDropZone.addEventListener('dragleave', () => {
+                    dom.resumeDropZone.classList.remove('drag-over');
+                });
+
+                dom.resumeDropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dom.resumeDropZone.classList.remove('drag-over');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.handleResumeUpload(files[0]);
+                    }
+                });
+
+                dom.resumeFileInput.addEventListener('change', (e) => {
+                    const files = e.target.files;
+                    if (files.length > 0) {
+                        this.handleResumeUpload(files[0]);
+                    }
+                    dom.resumeFileInput.value = ''; // Reset
+                });
+            }
+        }
+
+        // Resume Personalization Toggle
+        if (dom.resumeToggleBtn) {
+            dom.resumeToggleBtn.addEventListener('click', async () => {
+                if (dom.resumeToggleBtn.classList.contains('disabled')) {
+                    showToast('请先上传简历', 'warning');
+                    return;
+                }
+
+                const isActive = dom.resumeToggleBtn.classList.contains('active');
+                const newState = !isActive;
+
+                try {
+                    const response = await fetch('/api/resume/toggle', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enabled: newState })
+                    });
+
+                    if (response.ok) {
+                        if (newState) {
+                            dom.resumeToggleBtn.classList.add('active');
+                            showToast('简历个性化已开启', 'success');
+                        } else {
+                            dom.resumeToggleBtn.classList.remove('active');
+                            showToast('简历个性化已关闭', 'info');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Toggle error:', e);
+                }
             });
         }
 
@@ -609,6 +715,240 @@ export class UIManager {
             document.dispatchEvent(new CustomEvent('ast:user-message', {
                 detail: { role: 'user', content }
             }));
+        }
+    }
+
+    updateResumeStatus(status) {
+        if (!dom.resumeStatusIndicator) return;
+
+        const dot = dom.resumeStatusIndicator.querySelector('.resume-status-dot');
+        const text = dom.resumeStatusIndicator.querySelector('.resume-status-text');
+
+        dom.resumeStatusIndicator.style.display = 'flex';
+        dom.resumeStatusIndicator.className = 'resume-status-indicator'; // reset
+
+        if (status === 'uploading') {
+            dom.resumeStatusIndicator.classList.add('status-parsing');
+            text.textContent = '解析中...';
+        } else if (status === 'ready') {
+            dom.resumeStatusIndicator.classList.add('status-ready');
+            text.textContent = '简历就绪';
+        } else if (status === 'error') {
+            dom.resumeStatusIndicator.classList.add('status-error');
+            text.textContent = '解析失败';
+        } else {
+            dom.resumeStatusIndicator.style.display = 'none';
+        }
+    }
+
+    async checkResumeStatus() {
+        try {
+            const response = await fetch('/api/resume/status');
+            if (response.ok) {
+                const data = await response.json();
+
+                if (data.has_resume) {
+                    this.updateResumeStatus('ready');
+                    if (dom.resumeToggleBtn) {
+                        dom.resumeToggleBtn.classList.remove('disabled');
+                        if (data.personalization_enabled) {
+                            dom.resumeToggleBtn.classList.add('active');
+                        }
+                    }
+                } else {
+                    this.updateResumeStatus('missing');
+                    if (dom.resumeToggleBtn) {
+                        dom.resumeToggleBtn.classList.add('disabled');
+                        dom.resumeToggleBtn.classList.remove('active');
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Check resume status error:', e);
+        }
+    }
+
+    async openResumeModal() {
+        if (!dom.resumeModal) return;
+
+        // Load config
+        await this.loadResumeConfig();
+
+        dom.resumeModal.classList.add('active');
+
+        // Reset status
+        if (dom.resumeUploadStatus) {
+            dom.resumeUploadStatus.style.display = 'none';
+            dom.resumeUploadStatus.className = 'status-message';
+            dom.resumeUploadStatus.textContent = '';
+        }
+    }
+
+    async loadResumeConfig() {
+        try {
+            // Use existing config loading mechanism
+            await this.managers.config.loadConfigs();
+            const config = this.managers.config.configData?.resume_config || {};
+            const type = config.model_type || 'api';
+
+            if (dom.resumeModelTypeSelect) {
+                dom.resumeModelTypeSelect.value = type;
+            }
+
+            // Handle type change and populate models
+            this.handleResumeModelTypeChange(type, config.model_name);
+
+        } catch (e) {
+            console.error('Load resume config error:', e);
+        }
+    }
+
+    populateResumeModelSelect(selectedModel, customList = null) {
+        if (!dom.resumeModelSelect) return;
+
+        dom.resumeModelSelect.innerHTML = '';
+
+        let items = [];
+        if (customList) {
+            items = customList.map(m => ({ name: m, value: m }));
+        } else {
+            const configs = this.managers.config.configs || [];
+            items = configs.map(c => ({ name: c.name, value: c.name }));
+        }
+
+        if (items.length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "无可用模型 (请先在设置中添加)";
+            dom.resumeModelSelect.appendChild(option);
+            return;
+        }
+
+        let hasSelection = false;
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.name;
+            if (item.value === selectedModel) {
+                option.selected = true;
+                hasSelection = true;
+            }
+            dom.resumeModelSelect.appendChild(option);
+        });
+
+        // If no model selected (or saved model not found), select the first one
+        if (!hasSelection && items.length > 0) {
+            dom.resumeModelSelect.selectedIndex = 0;
+        }
+    }
+
+    handleResumeModelTypeChange(type, preferredModel = null) {
+        // Always show select, hide input (deprecated)
+        if (dom.resumeModelSelect) dom.resumeModelSelect.style.display = 'block';
+        if (dom.resumeLocalModelInput) dom.resumeLocalModelInput.style.display = 'none';
+
+        const selected = preferredModel || (dom.resumeModelSelect ? dom.resumeModelSelect.value : '');
+
+        if (type === 'local') {
+            const localModels = this.managers.config.modelLocal || ['Qwen3-0.6B'];
+            this.populateResumeModelSelect(selected, localModels);
+        } else {
+            this.populateResumeModelSelect(selected);
+        }
+    }
+
+
+    async saveResumeConfig() {
+        // Ensure we have the latest config data
+        await this.managers.config.loadConfigs();
+
+        const type = dom.resumeModelTypeSelect?.value;
+        const name = dom.resumeModelSelect?.value || 'default';
+
+        // Construct the full config object to update
+        const currentConfig = this.managers.config.configData || {};
+        const resumeConfig = {
+            model_type: type,
+            model_name: name
+        };
+
+        const newConfig = {
+            ...currentConfig,
+            resume_config: resumeConfig
+        };
+
+        try {
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newConfig)
+            });
+
+            if (response.ok) {
+                showToast('简历配置已保存', 'success');
+                // Reload to ensure sync
+                await this.managers.config.loadConfigs();
+            } else {
+                showToast('保存失败', 'error');
+            }
+        } catch (e) {
+            console.error('Save resume config error:', e);
+            showToast('保存出错', 'error');
+        }
+    }
+
+    async handleResumeUpload(file) {
+        if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+            showToast('请上传 PDF 文件', 'error');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Update status UI
+        if (dom.resumeUploadStatus) {
+            dom.resumeUploadStatus.style.display = 'block';
+            dom.resumeUploadStatus.className = 'status-message uploading';
+            dom.resumeUploadStatus.textContent = '正在上传并分析简历...';
+        }
+
+        this.updateResumeStatus('uploading');
+
+        try {
+            const response = await fetch('/api/resume/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast('简历解析成功', 'success');
+                this.updateResumeStatus('ready');
+                this.checkResumeStatus();
+
+                if (dom.resumeUploadStatus) {
+                    dom.resumeUploadStatus.className = 'status-message success';
+                    dom.resumeUploadStatus.textContent = '简历解析成功！已准备好进行个性化对话。';
+                }
+            } else {
+                showToast(result.message || '上传失败', 'error');
+                this.updateResumeStatus('error');
+
+                if (dom.resumeUploadStatus) {
+                    dom.resumeUploadStatus.className = 'status-message error';
+                    dom.resumeUploadStatus.textContent = '解析失败: ' + (result.message || '未知错误');
+                }
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            showToast('上传出错', 'error');
+            this.updateResumeStatus('error');
+
+            if (dom.resumeUploadStatus) {
+                dom.resumeUploadStatus.className = 'status-message error';
+                dom.resumeUploadStatus.textContent = '上传出错: ' + error.message;
+            }
         }
     }
 }
