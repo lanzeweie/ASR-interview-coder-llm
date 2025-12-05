@@ -1,0 +1,67 @@
+<root>
+  <basic_info>
+    <identity_summary>电子与通信工程专业本科生，专注于嵌入式系统开发和硬件设计</identity_summary>
+    <work_years>0</work_years>
+    <current_status>学生</current_status>
+    <primary_industry>电子通信</primary_industry>
+    <role_positioning>嵌入式开发工程师/硬件工程师</role_positioning>
+    <work_style>实践导向，善于学习和应用新技术，注重团队协作，具备良好的问题解决能力</work_style>
+    <interest_tags>嵌入式开发,电子硬件设计</interest_tags>
+  </basic_info>
+  <career_target>
+    <desired_role>嵌入式开发工程师</desired_role>
+    <desired_industry>电子通信</desired_industry>
+    <upskilling_focus>嵌入式开发和电子硬件设计</upskilling_focus>
+    <career_motivation>对嵌入式开发和电子硬件设计有浓厚兴趣，期待在该领域不断深耕</career_motivation>
+  </career_target>
+  <core_skills>
+    <skill>嵌入式系统开发</skill>
+    <skill>STM32系列芯片应用</skill>
+    <skill>硬件电路设计</skill>
+    <skill>单片机外设和通信协议</skill>
+    <skill>项目调试和问题解决</skill>
+  </core_skills>
+  <experience_summary>
+    <experience>
+      <company>Q电子科技协会</company>
+      <position>设备管理员</position>
+      <scope_summary>负责元件的采购和消耗统计，以及设备仪器的管理</scope_summary>
+      <achievements>
+        <achievement>完成设备管理相关工作</achievement>
+      </achievements>
+    </experience>
+    <experience>
+      <company>流媒体社团</company>
+      <position>视频后期</position>
+      <scope_summary>负责对接外派摄影人员的拍摄素材，以及后期的视频剪辑工作</scope_summary>
+      <achievements>
+        <achievement>完成视频后期制作任务</achievement>
+      </achievements>
+    </experience>
+  </experience_summary>
+  <projects>
+    <project>
+      <project_goal>开发电路模型探究装置软件部分，实现信号自动调节和电路建模功能</project_goal>
+      <candidate_role>软件部分开发</candidate_role>
+      <project_impact>实现信号源自动调节和未知模型电路自主学习建模功能</project_impact>
+    </project>
+    <project>
+      <project_goal>开发智能送药小车系统，实现数字识别、循迹和协同送药功能</project_goal>
+      <candidate_role>全部个人完成</candidate_role>
+      <project_impact>实现小车自主识别、循迹和双车协同工作</project_impact>
+    </project>
+  </projects>
+  <tech_stack_raw>
+    <programming_languages>C语言, Python, Verilog</programming_languages>
+    <frameworks>HAL库, RTOS实时操作系统, LVGL图形界面</frameworks>
+    <databases></databases>
+    <cloud_devops></cloud_devops>
+    <tools>Keil5, STM32CubeIDE, CCS, VSCode, 立创EDA, 万用表, 示波器, 信号发生器, 焊笔, 热风枪, 加热台</tools>
+    <others>STM32系列芯片, ESP32, GD32, 单片机基础外设, SPI, IIC, UART, STM32H750XBH6, 4.3寸串口触摸屏, FPGA+高速DAC, STM32F103RCT6, 勘智K210, OpenMV, HC05模块</others>
+  </tech_stack_raw>
+  <growth_plan>
+    <skills_to_improve>嵌入式开发和电子硬件设计相关技能</skills_to_improve>
+    <target_tracks>嵌入式开发工程师</target_tracks>
+    <current_limitations>在校学生，缺乏正式工作经验</current_limitations>
+  </growth_plan>
+</root>

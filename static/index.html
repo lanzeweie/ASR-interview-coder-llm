@@ -221,8 +221,11 @@
                                 <path
                                     d="M14 2H4C2.9 2 2 2.9 2 4V14C2 15.1 2.9 16 4 16H14C15.1 16 16 15.1 16 14V4C16 2.9 15.1 2 14 2Z"
                                     stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-                                <path d="M5 6H13M5 9H13M5 12H9" stroke="currentColor" stroke-width="1.5"
-                                    stroke-linecap="round" />
+                                <text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle" font-size="6"
+                                    font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                                    fill="currentColor">
+                                    PDF
+                                </text>
                             </svg>
                             <span class="tooltip-text">开启后将简历信息注入到 AI 上下文中</span>
                         </button>
@@ -675,12 +678,13 @@
         </div>
     </div>
 
-    <!-- 简历设置模态框 -->
+    <!-- Resume Modal -->
     <div id="resume-modal" class="modal">
         <div class="modal-overlay"></div>
-        <div class="modal-content settings-modal-content">
+        <div class="modal-content large"
+            style="max-width: 1200px; height: 85vh; display: flex; flex-direction: column;">
             <div class="modal-header">
-                <h2>简历设置与上传</h2>
+                <h2 class="modal-title">简历</h2>
                 <button id="resume-modal-close-btn" class="close-btn">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                         <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -688,45 +692,107 @@
                     </svg>
                 </button>
             </div>
-            <div class="modal-body">
-                <div class="settings-section">
-                    <h3>简历分析 Agent 配置</h3>
-                    <div class="form-group">
-                        <label>模型类型</label>
-                        <select id="resume-model-type-select" class="form-select">
-                            <option value="api">API 模型</option>
-                            <option value="local">本地模型</option>
-                        </select>
+            <div class="modal-body" style="display: flex; gap: 20px; padding: 20px; height: 100%; overflow: hidden;">
+
+                <!-- Left Column: Controls & Upload -->
+                <div class="resume-left-panel"
+                    style="flex: 0 0 320px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; padding-right: 10px;">
+
+                    <!-- Settings Section -->
+                    <div class="settings-section">
+                        <h3><i class="fas fa-cog"></i> 解析设置</h3>
+                        <div class="form-group">
+                            <label>模型类型</label>
+                            <select id="resume-model-type-select" class="form-select">
+                                <option value="api">API 模型</option>
+                                <option value="local">本地模型</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="resume-model-name-group">
+                            <label>选择模型</label>
+                            <select id="resume-model-select" class="form-select">
+                                <option value="default">默认 (跟随主配置)</option>
+                            </select>
+                            <input type="text" id="resume-local-model-input" class="form-input"
+                                placeholder="输入本地模型路径/名称" style="display: none;">
+                        </div>
+                        <div class="form-actions">
+                            <button id="save-resume-config-btn" class="btn btn-primary small"
+                                style="width: 100%;">保存配置</button>
+                        </div>
                     </div>
-                    <div class="form-group" id="resume-model-name-group">
-                        <label>选择模型</label>
-                        <select id="resume-model-select" class="form-select">
-                            <option value="default">默认 (跟随主配置)</option>
-                        </select>
-                        <input type="text" id="resume-local-model-input" class="form-input" placeholder="输入本地模型路径/名称"
-                            style="display: none;">
-                    </div>
-                    <div class="form-actions">
-                        <button id="save-resume-config-btn" class="btn btn-primary">保存配置</button>
+
+                    <!-- Upload Section -->
+                    <div class="settings-section">
+                        <h3><i class="fas fa-file-upload"></i> 上传简历</h3>
+                        <div class="upload-area" id="resume-drop-zone">
+                            <div class="upload-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                                    <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                    <path d="M3 16V18C3 19.1 3.9 20 5 20H19C20.1 20 21 19.1 21 18V16"
+                                        stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                                </svg>
+                            </div>
+                            <p>点击或拖拽 PDF 文件到此处</p>
+                            <input type="file" id="resume-file-input" accept=".pdf" style="display: none;">
+                        </div>
+                        <div id="resume-upload-status" class="status-message" style="display: none;"></div>
+
+                        <!-- Progress & Control Area -->
+                        <div id="resume-progress-container" style="display: none; margin-top: 15px;">
+                            <div class="progress-bar-container"
+                                style="height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; margin-bottom: 8px;">
+                                <div id="resume-progress-bar" class="progress-bar-fill"
+                                    style="width: 0%; height: 100%; background: var(--accent-primary); transition: width 0.3s ease;">
+                                </div>
+                            </div>
+                            <div class="progress-info"
+                                style="display: flex; justify-content: space-between; align-items: center;">
+                                <span id="resume-step-text"
+                                    style="font-size: 12px; color: var(--text-secondary);">准备中...</span>
+                                <button id="resume-stop-btn" class="btn btn-danger small"
+                                    style="padding: 2px 8px; font-size: 12px;">停止</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>上传简历</h3>
-                    <div class="upload-area" id="resume-drop-zone">
-                        <div class="upload-icon">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                                <path d="M12 16V8M12 8L9 11M12 8L15 11" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round" />
-                                <path d="M3 16V18C3 19.1 3.9 20 5 20H19C20.1 20 21 19.1 21 18V16" stroke="currentColor"
-                                    stroke-width="2" stroke-linecap="round" />
-                            </svg>
-                        </div>
-                        <p>点击或拖拽 PDF 文件到此处</p>
-                        <input type="file" id="resume-file-input" accept=".pdf" style="display: none;">
+                <!-- Right Column: Preview -->
+                <div class="resume-right-panel"
+                    style="flex: 1; display: flex; flex-direction: column; background: var(--bg-tertiary); border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden;">
+                    <div class="panel-header"
+                        style="padding: 15px; border-bottom: 1px solid var(--border-color); background: var(--bg-elevated); display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 600;">简历解析</h3>
                     </div>
-                    <div id="resume-upload-status" class="status-message" style="display: none;"></div>
+                    <div id="resume-preview-area" class="panel-body"
+                        style="flex: 1; overflow-y: auto; padding: 20px; display: block;">
+                        <div id="resume-markdown-content" class="markdown-body"
+                            style="font-size: 14px; line-height: 1.6;">
+                            <div class="empty-state"
+                                style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); padding-top: 100px;">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none"
+                                    style="margin-bottom: 15px; opacity: 0.5;">
+                                    <path
+                                        d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z"
+                                        stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                    <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" />
+                                </svg>
+                                <p>暂无简历数据</p>
+                                <p style="font-size: 12px;">请在左侧上传 PDF 简历进行分析</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
             </div>
         </div>
     </div>

@@ -191,3 +191,100 @@
     justify-content: flex-end;
     margin-top: 20px;
 }
+
+/* Two-pane layout styles */
+.resume-left-panel {
+    flex: 0 0 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.resume-right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.resume-right-panel .panel-header {
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.resume-right-panel .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: block;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-tertiary);
+    padding-top: 100px;
+}
+
+/* Markdown Content Styles */
+.markdown-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.markdown-body h1 {
+    font-size: 2em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+}
+
+.markdown-body h2 {
+    font-size: 1.5em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+}
+
+.markdown-body h3 {
+    font-size: 1.25em;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 2em;
+    margin-bottom: 16px;
+}
+
+.markdown-body li {
+    margin-bottom: 4px;
+}
+
+.markdown-body p {
+    margin-bottom: 16px;
+}
+
+.markdown-body strong {
+    font-weight: 600;
+    color: var(--text-primary);
+}

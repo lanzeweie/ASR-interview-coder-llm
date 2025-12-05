@@ -1389,31 +1389,32 @@ async def upload_resume(file: UploadFile = File(...)):
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
     
+    # Check if already processing
+    status = resume_manager.get_status()
+    if status["state"] == "processing":
+        return JSONResponse(status_code=400, content={"status": "error", "message": "正在处理另一个简历，请稍候或停止当前任务"})
+
     try:
         content = await file.read()
         # Save PDF
         pdf_path = await resume_manager.save_pdf(content, file.filename)
         
-        # Extract text (async)
-        text = await resume_manager.extract_text(pdf_path)
-        if not text:
-             return JSONResponse(status_code=400, content={"status": "error", "message": "无法提取文本或文件已加密"})
-
-        # Analyze and convert to XML (async)
-        # Note: In a production app, this should be a background task
-        # Pass current config data to allow resolving API models
+        # Start background processing
         current_config_data = load_config()
-        xml_content = await resume_manager.analyze_resume(text, config_data=current_config_data)
+        task = asyncio.create_task(resume_manager.process_resume_task(pdf_path, config_data=current_config_data))
+        resume_manager.current_task = task
         
-        if xml_content:
-            resume_manager.save_xml(xml_content)
-            return {"status": "success", "message": "简历解析成功"}
-        else:
-            return JSONResponse(status_code=500, content={"status": "error", "message": "简历分析失败"})
+        return {"status": "success", "message": "简历已上传，开始后台分析..."}
             
     except Exception as e:
         print(f"Resume upload error: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+@app.post("/api/resume/stop")
+async def stop_resume_processing():
+    """Stop current resume processing."""
+    await resume_manager.stop_processing()
+    return {"status": "success", "message": "已停止处理"}
 
 @app.get("/api/resume/status")
 async def get_resume_status():
@@ -1437,6 +1438,14 @@ async def get_resume_xml():
     if not xml:
         raise HTTPException(status_code=404, detail="Resume not found")
     return {"xml": xml}
+
+@app.get("/api/resume/markdown")
+async def get_resume_markdown():
+    """Get the parsed resume Markdown."""
+    md = resume_manager.get_resume_markdown()
+    if not md:
+        raise HTTPException(status_code=404, detail="Resume markdown not found")
+    return {"markdown": md}
 
 def inject_resume_to_messages(messages: list[dict]):
     """Inject resume XML into system prompt if enabled."""

@@ -14,6 +14,7 @@ import {
     PanelResizer,
     initPanelResizeListener
 } from './utils.js';
+import { renderMarkdown } from './markdown.js';
 
 // ===== UI事件管理类 =====
 export class UIManager {
@@ -342,11 +343,13 @@ export class UIManager {
             // File Upload
             if (dom.resumeDropZone && dom.resumeFileInput) {
                 dom.resumeDropZone.addEventListener('click', () => {
+                    if (dom.resumeDropZone.classList.contains('disabled')) return;
                     dom.resumeFileInput.click();
                 });
 
                 dom.resumeDropZone.addEventListener('dragover', (e) => {
                     e.preventDefault();
+                    if (dom.resumeDropZone.classList.contains('disabled')) return;
                     dom.resumeDropZone.classList.add('drag-over');
                 });
 
@@ -356,6 +359,7 @@ export class UIManager {
 
                 dom.resumeDropZone.addEventListener('drop', (e) => {
                     e.preventDefault();
+                    if (dom.resumeDropZone.classList.contains('disabled')) return;
                     dom.resumeDropZone.classList.remove('drag-over');
                     const files = e.dataTransfer.files;
                     if (files.length > 0) {
@@ -369,6 +373,14 @@ export class UIManager {
                         this.handleResumeUpload(files[0]);
                     }
                     dom.resumeFileInput.value = ''; // Reset
+                });
+            }
+
+            // Stop Button
+            const stopBtn = document.getElementById('resume-stop-btn');
+            if (stopBtn) {
+                stopBtn.addEventListener('click', () => {
+                    this.stopResumeProcessing();
                 });
             }
         }
@@ -718,26 +730,103 @@ export class UIManager {
         }
     }
 
-    updateResumeStatus(status) {
-        if (!dom.resumeStatusIndicator) return;
+    updateResumeStatus(statusData) {
+        // Handle both string input (legacy) and object input
+        const status = typeof statusData === 'string' ? statusData : statusData.state;
+        const step = statusData.step || '';
+        const message = statusData.message || '';
 
-        const dot = dom.resumeStatusIndicator.querySelector('.resume-status-dot');
-        const text = dom.resumeStatusIndicator.querySelector('.resume-status-text');
+        // 1. Update Indicator (Header)
+        if (dom.resumeStatusIndicator) {
+            const dot = dom.resumeStatusIndicator.querySelector('.resume-status-dot');
+            const text = dom.resumeStatusIndicator.querySelector('.resume-status-text');
 
-        dom.resumeStatusIndicator.style.display = 'flex';
-        dom.resumeStatusIndicator.className = 'resume-status-indicator'; // reset
+            dom.resumeStatusIndicator.style.display = 'flex';
+            dom.resumeStatusIndicator.className = 'resume-status-indicator'; // reset
 
-        if (status === 'uploading') {
-            dom.resumeStatusIndicator.classList.add('status-parsing');
-            text.textContent = '解析中...';
-        } else if (status === 'ready') {
-            dom.resumeStatusIndicator.classList.add('status-ready');
-            text.textContent = '简历就绪';
+            if (status === 'processing' || status === 'uploading') {
+                dom.resumeStatusIndicator.classList.add('status-parsing');
+                text.textContent = '分析中...';
+            } else if (status === 'completed' || status === 'ready') {
+                dom.resumeStatusIndicator.classList.add('status-ready');
+                text.textContent = '简历就绪';
+            } else if (status === 'error') {
+                dom.resumeStatusIndicator.classList.add('status-error');
+                text.textContent = '解析失败';
+            } else {
+                dom.resumeStatusIndicator.style.display = 'none';
+            }
+        }
+
+        // 2. Update Modal UI
+        const progressContainer = document.getElementById('resume-progress-container');
+        const progressBar = document.getElementById('resume-progress-bar');
+        const stepText = document.getElementById('resume-step-text');
+        const uploadStatus = document.getElementById('resume-upload-status');
+        const dropZone = dom.resumeDropZone;
+        const previewArea = document.getElementById('resume-preview-area');
+
+        if (status === 'processing') {
+            // Show progress
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (uploadStatus) uploadStatus.style.display = 'none';
+            if (dropZone) {
+                dropZone.classList.add('disabled');
+                dropZone.style.opacity = '0.5';
+                dropZone.style.pointerEvents = 'none';
+            }
+            if (previewArea) previewArea.style.display = 'none';
+
+            // Update progress bar based on step
+            let progress = 10;
+            let text = message || '正在处理...';
+
+            if (step === 'uploading') progress = 20;
+            else if (step === 'extracting') progress = 40;
+            else if (step === 'analyzing_xml') progress = 60;
+            else if (step === 'analyzing_markdown') progress = 80;
+
+            if (progressBar) progressBar.style.width = `${progress}%`;
+            if (stepText) stepText.textContent = text;
+
+        } else if (status === 'completed' || status === 'ready') {
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (uploadStatus) {
+                uploadStatus.style.display = 'block';
+                uploadStatus.className = 'status-message success';
+                uploadStatus.textContent = '简历分析完成！';
+            }
+            if (dropZone) {
+                dropZone.classList.remove('disabled');
+                dropZone.style.opacity = '1';
+                dropZone.style.pointerEvents = 'auto';
+            }
+
+            // Load markdown if available
+            if (statusData.has_markdown) {
+                this.loadResumeMarkdown();
+            }
+
         } else if (status === 'error') {
-            dom.resumeStatusIndicator.classList.add('status-error');
-            text.textContent = '解析失败';
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (uploadStatus) {
+                uploadStatus.style.display = 'block';
+                uploadStatus.className = 'status-message error';
+                uploadStatus.textContent = statusData.error || '发生错误';
+            }
+            if (dropZone) {
+                dropZone.classList.remove('disabled');
+                dropZone.style.opacity = '1';
+                dropZone.style.pointerEvents = 'auto';
+            }
         } else {
-            dom.resumeStatusIndicator.style.display = 'none';
+            // Idle
+            if (progressContainer) progressContainer.style.display = 'none';
+            if (dropZone) {
+                dropZone.classList.remove('disabled');
+                dropZone.style.opacity = '1';
+                dropZone.style.pointerEvents = 'auto';
+            }
         }
     }
 
@@ -747,8 +836,9 @@ export class UIManager {
             if (response.ok) {
                 const data = await response.json();
 
+                this.updateResumeStatus(data);
+
                 if (data.has_resume) {
-                    this.updateResumeStatus('ready');
                     if (dom.resumeToggleBtn) {
                         dom.resumeToggleBtn.classList.remove('disabled');
                         if (data.personalization_enabled) {
@@ -756,15 +846,49 @@ export class UIManager {
                         }
                     }
                 } else {
-                    this.updateResumeStatus('missing');
                     if (dom.resumeToggleBtn) {
                         dom.resumeToggleBtn.classList.add('disabled');
                         dom.resumeToggleBtn.classList.remove('active');
                     }
                 }
+
+                // Poll if processing
+                if (data.state === 'processing') {
+                    setTimeout(() => this.checkResumeStatus(), 1000);
+                }
             }
         } catch (e) {
             console.error('Check resume status error:', e);
+        }
+    }
+
+    async stopResumeProcessing() {
+        try {
+            const response = await fetch('/api/resume/stop', { method: 'POST' });
+            if (response.ok) {
+                showToast('已停止处理', 'info');
+                this.checkResumeStatus();
+            }
+        } catch (e) {
+            console.error('Stop processing error:', e);
+        }
+    }
+
+    async loadResumeMarkdown() {
+        const previewArea = document.getElementById('resume-preview-area');
+        const contentDiv = document.getElementById('resume-markdown-content');
+
+        try {
+            const response = await fetch('/api/resume/markdown');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.markdown && previewArea && contentDiv) {
+                    previewArea.style.display = 'block';
+                    renderMarkdown(contentDiv, data.markdown);
+                }
+            }
+        } catch (e) {
+            console.error('Load markdown error:', e);
         }
     }
 
@@ -906,14 +1030,8 @@ export class UIManager {
         const formData = new FormData();
         formData.append('file', file);
 
-        // Update status UI
-        if (dom.resumeUploadStatus) {
-            dom.resumeUploadStatus.style.display = 'block';
-            dom.resumeUploadStatus.className = 'status-message uploading';
-            dom.resumeUploadStatus.textContent = '正在上传并分析简历...';
-        }
-
-        this.updateResumeStatus('uploading');
+        // Initial UI update
+        this.updateResumeStatus({ state: 'processing', step: 'uploading', message: '正在上传...' });
 
         try {
             const response = await fetch('/api/resume/upload', {
@@ -923,32 +1041,17 @@ export class UIManager {
             const result = await response.json();
 
             if (response.ok) {
-                showToast('简历解析成功', 'success');
-                this.updateResumeStatus('ready');
+                showToast('上传成功，开始分析...', 'success');
+                // Start polling
                 this.checkResumeStatus();
-
-                if (dom.resumeUploadStatus) {
-                    dom.resumeUploadStatus.className = 'status-message success';
-                    dom.resumeUploadStatus.textContent = '简历解析成功！已准备好进行个性化对话。';
-                }
             } else {
                 showToast(result.message || '上传失败', 'error');
-                this.updateResumeStatus('error');
-
-                if (dom.resumeUploadStatus) {
-                    dom.resumeUploadStatus.className = 'status-message error';
-                    dom.resumeUploadStatus.textContent = '解析失败: ' + (result.message || '未知错误');
-                }
+                this.updateResumeStatus({ state: 'error', error: result.message });
             }
         } catch (error) {
             console.error('Upload error:', error);
             showToast('上传出错', 'error');
-            this.updateResumeStatus('error');
-
-            if (dom.resumeUploadStatus) {
-                dom.resumeUploadStatus.className = 'status-message error';
-                dom.resumeUploadStatus.textContent = '上传出错: ' + error.message;
-            }
+            this.updateResumeStatus({ state: 'error', error: error.message });
         }
     }
 }

@@ -110,7 +110,13 @@ export const dom = {
     saveResumeConfigBtn: document.getElementById('save-resume-config-btn'),
     resumeDropZone: document.getElementById('resume-drop-zone'),
     resumeFileInput: document.getElementById('resume-file-input'),
-    resumeUploadStatus: document.getElementById('resume-upload-status')
+    resumeUploadStatus: document.getElementById('resume-upload-status'),
+    resumeProgressContainer: document.getElementById('resume-progress-container'),
+    resumeProgressBar: document.getElementById('resume-progress-bar'),
+    resumeStepText: document.getElementById('resume-step-text'),
+    resumeStopBtn: document.getElementById('resume-stop-btn'),
+    resumePreviewArea: document.getElementById('resume-preview-area'),
+    resumeMarkdownContent: document.getElementById('resume-markdown-content')
 };
 
 // ===== DOM工具函数 =====
