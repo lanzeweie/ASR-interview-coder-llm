@@ -65,6 +65,8 @@ export function showToast(message, type = 'info') {
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
+    toast.style.cursor = 'pointer'; // 提示可点击
+    toast.title = '点击关闭';
 
     const icon = document.createElement('div');
     icon.innerHTML = type === 'success' ? '✓' : type === 'error' ? '⚠' : 'ℹ';
@@ -78,11 +80,23 @@ export function showToast(message, type = 'info') {
     toast.appendChild(text);
     dom.toastContainer.appendChild(toast);
 
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%) scale(0.9)';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    const removeToast = () => {
+        toast.classList.add('closing');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 250);
+    };
+
+    // 自动关闭定时器
+    const autoCloseTimer = setTimeout(removeToast, 3000);
+
+    // 点击立即关闭
+    toast.onclick = () => {
+        clearTimeout(autoCloseTimer);
+        removeToast();
+    };
 }
 
 // ===== 面板调节状态 =====

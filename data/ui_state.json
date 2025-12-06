@@ -1,9 +1,9 @@
 {
-  "multiLLMActive": false,
+  "multiLLMActive": true,
   "agentToggleActive": true,
   "intentRecognitionActive": true,
-  "currentChatId": "abcd47de-8565-4089-94f6-6d7faf52743c",
+  "currentChatId": null,
   "sidebarCollapsed": false,
-  "timestamp": 1765024976159,
+  "timestamp": 1765025704891,
   "ast_asr_width": 1220
 }

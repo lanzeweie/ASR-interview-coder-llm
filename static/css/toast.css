@@ -39,6 +39,11 @@
     line-height: 1.5;
 }
 
+/* Toast Closing State */
+.toast.closing {
+    animation: fadeOut 0.25s ease forwards;
+}
+
 /* Toast Types */
 .toast.info {
     border-left: 4px solid var(--accent-primary);
@@ -90,5 +95,17 @@
     to {
         opacity: 1;
         transform: translateX(0) scale(1);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateX(100%) scale(0.9);
     }
 }
