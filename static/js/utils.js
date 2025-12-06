@@ -169,7 +169,7 @@ export class PanelResizer {
 
         // 最小宽度限制
         const minAsrWidth = 250;
-        const minLlmWidth = 300;
+        const minLlmWidth = 400;
 
         // 确保两个面板都不小于最小宽度
         if (newAsrWidth < minAsrWidth) {
@@ -343,8 +343,27 @@ export function adjustPanelLayout({ asrWidth, llmWidth } = {}) {
         }
     }
 
-    if (typeof llmWidth === 'number' && currentModelDisplay) {
-        currentModelDisplay.style.display = llmWidth < 300 ? 'none' : '';
+    if (typeof llmWidth === 'number') {
+        if (currentModelDisplay) {
+            currentModelDisplay.style.display = llmWidth < 450 ? 'none' : '';
+        }
+
+        // 当 LLM 面板变窄时，隐藏状态指示器的文字，只显示点
+        const isCompact = llmWidth < 580;
+        const indicators = [
+            { el: dom.agentStatusIndicator, textClass: '.agent-status-text' },
+            { el: dom.intentRecognitionIndicator, textClass: '.intent-recognition-text' },
+            { el: dom.resumeStatusIndicator, textClass: '.resume-status-text' }
+        ];
+
+        indicators.forEach(({ el, textClass }) => {
+            if (el) {
+                const text = el.querySelector(textClass);
+                if (text) {
+                    text.style.display = isCompact ? 'none' : '';
+                }
+            }
+        });
     }
 }
 
