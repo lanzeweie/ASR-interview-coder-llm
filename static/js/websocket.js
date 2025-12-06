@@ -237,6 +237,10 @@ export class WebSocketManager {
                 statusEl.textContent = '分析中';
                 flag.classList.remove('flag-complete', 'flag-helper');
                 flag.classList.add('flag-progress');
+            } else if (data.analysis_status === 'intent_started') {
+                statusEl.textContent = '意图识别中';
+                flag.classList.remove('flag-complete', 'flag-helper');
+                flag.classList.add('flag-progress');
             } else if (data.analysis_need_ai) {
                 statusEl.textContent = '助手介入';
                 flag.classList.remove('flag-progress', 'flag-complete');
@@ -253,6 +257,22 @@ export class WebSocketManager {
         if (noteEl) {
             noteEl.innerHTML = '';
 
+            // 显示意图识别进行中状态
+            if (data.analysis_status === 'intent_started') {
+                const model = data.intent_model || 'Unknown';
+                const intentDiv = document.createElement('div');
+                intentDiv.className = 'intent-result-compact'; // Updated class
+                intentDiv.innerHTML = `
+                    <div class="intent-meta-compact">
+                        <span class="intent-label-compact">调用模型: ${model}</span>
+                        <span class="intent-status-compact" style="color: var(--accent-primary);">🔄 正在分析意图...</span>
+                    </div>
+                `;
+                noteEl.appendChild(intentDiv);
+                noteEl.style.display = 'block';
+                return;
+            }
+
             // 显示常规分析信息
             if (noteText) {
                 const textDiv = document.createElement('div');
@@ -264,16 +284,20 @@ export class WebSocketManager {
             if (data.intent_info) {
                 const { model, summary } = data.intent_info;
                 const intentDiv = document.createElement('div');
-                intentDiv.className = 'intent-result';
-                intentDiv.style.marginTop = '8px';
-                intentDiv.style.paddingTop = '8px';
-                intentDiv.style.borderTop = '1px solid rgba(255,255,255,0.1)';
-                intentDiv.style.fontSize = '0.9em';
+                intentDiv.className = 'intent-result-compact'; // Updated class
+
+                // Format summary to include label "意图总结: " if not present
+                let displaySummary = summary;
+                if (!displaySummary.startsWith('意图总结') && !displaySummary.startsWith('Intent Summary')) {
+                    displaySummary = `意图总结: ${displaySummary}`;
+                }
 
                 intentDiv.innerHTML = `
-                    <div style="opacity: 0.7; margin-bottom: 2px;">调用模型：${model}</div>
-                    <div style="color: #4caf50; font-weight: 600; margin-bottom: 2px;">✅ 意图识别完成</div>
-                    <div style="line-height: 1.4;">意图总结：${summary}</div>
+                    <div class="intent-meta-compact">
+                        <span class="intent-label-compact">调用模型: ${model}</span>
+                        <span class="intent-status-compact">✅ 意图识别完成</span>
+                    </div>
+                    <div class="intent-summary-compact">${displaySummary}</div>
                 `;
                 noteEl.appendChild(intentDiv);
             }

@@ -348,11 +348,13 @@
 }
 
 @keyframes analysis-dot-pulse {
+
     0%,
     100% {
         transform: scale(1);
         opacity: 1;
     }
+
     50% {
         transform: scale(1.4);
         opacity: 0.6;
@@ -603,4 +605,70 @@
 
 .control-btn:active {
     transform: translateY(0);
+}
+
+/* ========================================
+   Voice Hall - Intent Result Styles
+   ======================================== */
+.intent-result-compact {
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--bg-tertiary, #f8fafc);
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle, #e2e8f0);
+    font-family: var(--font-sans);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.intent-meta-compact {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.intent-label-compact {
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-tertiary, #64748b);
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    border: 1px solid rgba(0, 0, 0, 0.02);
+}
+
+.intent-status-compact {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-success, #22c55e);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.intent-summary-compact {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary, #475569);
+    background: rgba(34, 197, 94, 0.06);
+    border: 1px dashed rgba(34, 197, 94, 0.4);
+    border-radius: 6px;
+    padding: 8px 12px;
+    white-space: pre-wrap;
+    position: relative;
+    /* Optional: add "Intent Summary" label logic if needed, 
+       but user image just showed text inside. 
+       We can assume the summary text includes the label or we format it in JS. */
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }

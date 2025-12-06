@@ -275,11 +275,34 @@ class TriggerManager:
             agent_config = config_data.get("agent_config", {})
             intent_recognition_enabled = agent_config.get("intent_recognition_enabled", False)
 
+            # 定义进度回调
+            async def progress_callback(stage: str, data: Dict):
+                if self.broadcast_callback:
+                    import time
+                    cur_analysis_id = analysis_id or self.state.current_analysis_id
+                    
+                    if stage == "intent_started":
+                        model = data.get("model", "Unknown")
+                        print(f"[触发机制] 📡 发送意图识别开始广播: {model}")
+                        try:
+                            await self.broadcast_callback({
+                                "time": time.strftime("%H:%M:%S"),
+                                "speaker": "智能分析",
+                                "analysis_id": cur_analysis_id,
+                                "analysis_status": "intent_started",
+                                "analysis_summary": analysis_meta.get("analysis_summary", "[智能分析]") if analysis_meta else "[智能分析]",
+                                "intent_model": model,
+                                "text": f"正在进行意图识别..."
+                            })
+                        except Exception as e:
+                            print(f"[触发机制] ❌ 广播失败: {e}")
+
             # 运行完整的三阶段智能分析
             result = await agent_manager.run_intelligent_analysis(
                 messages,
                 speaker_name,
-                intent_recognition=intent_recognition_enabled
+                intent_recognition=intent_recognition_enabled,
+                status_callback=progress_callback
             )
             result['analysis_id'] = analysis_id or self.state.current_analysis_id
             if analysis_meta:

@@ -12,7 +12,7 @@ import json
 import re
 import time
 from html import escape
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from llm_client import LLMClient
 
@@ -540,11 +540,10 @@ class IntentRecognitionAgent(BaseLLMAgent):
     async def analyze(self, messages: List[Dict], speaker_name: str) -> Dict:
         prompt = self.build_prompt(messages, speaker_name)
         try:
-            print(
-                f"[意图识别] 开始分析，主人公: {speaker_name}, 消息数: {len(messages)}, "
-                f"模型类型: {self.model_type}, 模型: {self.config.get('model_name') or self.config.get('model')}"
-            )
-            print("[意图识别][调试] 完整 Prompt 内容:")
+            print(f"\n[DEBUG_INTENT] 🚀 正在执行意图识别 prompt...")
+            print(f"[DEBUG_INTENT] 主人公: {speaker_name}")
+            print(f"[DEBUG_INTENT] 上下文消息数: {len(messages)}")
+            print("[DEBUG_INTENT] 完整 Prompt 内容:")
             print("=" * 80)
             print(prompt)
             print("=" * 80)
@@ -807,7 +806,8 @@ class AgentManager:
         use_resume: bool = False,
         use_think_tank: bool = True,
         bypass_enabled: bool = False,
-        force_modules: bool = False
+        force_modules: bool = False,
+        status_callback: Optional[Callable[[str, Dict], asyncio.Future]] = None
     ) -> Dict:
         print(
             "[智能分析] run_pipeline -> "
@@ -835,16 +835,31 @@ class AgentManager:
         intent_result = None
         if use_intent and not should_halt:
             print("[意图识别] 模块启用，即将运行 IntentRecognitionAgent")
+            if status_callback:
+                intent_model = self.intent_agent.config.get('model_name') if self.intent_agent else "Unknown"
+                if asyncio.iscoroutinefunction(status_callback):
+                    await status_callback("intent_started", {"model": intent_model})
+                else:
+                    status_callback("intent_started", {"model": intent_model})
+            
             intent_result = await self.run_intent_recognition(messages, speaker_name)
+            
+            # 检查意图识别结果，如果未检测到技术问题，则终止后续流程
+            if intent_result and intent_result.get('success'):
+                summary_xml = intent_result.get('summary_xml', '')
+                if '未检测到技术问题' in summary_xml:
+                    print("[智能分析] 意图识别结果为'未检测到技术问题'，终止后续流程")
+                    should_halt = True
 
         distribution_result = None
         if use_think_tank:
             if should_halt:
                 distribution_result = {
-                    'mode': 'default',
+                    'mode': 'halt', # 使用 'halt' 模式明确表示停止
                     'targets': [],
                     'intent': intent_result,
-                    'system_prompt': self.think_tank_agent.get_system_prompt(use_intent, use_resume)
+                    'system_prompt': '', # 停止时不不需要 system prompt
+                    'reason': 'Process halted by analysis/intent result'
                 }
             else:
                 distribution_result = self.think_tank_agent.prepare_distribution(
@@ -874,7 +889,8 @@ class AgentManager:
         messages: List[Dict],
         speaker_name: str,
         intent_recognition: bool = False,
-        resume_personalization: bool = False
+        resume_personalization: bool = False,
+        status_callback: Optional[Callable[[str, Dict], asyncio.Future]] = None
     ) -> Dict:
         print(f"[智能分析] 开始三阶段分析，意图识别: {intent_recognition}, 简历个性化: {resume_personalization}")
         result = await self.run_pipeline(
@@ -885,7 +901,8 @@ class AgentManager:
             use_resume=resume_personalization,
             use_think_tank=True,
             bypass_enabled=True,
-            force_modules=False
+            force_modules=False,
+            status_callback=status_callback
         )
         phase2_result = result.get('phase2')
         if phase2_result is not None:

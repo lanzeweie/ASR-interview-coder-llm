@@ -402,7 +402,9 @@ async def agent_analysis_callback(result, messages, speaker_name):
                 print(f"  - 消息数量: {len(formatted_messages)}")
 
                 # 如果有智囊团目标，使用智囊团模式
-                if is_multi_llm and targets:
+                if distribution_mode == 'halt':
+                    print(f"[智能分析] 🛑 分析流程已终止 (原因: {distribution_result.get('reason', 'Unknown')})")
+                elif is_multi_llm and targets:
                     broadcast_message = {
                         "type": "agent_triggered",
                         "reason": phase1_result.get('reason', '检测到需要AI帮助分析，已启动智囊团'),

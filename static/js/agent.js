@@ -493,6 +493,52 @@ export class LLMManager {
             if (this.wsManager) {
                 console.log('[智能分析] 正在请求服务器开始生成回复...');
 
+                // 如果包含意图识别数据，显示意图识别分析卡片 (Mimic manual Intent Recognition style)
+                if (data.intent_data) {
+                    try {
+                        const analyzingDiv = document.createElement('div');
+                        analyzingDiv.className = 'message system-message intent-analysis';
+                        analyzingDiv.dataset.analysisId = `intent-analysis-${Date.now()}`;
+                        // Use the exact same structure as processWithIntentRecognition
+                        analyzingDiv.innerHTML = `
+                            <div class="message-content intent-analysis-card compact">
+                                <div class="intent-meta">
+                                    <div class="intent-model">调用模型：待定</div>
+                                    <div class="intent-status-text intent-status-progress">正在收集上下文...</div>
+                                </div>
+                                <div class="intent-summary" style="display: none;"></div>
+                            </div>
+                        `;
+
+                        if (dom.llmWindow) {
+                            dom.llmWindow.appendChild(analyzingDiv);
+                            dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+                        }
+
+                        // Display the result immediately
+                        // Note: displayIntentAnalysisResult expects the full result object or at least the part containing phase2/phase1
+                        // The server sends intent_data which corresponds to 'intent' content from distribution_result
+                        // We might need to wrap it if displayIntentAnalysisResult expects { phase2: ... }
+                        // Based on server.py, intent_data IS the intent result dictionary.
+
+                        // Check if intent_data is wrapped in phase2 or if it IS the phase2-like object
+                        // AgentManager.displayIntentAnalysisResult handles checking .phase2 property.
+
+                        // We need to ensure we pass something that works.
+                        // Let's assume data.intent_data is the result object.
+
+                        // Also update model info if available
+                        const modelName = data.intent_data.model_name || 'Wiki_QA'; // Fallback or extract
+                        const metaDiv = analyzingDiv.querySelector('.intent-model');
+                        if (metaDiv) metaDiv.textContent = `调用模型：${modelName}`;
+
+                        this.displayIntentAnalysisResult(data.intent_data, analyzingDiv);
+
+                    } catch (e) {
+                        console.error('[智能分析] 显示意图识别卡片失败:', e);
+                    }
+                }
+
                 // 创建预响应提示 (Visual feedback)
                 const isMulti = data.is_multi_llm || false;
                 if (this.streamManager) {
@@ -576,9 +622,9 @@ export class LLMManager {
                     <div class="intent-summary" style="display: none;"></div>
                 </div>
             `;
-            if (dom.asrWindow) {
-                dom.asrWindow.appendChild(analyzingDiv);
-                dom.asrWindow.scrollTop = dom.asrWindow.scrollHeight;
+            if (dom.llmWindow) {
+                dom.llmWindow.appendChild(analyzingDiv);
+                dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
             }
             this.updateIntentStatus(analyzingDiv, `正在收集上下文（${messages.length} 条消息）`, 'progress');
 
@@ -669,8 +715,8 @@ export class LLMManager {
         this.updateIntentStatus(containerDiv, statusLabel, statusState);
         this.updateIntentSummary(containerDiv, combinedSummary, statusState);
 
-        if (dom.asrWindow) {
-            dom.asrWindow.scrollTop = dom.asrWindow.scrollHeight;
+        if (dom.llmWindow) {
+            dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
         }
     }
 
