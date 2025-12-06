@@ -37,7 +37,6 @@ export class AgentManager {
                     this.enabled = data.enabled || false;
                     this.updateAgentToggleUI();
                     this.updateAgentStatusIndicator();
-                    this.resetAnalysisIndicator();
                     if (dom.agentToggleBtn) {
                         dom.agentToggleBtn.title = this.enabled ? '智能分析已开启，点击关闭' : '智能分析已关闭，点击开启';
                     }
@@ -53,8 +52,6 @@ export class AgentManager {
                 }
                 const indicator = document.getElementById('agent-status-indicator');
                 if (indicator) indicator.style.display = 'none';
-                const asrIndicator = dom.agentAnalysisIndicator;
-                if (asrIndicator) asrIndicator.style.display = 'none';
             }
         } catch (e) {
             console.error('Failed to load agent status:', e);
@@ -63,8 +60,6 @@ export class AgentManager {
             }
             const indicator = document.getElementById('agent-status-indicator');
             if (indicator) indicator.style.display = 'none';
-            const asrIndicator = dom.agentAnalysisIndicator;
-            if (asrIndicator) asrIndicator.style.display = 'none';
         }
     }
 
@@ -91,17 +86,6 @@ export class AgentManager {
         } else {
             indicator.classList.remove('active');
         }
-        const asrIndicator = dom.agentAnalysisIndicator;
-        if (asrIndicator) {
-            if (this.enabled) {
-                asrIndicator.classList.add('active');
-                asrIndicator.style.display = 'flex';
-            } else {
-                asrIndicator.classList.remove('active');
-                asrIndicator.style.display = 'none';
-            }
-        }
-        this.applyAnalysisIndicatorState();
     }
 
     // 切换智能分析开关
@@ -139,11 +123,6 @@ export class AgentManager {
                 this.enabled = newEnabled;
                 this.updateAgentToggleUI();
                 this.updateAgentStatusIndicator();
-                if (!newEnabled) {
-                    this.resetAnalysisIndicator();
-                } else {
-                    this.applyAnalysisIndicatorState();
-                }
 
                 // 保存UI状态（开关按钮的状态）
                 if (dom.agentToggleBtn) {
@@ -195,10 +174,8 @@ export class AgentManager {
     }
 
     updateAnalysisState(state = {}) {
-        if (!this.enabled) {
-            this.resetAnalysisIndicator();
-            return;
-        }
+        if (!this.enabled) return;
+
         if (state.status) {
             this.analysisState = state.status;
         }
@@ -220,84 +197,6 @@ export class AgentManager {
         if ('model' in state) {
             this.analysisModel = state.model || '';
         }
-        if (this.analysisResetTimer) {
-            clearTimeout(this.analysisResetTimer);
-            this.analysisResetTimer = null;
-        }
-        this.applyAnalysisIndicatorState();
-        if (this.analysisState === 'completed') {
-            this.analysisResetTimer = setTimeout(() => this.resetAnalysisIndicator(), 6000);
-        }
-    }
-
-    resetAnalysisIndicator() {
-        this.analysisState = 'idle';
-        this.analysisNeedAI = false;
-        this.analysisReason = '';
-        this.analysisSummary = '';
-        this.analysisCount = 0;
-        this.analysisPreview = '';
-        this.analysisModel = '';
-        if (this.analysisResetTimer) {
-            clearTimeout(this.analysisResetTimer);
-            this.analysisResetTimer = null;
-        }
-        this.applyAnalysisIndicatorState();
-    }
-
-    applyAnalysisIndicatorState() {
-        const indicator = dom.agentAnalysisIndicator;
-        if (!indicator) return;
-
-        if (!this.enabled) {
-            indicator.style.display = 'none';
-            return;
-        }
-
-        indicator.style.display = 'flex';
-        indicator.classList.add('active');
-        indicator.classList.remove('analysis-progress', 'analysis-complete', 'analysis-helper');
-
-        const statusEl = indicator.querySelector('.analysis-status-text');
-        const reasonEl = indicator.querySelector('.analysis-reason-text');
-        const summaryLine = this.analysisSummary || '';
-        const tooltipText = this.analysisReason || this.analysisPreview || summaryLine;
-        const baseLabel = summaryLine || '智能分析';
-        const applyReasonText = (text) => {
-            if (!reasonEl) return;
-            const formatted = this.formatReasonWithModel(text);
-            reasonEl.textContent = formatted || '';
-            reasonEl.style.display = formatted ? 'block' : 'none';
-        };
-
-        if (this.analysisState === 'in_progress') {
-            indicator.classList.add('analysis-progress');
-            if (statusEl) statusEl.textContent = `${baseLabel} · 分析中`;
-            indicator.title = tooltipText || '';
-            applyReasonText(this.analysisPreview || '');
-        } else if (this.analysisState === 'completed' && this.analysisNeedAI) {
-            indicator.classList.add('analysis-helper');
-            if (statusEl) statusEl.textContent = `${baseLabel} · 助手介入`;
-            indicator.title = tooltipText || '';
-            applyReasonText(this.analysisReason || this.analysisPreview || '');
-        } else if (this.analysisState === 'completed') {
-            indicator.classList.add('analysis-complete');
-            if (statusEl) statusEl.textContent = `${baseLabel} · 分析完成`;
-            indicator.title = tooltipText || '';
-            applyReasonText(this.analysisReason || '');
-        } else {
-            if (statusEl) statusEl.textContent = '待命';
-            indicator.removeAttribute('title');
-            applyReasonText('');
-        }
-    }
-
-    formatReasonWithModel(text = '') {
-        const modelLabel = this.analysisModel ? `[${this.analysisModel}]` : '';
-        if (modelLabel && text) {
-            return `${modelLabel} ${text}`;
-        }
-        return modelLabel || text || '';
     }
 }
 
@@ -496,6 +395,8 @@ export class LLMManager {
                 // 如果包含意图识别数据，显示意图识别分析卡片 (Mimic manual Intent Recognition style)
                 if (data.intent_data) {
                     try {
+                        const modelName = data.intent_data.model_name || data.intent_data.model || 'Wiki_QA';
+
                         const analyzingDiv = document.createElement('div');
                         analyzingDiv.className = 'message system-message intent-analysis';
                         analyzingDiv.dataset.analysisId = `intent-analysis-${Date.now()}`;
@@ -503,7 +404,7 @@ export class LLMManager {
                         analyzingDiv.innerHTML = `
                             <div class="message-content intent-analysis-card compact">
                                 <div class="intent-meta">
-                                    <div class="intent-model">调用模型：待定</div>
+                                    <div class="intent-model">调用模型：${modelName}</div>
                                     <div class="intent-status-text intent-status-progress">正在收集上下文...</div>
                                 </div>
                                 <div class="intent-summary" style="display: none;"></div>
@@ -514,23 +415,6 @@ export class LLMManager {
                             dom.llmWindow.appendChild(analyzingDiv);
                             dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
                         }
-
-                        // Display the result immediately
-                        // Note: displayIntentAnalysisResult expects the full result object or at least the part containing phase2/phase1
-                        // The server sends intent_data which corresponds to 'intent' content from distribution_result
-                        // We might need to wrap it if displayIntentAnalysisResult expects { phase2: ... }
-                        // Based on server.py, intent_data IS the intent result dictionary.
-
-                        // Check if intent_data is wrapped in phase2 or if it IS the phase2-like object
-                        // AgentManager.displayIntentAnalysisResult handles checking .phase2 property.
-
-                        // We need to ensure we pass something that works.
-                        // Let's assume data.intent_data is the result object.
-
-                        // Also update model info if available
-                        const modelName = data.intent_data.model_name || 'Wiki_QA'; // Fallback or extract
-                        const metaDiv = analyzingDiv.querySelector('.intent-model');
-                        if (metaDiv) metaDiv.textContent = `调用模型：${modelName}`;
 
                         this.displayIntentAnalysisResult(data.intent_data, analyzingDiv);
 

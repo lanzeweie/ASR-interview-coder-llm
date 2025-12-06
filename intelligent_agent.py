@@ -567,7 +567,11 @@ class IntentRecognitionAgent(BaseLLMAgent):
                 'success': True,
                 'summary_xml': xml_content,
                 'raw_response': response_text,
-                'model_name': self.config.get('model_name') or self.config.get('model')
+                'model_name': (
+                    self.config.get('model_name') 
+                    or self.config.get('model') 
+                    or "Wiki_QA"
+                )
             }
         except RuntimeError as exc:
             return {'success': False, 'error': str(exc)}
@@ -836,7 +840,11 @@ class AgentManager:
         if use_intent and not should_halt:
             print("[意图识别] 模块启用，即将运行 IntentRecognitionAgent")
             if status_callback:
-                intent_model = self.intent_agent.config.get('model_name') if self.intent_agent else "Unknown"
+                intent_model = (
+                    self.intent_agent.config.get('model_name') 
+                    or self.intent_agent.config.get('model') 
+                    or getattr(self.intent_agent, 'model_name', 'Unknown')
+                ) if self.intent_agent else "Unknown"
                 if asyncio.iscoroutinefunction(status_callback):
                     await status_callback("intent_started", {"model": intent_model})
                 else:

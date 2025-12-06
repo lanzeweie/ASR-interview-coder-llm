@@ -49,7 +49,7 @@ export const dom = {
 
     // 智能分析 DOM
     agentToggleBtn: document.getElementById('agent-toggle'),
-    agentAnalysisIndicator: document.getElementById('agent-analysis-indicator'),
+
     agentEnableThinkingBtn: document.getElementById('agent-enable-thinking-btn'),
     agentEnableThinkingGroup: document.getElementById('agent-enable-thinking-group'),
 
