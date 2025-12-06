@@ -62,6 +62,8 @@ async function initializeManagers() {
     // 初始化各个功能管理器
     managers.chat = new ChatManager();
     managers.config = new ConfigManager();
+    // 暴露给全局，供HTML中的onclick可以直接调用
+    window.configManager = managers.config;
     managers.voiceprint = new VoiceprintManager();
     managers.agent = new AgentManager();
     managers.intentRecognition = new IntentRecognitionManager();

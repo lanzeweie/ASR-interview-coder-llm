@@ -50,9 +50,13 @@ export const dom = {
     // 智能分析 DOM
     agentToggleBtn: document.getElementById('agent-toggle'),
     agentAnalysisIndicator: document.getElementById('agent-analysis-indicator'),
+    agentEnableThinkingBtn: document.getElementById('agent-enable-thinking-btn'),
+    agentEnableThinkingGroup: document.getElementById('agent-enable-thinking-group'),
 
     // 意图识别 DOM
     intentRecognitionToggle: document.getElementById('intent-recognition-toggle'),
+    intentRecognitionEnableThinkingBtn: document.getElementById('intent-recognition-enable-thinking-btn'),
+    intentRecognitionEnableThinkingGroup: document.getElementById('intent-recognition-enable-thinking-group'),
 
     // 聊天管理 DOM
     chatListDiv: document.getElementById('chat-list'),

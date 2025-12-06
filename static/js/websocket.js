@@ -34,7 +34,7 @@ export class WebSocketManager {
         this.asrSocket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                
+
                 // 如果是初始状态消息，更新UI
                 if (data.asr_status) {
                     const asrInitialized = data.asr_status.initialized;
@@ -68,12 +68,12 @@ export class WebSocketManager {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/llm`;
         this.llmSocket = new WebSocket(wsUrl);
-        
+
         this.llmSocket.onopen = () => {
             console.log('[LLM] WebSocket 连接已建立');
             this.isConnected.llm = true;
         };
-        
+
         this.llmSocket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
@@ -82,14 +82,14 @@ export class WebSocketManager {
                 console.error('LLM消息解析错误:', e);
             }
         };
-        
+
         this.llmSocket.onclose = () => {
             console.log('[LLM] WebSocket 连接已断开');
             this.isConnected.llm = false;
             // 自动重连
             setTimeout(() => this.connectLLM(), 3000);
         };
-        
+
         this.llmSocket.onerror = () => {
             console.log('[LLM] WebSocket 连接错误');
             this.isConnected.llm = false;
@@ -99,7 +99,7 @@ export class WebSocketManager {
     // 更新ASR状态
     updateASRStatus(asrInitialized) {
         if (!dom.asrStatusDiv) return;
-        
+
         const dot = dom.asrStatusDiv.querySelector('.status-dot');
         const text = dom.asrStatusDiv.querySelector('.status-text');
 
@@ -251,8 +251,34 @@ export class WebSocketManager {
             badge.title = summaryText;
         }
         if (noteEl) {
-            noteEl.textContent = noteText;
-            noteEl.style.display = noteText ? 'block' : 'none';
+            noteEl.innerHTML = '';
+
+            // 显示常规分析信息
+            if (noteText) {
+                const textDiv = document.createElement('div');
+                textDiv.textContent = noteText;
+                noteEl.appendChild(textDiv);
+            }
+
+            // 显示意图识别结果
+            if (data.intent_info) {
+                const { model, summary } = data.intent_info;
+                const intentDiv = document.createElement('div');
+                intentDiv.className = 'intent-result';
+                intentDiv.style.marginTop = '8px';
+                intentDiv.style.paddingTop = '8px';
+                intentDiv.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+                intentDiv.style.fontSize = '0.9em';
+
+                intentDiv.innerHTML = `
+                    <div style="opacity: 0.7; margin-bottom: 2px;">调用模型：${model}</div>
+                    <div style="color: #4caf50; font-weight: 600; margin-bottom: 2px;">✅ 意图识别完成</div>
+                    <div style="line-height: 1.4;">意图总结：${summary}</div>
+                `;
+                noteEl.appendChild(intentDiv);
+            }
+
+            noteEl.style.display = (noteText || data.intent_info) ? 'block' : 'none';
         }
     }
 }

@@ -7,9 +7,11 @@
 """
 
 import asyncio
+import copy
 import json
 import re
 import time
+from html import escape
 from typing import Dict, List, Optional, Tuple
 
 from llm_client import LLMClient
@@ -70,6 +72,49 @@ def sanitize_role_definition(role: Optional[Dict]) -> Optional[Dict]:
         "prompt": prompt,
         "enabled": enabled
     }
+
+
+def get_sub_agent_system(agent_config_path: str = "data/agent.json", use_intent: bool = False, use_resume: bool = False) -> str:
+    """
+    根据开关状态获取对应的 sub-agent system prompt
+    
+    Args:
+        agent_config_path: agent配置文件路径
+        use_intent: 是否启用意图识别
+        use_resume: 是否启用简历个性化
+    
+    Returns:
+        对应场景的system prompt字符串
+    """
+    try:
+        with open(agent_config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        sub_agents = data.get('sub_agents', {})
+        
+        # 根据功能组合选择对应的 sub-agent
+        if use_intent and use_resume:
+            agent_key = 'full_featured'
+        elif use_intent:
+            agent_key = 'with_intent'
+        elif use_resume:
+            agent_key = 'with_resume'
+        else:
+            agent_key = 'direct_chat'
+        
+        agent_config = sub_agents.get(agent_key, {})
+        system_prompt = agent_config.get('system', '')
+        
+        if system_prompt:
+            print(f"[Sub-Agent] 加载系统提示词: {agent_config.get('name', agent_key)}")
+        else:
+            print(f"[Sub-Agent] 警告: 未找到 {agent_key} 的系统提示词，使用默认")
+            system_prompt = "你是一名资深 Python 技术专家，正在参加高级工程师面试。"
+        
+        return system_prompt
+    except Exception as exc:
+        print(f"[Sub-Agent] 加载配置失败: {exc}")
+        return "你是一名资深 Python 技术专家，正在参加高级工程师面试。"
 
 
 def format_messages_compact(messages: List[Dict]) -> str:
@@ -170,10 +215,16 @@ class BaseLLMAgent:
         elif self.model_type == 'local':
             if not (self.local_model and self.local_tokenizer):
                 raise RuntimeError(f"本地模型未加载 ({self.agent_label})")
+            
+            enable_thinking = self.generation_params.get("enable_thinking", False)
+            if self.config.get("enable_thinking"):
+                enable_thinking = True
+                
             text = self.local_tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
-                add_generation_prompt=True
+                add_generation_prompt=True,
+                enable_thinking=enable_thinking
             )
             inputs = self.local_tokenizer([text], return_tensors="pt").to(self.local_model.device)
             with torch.no_grad():
@@ -211,12 +262,13 @@ class SmartAnalysisAgent(BaseLLMAgent):
         self.silence_detection_started = False
         self.last_analysis_time = 0
         self.force_trigger_threshold = self.threshold * 3
+        self._pending_trigger_message = None
         print(f"[智能分析] Agent 初始化，阈值:{self.threshold} 字，静音:{self.silence_seconds} 秒")
 
     def build_analysis_prompt(self, messages: List[Dict], speaker_name: str) -> str:
         dialogue = format_messages_compact(messages)
         print(f"[智能分析] 构建Prompt，消息数: {len(messages)}，长度: {len(dialogue)}")
-        prompt = """
+        prompt = f"""
         你是一个软件工程对话分析器，专门用于判断语音转文字后的对话片段是否明确涉及相关技术内容。请严格遵循以下规则，并仅输出一个标准 JSON 对象，不得包含任何额外文本、解释、格式符号或换行。
 
         输入：
@@ -224,9 +276,9 @@ class SmartAnalysisAgent(BaseLLMAgent):
 
         处理原则：
 
-        主人公为 {speaker_name}。
+        主人公为 {speaker_name}。不存则在无视
         语音转文字可能存在术语截断、错别字或不完整表达（如“Dock”、“调接口超时”、“React 的 useE”），你可基于上下文合理推测其指代的常见软件工程术语（如 Docker、API、useEffect）。
-        但必须采取保守策略：仅当有较强证据表明对话明确涉及技术主题时，才返回 {{"is": true}}：
+        但必须采取激进策略：只要有证据表明对话明确涉及咨询/询问/问答技术主题时，才返回 {{"is": true}}：
         例如：
         • 编程语言、框架或库的具体使用问题（如 Python 装包失败、React 状态管理、TensorFlow 模型加载）
         • 调试、错误排查、性能瓶颈分析
@@ -244,7 +296,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
 
         严格输出：{{"is": true}} 或 {{"is": false}}
         必须是合法 JSON，不包裹在 Markdown、反引号、代码块或任何额外字符中
-        """.format(dialogue=dialogue, speaker_name=speaker_name)
+        """
         return prompt
 
     @staticmethod
@@ -274,8 +326,12 @@ class SmartAnalysisAgent(BaseLLMAgent):
                 ]
             else:
                 chat_messages = [{"role": "user", "content": prompt}]
-
+            print(chat_messages)
             response_text = await self._run_chat(chat_messages)
+            
+            # 去除 <think> 标签内容
+            response_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL)
+            
             clean_text = response_text.replace("```json", "").replace("```", "").strip()
             is_valid, result = self.validate_response(clean_text)
             if is_valid and result:
@@ -345,7 +401,35 @@ class SmartAnalysisAgent(BaseLLMAgent):
             print(f"[智能分析] 已启动静音检测，阈值: {self.silence_seconds}秒")
             return False, None
         else:
-            return self._check_trigger_conditions(text), "满足触发条件"
+            triggered = self._check_trigger_conditions(text)
+            if triggered:
+                enriched_message = copy.deepcopy(message)
+                accumulated = self.accumulated_text.strip()
+                if accumulated:
+                    enriched_message['text'] = accumulated
+                    if 'content' in enriched_message:
+                        enriched_message['content'] = accumulated
+                self._pending_trigger_message = enriched_message
+                self.accumulated_text = ""
+                self.current_speaker = None
+                self.silence_detection_started = False
+                if self.silence_timer:
+                    self.silence_timer.cancel()
+                    self.silence_timer = None
+            return triggered, "满足触发条件"
+
+    def prepare_analysis_messages(self, messages: List[Dict]) -> List[Dict]:
+        if not self._pending_trigger_message:
+            return messages
+        
+        # 确保pending消息被包含
+        # 注意：这里我们比较引用，如果需要在内容上判重可能需要调整
+        if self._pending_trigger_message not in messages:
+            messages = [*messages, self._pending_trigger_message]
+            print(f"[智能分析] 已追加触发消息: {self._pending_trigger_message.get('text', '')[:20]}...")
+        
+        self._pending_trigger_message = None
+        return messages
 
     async def _monitor_silence(self):
         try:
@@ -387,6 +471,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
             self.silence_timer.cancel()
             self.silence_timer = None
         self.last_analysis_time = 0
+        self._pending_trigger_message = None
         print(f"[智能分析] 状态已重置")
 
 
@@ -472,19 +557,41 @@ class IntentRecognitionAgent(BaseLLMAgent):
                 chat_messages = [{"role": "user", "content": prompt}]
 
             response_text = await self._run_chat(chat_messages)
+            
+            # 去除 <think> 标签内容
+            response_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL)
+            
             xml_content = self._extract_xml(response_text)
             print("[意图识别] XML结果: ")
             print(xml_content)
             return {
                 'success': True,
                 'summary_xml': xml_content,
-                'raw_response': response_text
+                'raw_response': response_text,
+                'model_name': self.config.get('model_name') or self.config.get('model')
             }
         except RuntimeError as exc:
             return {'success': False, 'error': str(exc)}
         except Exception as exc:
             print(f"[意图识别] 分析失败: {exc}")
             return {'success': False, 'error': str(exc)}
+
+def format_intent_analysis(intent_result: Optional[Dict]) -> str:
+    if not intent_result:
+        return ""
+    if intent_result.get("success") and intent_result.get("summary_xml"):
+        return intent_result["summary_xml"]
+    error = intent_result.get("error")
+    if error:
+        safe_error = escape(str(error))
+        return (
+            "<leader_analysis>"
+            f"<summary>{safe_error}</summary>"
+            "<true_question></true_question>"
+            "<steps></steps>"
+            "</leader_analysis>"
+        )
+    return ""
 
 
 class ThinkTankAgent:
@@ -502,12 +609,31 @@ class ThinkTankAgent:
             print(f"[智囊团] 加载 {path} 失败: {exc}")
             return {}
 
+    def get_system_prompt(self, use_intent: bool = False, use_resume: bool = False) -> str:
+        """
+        获取当前场景对应的system prompt
+        
+        Args:
+            use_intent: 是否启用意图识别
+            use_resume: 是否启用简历个性化
+        
+        Returns:
+            对应场景的system prompt
+        """
+        return get_sub_agent_system(
+            agent_config_path=self.role_config_path,
+            use_intent=use_intent,
+            use_resume=use_resume
+        )
+
     def prepare_distribution(
         self,
         messages: List[Dict],
         phase1_result: Optional[Dict],
         intent_result: Optional[Dict] = None,
-        force: bool = False
+        force: bool = False,
+        use_intent: bool = False,
+        use_resume: bool = False
     ) -> Dict:
         phase1_is_positive = bool(phase1_result and phase1_result.get('is'))
         if not force and not phase1_is_positive:
@@ -515,7 +641,8 @@ class ThinkTankAgent:
             return {
                 'mode': 'default',
                 'targets': [],
-                'intent': intent_result
+                'intent': intent_result,
+                'system_prompt': self.get_system_prompt(use_intent, use_resume)
             }
 
         role_data = self._safe_load_json(self.role_config_path)
@@ -549,12 +676,16 @@ class ThinkTankAgent:
             if matching_configs:
                 role_targets[role_id] = matching_configs[0]
 
+        # 获取当前场景对应的system prompt
+        system_prompt = self.get_system_prompt(use_intent, use_resume)
+
         if role_targets:
             print(f"[智囊团] 匹配到 {len(role_targets)} 个角色目标")
             return {
                 'mode': 'think_tank',
                 'targets': role_targets,
-                'intent': intent_result
+                'intent': intent_result,
+                'system_prompt': system_prompt
             }
 
         default_targets = list(active_names)[:1]
@@ -562,7 +693,8 @@ class ThinkTankAgent:
         return {
             'mode': 'default',
             'targets': default_targets,
-            'intent': intent_result
+            'intent': intent_result,
+            'system_prompt': system_prompt
         }
 
 
@@ -586,6 +718,13 @@ class AgentManager:
             'model': overrides.get('model', ''),
             'generation_params': overrides.get('generation_params', {})
         }
+        
+        # 将 enable_thinking 放入 generation_params
+        if overrides.get('enable_thinking'):
+             runtime['generation_params']['enable_thinking'] = True
+        elif model_config and model_config.get('enable_thinking'):
+             runtime['generation_params']['enable_thinking'] = True
+             
         if runtime['model_type'] == 'api' and model_config:
             runtime['api_key'] = model_config.get('api_key', runtime['api_key'])
             runtime['base_url'] = model_config.get('base_url', runtime['base_url'])
@@ -598,7 +737,8 @@ class AgentManager:
             model_name = model_config.get('model_name', config.get('model_name', 'Qwen/Qwen2-0.5B-Instruct'))
             overrides = {
                 'model_type': model_config.get('model_type', config.get('model_type', 'api')),
-                'model_name': model_name
+                'model_name': model_name,
+                'enable_thinking': config.get('enable_thinking', False)
             }
             agent_config = self._build_llm_runtime_config(overrides, model_config, model_name)
             agent_config.update({
@@ -620,7 +760,8 @@ class AgentManager:
             fallback = config.get('model_name', 'Qwen3-0.6B')
             overrides = {
                 'model_type': config.get('model_type', 'local'),
-                'model_name': fallback
+                'model_name': fallback,
+                'enable_thinking': config.get('intent_enable_thinking', False)
             }
             agent_config = self._build_llm_runtime_config(overrides, model_config, fallback)
             self.intent_agent = IntentRecognitionAgent(agent_config)
@@ -653,7 +794,8 @@ class AgentManager:
         if not agent:
             return {'is': False, 'reason': '未配置智能 Agent'}
 
-        return await agent.analyze(messages, speaker_name)
+        prepared_messages = agent.prepare_analysis_messages(messages)
+        return await agent.analyze(prepared_messages, speaker_name)
 
     async def run_pipeline(
         self,
@@ -662,14 +804,15 @@ class AgentManager:
         *,
         use_analysis: bool = True,
         use_intent: bool = False,
+        use_resume: bool = False,
         use_think_tank: bool = True,
         bypass_enabled: bool = False,
         force_modules: bool = False
     ) -> Dict:
         print(
             "[智能分析] run_pipeline -> "
-            f"analysis={use_analysis}, intent={use_intent}, think_tank={use_think_tank}, "
-            f"bypass={bypass_enabled}, force={force_modules}"
+            f"analysis={use_analysis}, intent={use_intent}, resume={use_resume}, "
+            f"think_tank={use_think_tank}, bypass={bypass_enabled}, force={force_modules}"
         )
         if use_analysis:
             phase1_result = await self.analyze_conversation(
@@ -700,20 +843,24 @@ class AgentManager:
                 distribution_result = {
                     'mode': 'default',
                     'targets': [],
-                    'intent': intent_result
+                    'intent': intent_result,
+                    'system_prompt': self.think_tank_agent.get_system_prompt(use_intent, use_resume)
                 }
             else:
                 distribution_result = self.think_tank_agent.prepare_distribution(
                     messages,
                     phase1_result,
                     intent_result,
-                    force=force_modules or not use_analysis
+                    force=force_modules or not use_analysis,
+                    use_intent=use_intent,
+                    use_resume=use_resume
                 )
         else:
             distribution_result = {
                 'mode': 'skipped',
                 'targets': [],
-                'intent': intent_result
+                'intent': intent_result,
+                'system_prompt': self.think_tank_agent.get_system_prompt(use_intent, use_resume)
             }
 
         return {
@@ -726,14 +873,16 @@ class AgentManager:
         self,
         messages: List[Dict],
         speaker_name: str,
-        intent_recognition: bool = False
+        intent_recognition: bool = False,
+        resume_personalization: bool = False
     ) -> Dict:
-        print(f"[智能分析] 开始三阶段分析，意图识别: {intent_recognition}")
+        print(f"[智能分析] 开始三阶段分析，意图识别: {intent_recognition}, 简历个性化: {resume_personalization}")
         result = await self.run_pipeline(
             messages,
             speaker_name,
             use_analysis=True,
             use_intent=intent_recognition,
+            use_resume=resume_personalization,
             use_think_tank=True,
             bypass_enabled=True,
             force_modules=False
@@ -743,6 +892,7 @@ class AgentManager:
             print(f"[智能分析] 阶段2完成: {phase2_result.get('success', False)}")
         distribution_result = result.get('distribution', {})
         print(f"[智能分析] 阶段3完成: mode={distribution_result.get('mode')}")
+        print(f"[智能分析] 使用的系统提示词模式: {distribution_result.get('system_prompt', '未设置')[:50]}...")
         return result
 
     async def run_intent_recognition(self, messages: List[Dict], speaker_name: str) -> Dict:

@@ -1,15 +1,17 @@
-import threading
+import argparse
 import asyncio
+import base64
 import json
 import os
 import re
+import threading
 import time
-import argparse
 import wave
-import base64
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, UploadFile, File
-from fastapi.staticfiles import StaticFiles
+
+from fastapi import (Body, FastAPI, File, HTTPException, UploadFile, WebSocket,
+                     WebSocketDisconnect)
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 # Conditional imports for optional features
 try:
@@ -19,14 +21,13 @@ except ImportError:
     ASR_AVAILABLE = False
     print("Warning: ASR module not available. Use --no-asr to suppress this warning.")
 
-from llm_client import LLMClient
-
 from chat_manager import ChatManager
+from llm_client import LLMClient
 from resume_manager import ResumeManager
 
 # Intelligent Agent imports
 try:
-    from intelligent_agent import agent_manager
+    from intelligent_agent import agent_manager, format_intent_analysis
     from trigger_manager import trigger_manager
     AGENT_AVAILABLE = True
 except ImportError:
@@ -300,6 +301,20 @@ async def agent_analysis_callback(result, messages, speaker_name):
         elif reason:
             status_text = f"{summary_label} · {reason}"
 
+        # Prepare intent info for broadcast
+        phase2_result = result.get('phase2')
+        intent_data = None
+        if phase2_result and phase2_result.get('success'):
+            raw_xml = phase2_result.get('summary_xml', '')
+            import re
+            summary_match = re.search(r'<summary>(.*?)</summary>', raw_xml, re.DOTALL)
+            summary_text = summary_match.group(1).strip() if summary_match else raw_xml
+            
+            intent_data = {
+                'model': phase2_result.get('model_name', 'Unknown'),
+                'summary': summary_text
+            }
+
         # 分析完成，发送结束消息到ASR面板
         await manager.broadcast({
             "time": time.strftime("%H:%M:%S"),
@@ -312,7 +327,8 @@ async def agent_analysis_callback(result, messages, speaker_name):
             "analysis_summary": summary,
             "analysis_count": count,
             "analysis_preview": preview,
-            "analysis_model": model_name
+            "analysis_model": model_name,
+            "intent_info": intent_data
         })
 
         if is_needed:
@@ -342,10 +358,19 @@ async def agent_analysis_callback(result, messages, speaker_name):
                 # 构造发送给下一阶段AI的消息
                 system_prompt = f"你是AI助手，帮助{speaker_name}提供技术支持。"
                 if intent_result and intent_result.get("summary_xml"):
-                    intent_summary = format_intent_analysis(intent_result)
+                    intent_summary_xml = format_intent_analysis(intent_result)
+                    
+                    # 提取摘要用于显示，避免在UI显示原始XML
+                    import re
+                    match = re.search(r'<summary>(.*?)</summary>', intent_summary_xml, re.DOTALL)
+                    summary_text = match.group(1).strip() if match else intent_summary_xml
+                    
+                    # 构造人类可读的提示
+                    display_content = f"【意图识别分析】\n{summary_text}"
+                    
                     formatted_messages = [
-                        {"role": "system", "content": system_prompt + "请根据意图识别结果直接给出建议。"},
-                        {"role": "user", "content": intent_summary}
+                        {"role": "system", "content": system_prompt + " 请根据意图识别分析结果直接给出建议。"},
+                        {"role": "user", "content": display_content}
                     ]
                     print("[智能分析] 使用意图识别结果作为唯一上下文发送给下一阶段AI")
                 else:
@@ -1598,9 +1623,23 @@ async def llm_websocket(websocket: WebSocket):
             chat_id = data.get("chat_id")
             is_multi_llm = data.get("is_multi_llm", False)
 
-            # Add system prompt if not present or just ensure it's there
+            # 获取动态 system prompt
+            config_data = load_config()
+            agent_config = config_data.get("agent_config", {})
+            intent_enabled = agent_config.get("intent_recognition_enabled", False)
+            
+            from intelligent_agent import get_sub_agent_system
+            system_prompt = get_sub_agent_system(
+                agent_config_path=AGENT_ROLE_FILE,
+                use_intent=intent_enabled,
+                use_resume=resume_personalization_enabled
+            )
+            
+            # Add system prompt if not present or update existing one
             if not messages or messages[0].get("role") != "system":
-                 messages.insert(0, {"role": "system", "content": "你是一个Ai助手帮助用户，并且分析聊天记录"})
+                 messages.insert(0, {"role": "system", "content": system_prompt})
+            else:
+                 messages[0]["content"] = system_prompt
 
             # Inject Resume if enabled
             inject_resume_to_messages(messages)
@@ -1723,4 +1762,5 @@ def format_intent_analysis(intent_result: dict) -> str:
     if steps:
         parts.append("下一步行动：")
         parts.extend(f"- {step}" for step in steps)
+    return "\n".join(parts)
     return "\n".join(parts)

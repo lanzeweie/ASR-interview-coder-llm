@@ -45,8 +45,10 @@
     border-bottom: 1px solid var(--border-subtle);
     padding: 0 var(--gap-md);
     flex-shrink: 0;
-    flex-wrap: wrap;  /* 允许标签页换行 */
-    row-gap: 2px;     /* 换行时的行间距 */
+    flex-wrap: wrap;
+    /* 允许标签页换行 */
+    row-gap: 2px;
+    /* 换行时的行间距 */
 }
 
 .tab-button {
@@ -592,11 +594,73 @@
     flex-shrink: 0;
 }
 
-.llm-mode-btn:hover {
-    border-color: var(--accent-primary);
-    background: var(--bg-hover);
-    color: var(--accent-primary);
+/* 卡片式复选框组 */
+/* 功能切换按钮 (Feature Toggle Button) */
+.feature-toggle-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-normal);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    outline: none;
 }
+
+.feature-toggle-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.feature-toggle-btn.active {
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(99, 102, 241, 0.05));
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+}
+
+.feature-toggle-btn i {
+    font-size: 18px;
+    color: var(--text-tertiary);
+    transition: all 0.2s ease;
+}
+
+.feature-toggle-btn.active i {
+    color: var(--accent-primary);
+    transform: scale(1.1);
+}
+
+.feature-toggle-btn .btn-text {
+    flex: 1;
+}
+
+.feature-toggle-btn .status-badge {
+    font-size: 12px;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border-subtle);
+    transition: all 0.2s ease;
+}
+
+.feature-toggle-btn.active .status-badge {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+}
+
 
 /* 激活状态 */
 .llm-mode-btn.active {
@@ -1222,10 +1286,7 @@
         max-width: 95%;
     }
 
-    .settings-layout {
-        /* 移除固定高度，由内容自然撑开 */
-        /* height: 450px; */
-    }
+
 
     .settings-sidebar {
         width: 220px;
@@ -1391,10 +1452,7 @@
         max-height: none;
     }
 
-    .settings-content {
-        /* 移除最小高度限制 */
-        /* min-height: 350px; */
-    }
+
 
     .tab-button {
         padding: 8px 10px;
@@ -1500,6 +1558,7 @@
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     word-break: break-word;
 }

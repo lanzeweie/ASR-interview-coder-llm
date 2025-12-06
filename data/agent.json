@@ -1,4 +1,22 @@
 {
+  "sub_agents": {
+    "direct_chat": {
+      "name": "直接对话模式",
+      "system": "听从用户的指示"
+    },
+    "with_intent": {
+      "name": "意图识别模式",
+      "system": "以意图识别内容为准，围绕意图识别的内容开展回答"
+    },
+    "with_resume": {
+      "name": "简历个性化模式",
+      "system": "你的回答需要结合候选人的项目背景和技术栈特点。请以第一人代入完成"
+    },
+    "full_featured": {
+      "name": "意图识别+简历个性化模式",
+      "system": "你的回答需要结合候选人的项目背景和技术栈特点，以意图识别内容为准，围绕意图识别的内容开展回答"
+    }
+  },
   "think_tank_roles": [
     {
       "id": "tech_assistant",

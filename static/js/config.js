@@ -987,6 +987,12 @@ export class ConfigManager {
                 dom.agentModelTypeSelect.value = agentConfig.model_type;
             }
 
+            // 设置思考模式
+            if (dom.agentEnableThinkingBtn) {
+                const isEnabled = agentConfig.enable_thinking === true;
+                this.updateThinkingModeUI('agent', isEnabled);
+            }
+
             // 触发类型切换处理
             this.handleModelTypeChange(dom.agentModelTypeSelect);
 
@@ -1008,6 +1014,31 @@ export class ConfigManager {
 
         } catch (e) {
             console.error('加载智能分析配置失败:', e);
+        }
+    }
+
+    // 切换思考模式UI状态
+    toggleThinkingMode(type) {
+        const btn = type === 'agent' ? dom.agentEnableThinkingBtn : dom.intentRecognitionEnableThinkingBtn;
+        if (!btn) return;
+
+        const willEnable = !btn.classList.contains('active');
+        this.updateThinkingModeUI(type, willEnable);
+    }
+
+    // 更新思考模式UI显示
+    updateThinkingModeUI(type, isEnabled) {
+        const btn = type === 'agent' ? dom.agentEnableThinkingBtn : dom.intentRecognitionEnableThinkingBtn;
+        if (!btn) return;
+
+        const badge = btn.querySelector('.status-badge');
+
+        if (isEnabled) {
+            btn.classList.add('active');
+            if (badge) badge.textContent = 'ON';
+        } else {
+            btn.classList.remove('active');
+            if (badge) badge.textContent = 'OFF';
         }
     }
 
@@ -1052,10 +1083,15 @@ export class ConfigManager {
                 }
             }
 
+            // 获取思考模式状态
+            const agentThinkingEnabled = dom.agentEnableThinkingBtn ? dom.agentEnableThinkingBtn.classList.contains('active') : false;
+            const intentThinkingEnabled = dom.intentRecognitionEnableThinkingBtn ? dom.intentRecognitionEnableThinkingBtn.classList.contains('active') : false;
+
             const config = {
                 // 智能分析参数
                 model_type: modelType,
                 model_name: modelName,
+                enable_thinking: agentThinkingEnabled,
                 min_chars_threshold: parseInt(dom.agentMinCharsInput?.value) || 10,
                 silence_threshold: parseFloat(dom.agentSilenceThresholdInput?.value) || 2.0,
                 max_history_messages: parseInt(dom.agentMaxMessagesInput?.value) || 50,
@@ -1063,6 +1099,7 @@ export class ConfigManager {
                 // 意图识别参数
                 intent_model_type: intentModelType,
                 intent_model_name: intentModelName,
+                intent_enable_thinking: intentThinkingEnabled,
                 // 保持当前的启用状态
                 intent_recognition_enabled: window.intentRecognitionEnabled
             };
@@ -1143,6 +1180,11 @@ export class ConfigManager {
 
             apiModelSelect.disabled = false;
             hintText.textContent = `选择本地模型`;
+
+            // 显示思考模式选项
+            if (dom.agentEnableThinkingGroup) {
+                dom.agentEnableThinkingGroup.style.display = 'block';
+            }
         } else {
             // API 模型模式
             apiModelGroup.style.display = 'block';
@@ -1165,6 +1207,11 @@ export class ConfigManager {
             }
 
             hintText.textContent = '选择用于智能判定的小模型（建议使用轻量级模型）';
+
+            // 隐藏思考模式选项
+            if (dom.agentEnableThinkingGroup) {
+                dom.agentEnableThinkingGroup.style.display = 'none';
+            }
         }
     }
 
@@ -1283,7 +1330,8 @@ export class ConfigManager {
             const agentConfig = data.config || {};
             window.intentRecognitionConfig = {
                 model_type: agentConfig.intent_model_type || 'local',
-                model_name: agentConfig.intent_model_name || 'Qwen3-0.6B'
+                model_name: agentConfig.intent_model_name || 'Qwen3-0.6B',
+                enable_thinking: agentConfig.intent_enable_thinking === true
             };
 
             // 填充模型类型选择框
@@ -1298,6 +1346,12 @@ export class ConfigManager {
                 const config = window.intentRecognitionConfig;
                 if (config.model_type) {
                     typeSelect.value = config.model_type;
+                }
+
+                // 设置思考模式
+                if (dom.intentRecognitionEnableThinkingBtn) {
+                    const isEnabled = config.enable_thinking === true;
+                    this.updateThinkingModeUI('intent', isEnabled);
                 }
 
                 // 触发类型切换处理
@@ -1346,6 +1400,11 @@ export class ConfigManager {
 
             apiModelSelect.disabled = false;
             hintText.textContent = `选择本地模型`;
+
+            // 显示思考模式选项
+            if (dom.intentRecognitionEnableThinkingGroup) {
+                dom.intentRecognitionEnableThinkingGroup.style.display = 'block';
+            }
         } else {
             // API 模型模式
             apiModelGroup.style.display = 'block';
@@ -1368,6 +1427,11 @@ export class ConfigManager {
             }
 
             hintText.textContent = '选择用于意图识别的小模型（建议使用轻量级模型）';
+
+            // 隐藏思考模式选项
+            if (dom.intentRecognitionEnableThinkingGroup) {
+                dom.intentRecognitionEnableThinkingGroup.style.display = 'none';
+            }
         }
     }
 }

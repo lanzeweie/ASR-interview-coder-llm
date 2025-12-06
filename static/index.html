@@ -387,6 +387,7 @@
                             </div>
                         </div>
 
+
                         <div id="tab-multi" class="tab-content">
                             <div class="multi-model-cluster">
                                 <div class="cluster-header">智囊团</div>
@@ -431,6 +432,16 @@
                                         <option value="">-- 请选择 --</option>
                                     </select>
                                     <div class="form-hint">选择用于智能判定的小模型（建议使用轻量级模型）</div>
+                                </div>
+
+                                <div class="form-group" id="agent-enable-thinking-group" style="display: none;">
+                                    <button type="button" id="agent-enable-thinking-btn" class="feature-toggle-btn"
+                                        onclick="configManager.toggleThinkingMode('agent')">
+                                        <i class="fas fa-brain"></i>
+                                        <span class="btn-text">启用思考模式 (Thinking Mode)</span>
+                                        <span class="status-badge">OFF</span>
+                                    </button>
+                                    <div class="form-hint" style="margin-top: 8px;">本地专用：开启后模型将进行推理思考</div>
                                 </div>
 
                                 <div class="form-group">
@@ -492,6 +503,17 @@
                                         <option value="">-- 请选择 --</option>
                                     </select>
                                     <div class="form-hint">选择用于意图识别的小模型（建议使用轻量级模型）</div>
+                                </div>
+
+                                <div class="form-group" id="intent-recognition-enable-thinking-group"
+                                    style="display: none;">
+                                    <button type="button" id="intent-recognition-enable-thinking-btn"
+                                        class="feature-toggle-btn" onclick="configManager.toggleThinkingMode('intent')">
+                                        <i class="fas fa-brain"></i>
+                                        <span class="btn-text">启用思考模式 (Thinking Mode)</span>
+                                        <span class="status-badge">OFF</span>
+                                    </button>
+                                    <div class="form-hint" style="margin-top: 8px;">本地专用：开启后模型将进行推理思考</div>
                                 </div>
 
                                 <!-- 意图识别功能说明 -->

@@ -576,9 +576,9 @@ export class LLMManager {
                     <div class="intent-summary" style="display: none;"></div>
                 </div>
             `;
-            if (dom.llmWindow) {
-                dom.llmWindow.appendChild(analyzingDiv);
-                dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+            if (dom.asrWindow) {
+                dom.asrWindow.appendChild(analyzingDiv);
+                dom.asrWindow.scrollTop = dom.asrWindow.scrollHeight;
             }
             this.updateIntentStatus(analyzingDiv, `正在收集上下文（${messages.length} 条消息）`, 'progress');
 
@@ -641,7 +641,7 @@ export class LLMManager {
 
     // 显示意图识别结果
     displayIntentAnalysisResult(result, containerDiv) {
-        if (!containerDiv || !dom.llmWindow) return;
+        if (!containerDiv) return;
 
         const phase1Result = result.phase1 || result || {};
         const phase2Result = result.phase2 || result || {};
@@ -669,7 +669,9 @@ export class LLMManager {
         this.updateIntentStatus(containerDiv, statusLabel, statusState);
         this.updateIntentSummary(containerDiv, combinedSummary, statusState);
 
-        dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+        if (dom.asrWindow) {
+            dom.asrWindow.scrollTop = dom.asrWindow.scrollHeight;
+        }
     }
 
     parseIntentSummary(phase2Result) {
