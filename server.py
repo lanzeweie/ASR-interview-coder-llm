@@ -55,6 +55,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # --- Config Management ---
 CONFIG_FILE = "api_config.json"
 AGENT_ROLE_FILE = "data/agent.json"
+UI_STATE_FILE = "data/ui_state.json"
 
 LEGACY_IDENTITY_MAP = {
     "思考": "tech_assistant",
@@ -214,6 +215,23 @@ def save_config(config):
     config["configs"] = [normalize_config_tags(dict(conf)) for conf in configs]
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4)
+
+def load_ui_state():
+    if os.path.exists(UI_STATE_FILE):
+        try:
+            with open(UI_STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading UI state: {e}")
+    return {}
+
+def save_ui_state(state):
+    os.makedirs(os.path.dirname(UI_STATE_FILE), exist_ok=True)
+    try:
+        with open(UI_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"Error saving UI state: {e}")
 
 # Initialize LLM Client
 config_data = load_config()
@@ -739,6 +757,20 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 # --- LLM Endpoints ---
+
+@app.get("/api/ui_state")
+async def get_ui_state():
+    """获取前端 UI 状态"""
+    return load_ui_state()
+
+@app.post("/api/ui_state")
+async def update_ui_state(data: dict = Body(...)):
+    """更新前端 UI 状态 (增量更新)"""
+    current_state = load_ui_state()
+    # 深度合并或替换顶层键
+    current_state.update(data)
+    save_ui_state(current_state)
+    return {"status": "success", "state": current_state}
 
 @app.get("/api/identities")
 async def get_identities():

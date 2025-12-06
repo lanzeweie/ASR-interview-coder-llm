@@ -12,7 +12,8 @@ import {
     updateModelDisplay,
     loadSavedWidths,
     PanelResizer,
-    initPanelResizeListener
+    initPanelResizeListener,
+    API
 } from './utils.js';
 import { renderMarkdown } from './markdown.js';
 
@@ -298,7 +299,7 @@ export class UIManager {
                 // 更新全局变量和UI
                 window.agentEnabled = newState;
                 this.managers.chat.updateWelcomeMessage();
-                this.persistUIState();
+                this.persistUIState({}, { immediate: true });
             });
         }
 
@@ -438,7 +439,7 @@ export class UIManager {
                 const displayName = await this.managers.config.updateCurrentDisplayNameByToggle(isMulti);
 
                 this.managers.chat.updateWelcomeMessage();
-                this.persistUIState();
+                this.persistUIState({}, { immediate: true });
             });
         }
 
@@ -465,9 +466,9 @@ export class UIManager {
     }
 
     // 面板调节事件
-    initResizerEvents() {
+    async initResizerEvents() {
         // 加载保存的宽度
-        loadSavedWidths();
+        await loadSavedWidths();
 
         // 初始化调节器
         this.initResizers();
@@ -521,7 +522,9 @@ export class UIManager {
             resizer.classList.remove('resizing');
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            localStorage.setItem('ast_sidebar_width', sidebarPanel.offsetWidth);
+            // 使用 API 保存
+            API.saveUIState({ ast_sidebar_width: sidebarPanel.offsetWidth });
+
             this.sidebarStoredWidth = `${sidebarPanel.offsetWidth}px`;
             document.removeEventListener('mousemove', this.handleSidebarMouseMove);
             document.removeEventListener('mouseup', this.handleSidebarMouseUp);
@@ -541,45 +544,35 @@ export class UIManager {
     }
 
     // 初始化智囊团开关
-    initMultiLLMToggle() {
-        // 如果没有保存的状态，则设置为默认关闭状态
-        if (!localStorage.getItem('ast_ui_state')) {
-            if (dom.multiLLMToggle) {
-                dom.multiLLMToggle.classList.remove('active');
-                dom.multiLLMToggle.title = '智囊团已关闭，点击开启';
-            }
+    async initMultiLLMToggle() {
+        // 初始状态由 restoreUIState 处理，这里仅做 DOM 检查或默认值设定
+        if (dom.multiLLMToggle) {
+            dom.multiLLMToggle.title = '智囊团已关闭，点击开启';
         }
     }
 
     // 初始化意图识别开关
-    initIntentRecognitionToggle() {
-        // 如果没有保存的状态，则设置为默认关闭状态
-        if (!localStorage.getItem('ast_ui_state')) {
-            if (dom.intentRecognitionToggle) {
-                dom.intentRecognitionToggle.classList.remove('active');
-                dom.intentRecognitionToggle.title = '意图识别已关闭，点击开启';
-            }
-        } else {
-            // 如果有保存的状态，也要设置对应的title
-            if (dom.intentRecognitionToggle) {
-                const isActive = dom.intentRecognitionToggle.classList.contains('active');
-                dom.intentRecognitionToggle.title = isActive ? '意图识别已开启，点击关闭' : '意图识别已关闭，点击开启';
-            }
+    async initIntentRecognitionToggle() {
+        if (dom.intentRecognitionToggle) {
+            dom.intentRecognitionToggle.title = '意图识别已关闭，点击开启';
         }
     }
 
     // 恢复UI状态
-    restoreUIState() {
-        const savedState = loadUIState();
+    async restoreUIState() {
+        const savedState = await loadUIState(); // await the async function
         const collapseState = savedState ? !!savedState.sidebarCollapsed : false;
         this.applySidebarCollapsed(collapseState, { skipSave: true });
+
         if (!savedState) return;
 
         // 恢复智囊团开关状态
         if (typeof savedState.multiLLMActive === 'boolean') {
             if (savedState.multiLLMActive && dom.multiLLMToggle && !dom.multiLLMToggle.classList.contains('active')) {
                 dom.multiLLMToggle.classList.add('active');
-                updateModelDisplay(true, this.managers.config.currentConfigName);
+                // Consider updating display name here if needed, but config might not be loaded yet
+                // Defer updateModelDisplay until config is definitely loaded, or call it safely
+                setTimeout(() => updateModelDisplay(true, this.managers.config.currentConfigName), 1000);
             } else if (!savedState.multiLLMActive && dom.multiLLMToggle && dom.multiLLMToggle.classList.contains('active')) {
                 dom.multiLLMToggle.classList.remove('active');
                 updateModelDisplay(false, this.managers.config.currentConfigName);
@@ -615,7 +608,7 @@ export class UIManager {
                 } catch (error) {
                     console.log('恢复聊天失败，聊天可能已删除:', error);
                 }
-            }, 100);
+            }, 500); // Increased delay slightly
         }
     }
 
@@ -632,7 +625,8 @@ export class UIManager {
         };
     }
 
-    persistUIState(extra = {}) {
+    persistUIState(extra = {}, options = {}) {
+        const { immediate = false } = options;
         saveUIState({
             multiLLMActive: dom.multiLLMToggle?.classList.contains('active') || false,
             agentToggleActive: this.managers.agent.isEnabled(),
@@ -640,7 +634,7 @@ export class UIManager {
             currentChatId: this.managers.chat.getCurrentChatId(),
             sidebarCollapsed: document.body.classList.contains('sidebar-collapsed'),
             ...extra
-        });
+        }, immediate);
     }
 
     initSidebarToggle() {
@@ -653,10 +647,7 @@ export class UIManager {
     }
 
     getStoredSidebarWidth() {
-        const stored = localStorage.getItem('ast_sidebar_width');
-        if (stored && !Number.isNaN(parseInt(stored, 10))) {
-            return `${parseInt(stored, 10)}px`;
-        }
+        // Read directly from CSS variable which is set by loadSavedWidths
         const computed = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width');
         return computed?.trim() || '260px';
     }
@@ -686,7 +677,7 @@ export class UIManager {
         }
 
         if (!skipSave) {
-            this.persistUIState();
+            this.persistUIState({}, { immediate: true });
         }
     }
 
@@ -707,7 +698,7 @@ export class UIManager {
         this.managers.chat.updateWelcomeMessage();
 
         if (!skipSave) {
-            this.persistUIState();
+            this.persistUIState({}, { immediate: true });
         }
     }
 

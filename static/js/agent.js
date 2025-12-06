@@ -3,7 +3,7 @@
    ======================================== */
 
 import { dom } from './dom.js';
-import { showToast } from './utils.js';
+import { showToast, API } from './utils.js';
 import { renderMarkdown } from './markdown.js';
 
 // ===== 智能分析管理类 =====
@@ -24,13 +24,15 @@ export class AgentManager {
     // 初始化智能分析状态
     async initAgentStatus() {
         try {
-            const response = await fetch('/api/agent/status');
-            const data = await response.json();
+            const [statusRes, uiState] = await Promise.all([
+                fetch('/api/agent/status'),
+                API.loadUIState()
+            ]);
+            const data = await statusRes.json();
 
             if (data.available) {
                 // 检查是否有保存的UI状态
-                const savedState = localStorage.getItem('ast_ui_state');
-                const hasSavedUIState = savedState && JSON.parse(savedState).agentToggleActive !== undefined;
+                const hasSavedUIState = uiState && uiState.agentToggleActive !== undefined;
 
                 // 如果没有保存的UI状态，则使用API状态
                 if (!hasSavedUIState) {
@@ -41,9 +43,17 @@ export class AgentManager {
                         dom.agentToggleBtn.title = this.enabled ? '智能分析已开启，点击关闭' : '智能分析已关闭，点击开启';
                     }
                 } else {
-                    // 有保存的UI状态，使用API状态更新后端状态，但保持UI显示
-                    this.enabled = data.enabled || false;
-                    console.log('智能分析状态：API=' + this.enabled + ', UI已恢复=' + (JSON.parse(savedState).agentToggleActive ? '开启' : '关闭'));
+                    // 有保存的UI状态，使用UI状态
+                    // 注意：这里我们优先信赖 UI state，因为它是用户偏好
+                    this.enabled = uiState.agentToggleActive;
+
+                    // 如果UI状态和后端实际状态不一致，可能需要同步后端
+                    // 但目前 initAgentStatus 主要是为了初始化前端显示
+                    // toggleAgent 会调用 /api/agent/enable 来同步
+
+                    this.updateAgentToggleUI();
+                    this.updateAgentStatusIndicator();
+                    console.log('智能分析状态已恢复(Server):', this.enabled ? '开启' : '关闭');
                 }
             } else {
                 // 智能分析不可用，隐藏相关UI

@@ -4,6 +4,61 @@
 
 import { dom } from './dom.js';
 
+// ===== API Helper =====
+let saveTimer = null;
+let pendingState = {};
+
+export const API = {
+    async loadUIState() {
+        try {
+            const res = await fetch('/api/ui_state');
+            if (res.ok) {
+                return await res.json();
+            }
+            return {};
+        } catch (e) {
+            console.error('Failed to load UI state:', e);
+            return {};
+        }
+    },
+    async saveUIState(state, immediate = false) {
+        // 合并新状态到待保存状态
+        pendingState = { ...pendingState, ...state };
+
+        // 如果之前的定时器存在，清除它
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+        }
+
+        const commitSave = async () => {
+            if (Object.keys(pendingState).length === 0) return;
+
+            try {
+                const stateToSave = { ...pendingState };
+                pendingState = {}; // 清空待保存状态
+
+                await fetch('/api/ui_state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(stateToSave)
+                });
+                console.log('💾 UI状态已保存(Server):', stateToSave);
+            } catch (e) {
+                console.error('Failed to save UI state:', e);
+                // 保存失败，尝试将未保存的状态合并回去（简单起见，这里暂不处理复杂的回滚）
+            }
+        };
+
+        if (immediate) {
+            await commitSave();
+        } else {
+            console.log('⏳ UI状态变更已缓存，5秒后保存...');
+            saveTimer = setTimeout(commitSave, 5000);
+        }
+    }
+};
+
 // ===== Toast 通知系统 =====
 export function showToast(message, type = 'info') {
     if (!dom.toastContainer) return;
@@ -141,7 +196,9 @@ export class PanelResizer {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         // 保存 ASR 面板宽度（LLM 面板宽度会自适应）
-        localStorage.setItem(`ast_asr_width`, asrPanel.offsetWidth);
+        const width = asrPanel.offsetWidth;
+        API.saveUIState({ ast_asr_width: width });
+
         adjustPanelLayout({
             asrWidth: asrPanel.offsetWidth,
             llmWidth: document.getElementById('llm-panel')?.offsetWidth
@@ -158,13 +215,15 @@ export class PanelResizer {
 }
 
 // ===== 宽度持久化 =====
-export function loadSavedWidths() {
-    const sidebarWidth = localStorage.getItem('ast_sidebar_width');
+export async function loadSavedWidths() {
+    const state = await API.loadUIState();
+
+    const sidebarWidth = state.ast_sidebar_width;
     if (sidebarWidth) {
         document.documentElement.style.setProperty('--sidebar-width', `${sidebarWidth}px`);
     }
 
-    const asrWidth = localStorage.getItem('ast_asr_width');
+    const asrWidth = state.ast_asr_width;
     const asrPanel = document.getElementById('asr-panel');
     const llmPanel = document.getElementById('llm-panel');
     if (asrWidth && asrPanel) {
@@ -175,33 +234,25 @@ export function loadSavedWidths() {
         asrWidth: asrPanel ? asrPanel.offsetWidth : undefined,
         llmWidth: llmPanel ? llmPanel.offsetWidth : undefined
     });
+    return state; // Return state so caller can use other properties
 }
 
 // ===== UI状态持久化 =====
-export function saveUIState(uiState) {
+export function saveUIState(uiState, immediate = false) {
     const state = {
         ...uiState,
         timestamp: Date.now()
     };
-    localStorage.setItem('ast_ui_state', JSON.stringify(state));
-    console.log('💾 UI状态已保存:', state);
+    API.saveUIState(state, immediate);
 }
 
-export function loadUIState() {
+export async function loadUIState() {
     try {
-        const savedState = localStorage.getItem('ast_ui_state');
-        if (!savedState) return null;
+        const uiState = await API.loadUIState();
+        if (!uiState) return null;
 
-        const uiState = JSON.parse(savedState);
-        const age = Date.now() - (uiState.timestamp || 0);
-
-        // 状态超过7天则忽略，恢复默认
-        if (age > 7 * 24 * 60 * 60 * 1000) {
-            console.log('保存的UI状态已过期，使用默认状态');
-            return null;
-        }
-
-        console.log('UI状态已恢复:', uiState);
+        // Backend storage is persistent, no need for 7-day expiration check unless logic requires valid session
+        console.log('UI状态已恢复(Server):', uiState);
         return uiState;
     } catch (error) {
         console.error('恢复UI状态失败:', error);
