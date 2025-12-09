@@ -35,6 +35,8 @@ export class UIManager {
         this.initResizerEvents();
         this.initTextSelectionEvents();
         this.initSidebarToggle();
+        this.initJobEvents();
+        this.checkJobStatus();
     }
 
     // 设置相关事件
@@ -99,14 +101,30 @@ export class UIManager {
                 const selectedRadio = document.querySelector('.tags-quick-select input[type="radio"]:checked');
                 const selectedTag = selectedRadio ? selectedRadio.value : '';
                 this.managers.config.updateSystemPromptHintVisibility(selectedTag);
-                if (!selectedTag && dom.systemPromptInput) {
+                if (dom.systemPromptInput) {
                     dom.systemPromptInput.value = '';
                     dom.systemPromptInput.disabled = false;
                 }
             });
         });
 
-        // 标签页切换
+        // Global handlers for model type changes
+        window.handleModelTypeChange = (select) => {
+            this.managers.config.handleModelTypeChange(select);
+        };
+        window.handleJobModelTypeChange = (select) => {
+            this.populateModelSelectForJob(select.value);
+            // Trigger visibility check for thinking mode
+            this.managers.config.updateThinkingModeVisibility('job', select.value);
+        };
+        window.handleResumeModelTypeChange = (select) => {
+            // Populating logic is separate, but we need visibility check
+            // Note: Resume model select population is handled by handleResumeModelTypeChange method in UI
+            // But we need to update thinking mode visibility from the dropdown change
+            if (this.managers.config && typeof this.managers.config.updateThinkingModeVisibility === 'function') {
+                this.managers.config.updateThinkingModeVisibility('resume', select.value);
+            }
+        };
         document.querySelectorAll('.tab-button').forEach(button => {
             button.addEventListener('click', () => {
                 const tabName = button.dataset.tab;
@@ -727,28 +745,23 @@ export class UIManager {
         const step = statusData.step || '';
         const message = statusData.message || '';
 
-        // 1. Update Indicator (Header)
-        if (dom.resumeStatusIndicator) {
-            const dot = dom.resumeStatusIndicator.querySelector('.resume-status-dot');
-            const text = dom.resumeStatusIndicator.querySelector('.resume-status-text');
-
-            dom.resumeStatusIndicator.style.display = 'flex';
-            dom.resumeStatusIndicator.className = 'resume-status-indicator'; // reset
-
-            if (status === 'processing' || status === 'uploading') {
-                dom.resumeStatusIndicator.classList.add('status-parsing');
-                text.textContent = '分析中...';
-            } else if (status === 'completed' || status === 'ready') {
-                dom.resumeStatusIndicator.classList.add('status-ready');
-                text.textContent = '简历就绪';
-            } else if (status === 'error') {
-                dom.resumeStatusIndicator.classList.add('status-error');
-                text.textContent = '解析失败';
-            } else {
-                dom.resumeStatusIndicator.style.display = 'none';
+        // 1. Update Resume Button Icon (Active State)
+        if (dom.uploadResumeBtn) {
+            const icon = dom.uploadResumeBtn.querySelector('svg');
+            const text = dom.uploadResumeBtn.querySelector('text'); // The PDF text
+            if (icon && text) {
+                if (status === 'processing' || status === 'uploading') {
+                    icon.style.color = '#fbbf24'; // Orange
+                    text.style.fill = '#fbbf24';  // Ensure text matches
+                } else if (status === 'completed' || status === 'ready' || statusData.has_resume) {
+                    icon.style.color = '#10b981'; // Green
+                    text.style.fill = '#10b981';
+                } else {
+                    icon.style.color = 'currentColor'; // Default
+                    text.style.fill = 'currentColor';
+                }
             }
         }
-
         // 2. Update Modal UI
         const progressContainer = document.getElementById('resume-progress-container');
         const progressBar = document.getElementById('resume-progress-bar');
@@ -913,6 +926,17 @@ export class UIManager {
             // Handle type change and populate models
             this.handleResumeModelTypeChange(type, config.model_name);
 
+            // Restore Thinking Mode
+            if (config.thinking_mode) {
+                this.managers.config.updateThinkingModeUI('resume', true);
+            } else {
+                this.managers.config.updateThinkingModeUI('resume', false);
+            }
+            // Ensure visibility is correct
+            if (this.managers.config && typeof this.managers.config.updateThinkingModeVisibility === 'function') {
+                this.managers.config.updateThinkingModeVisibility('resume', type);
+            }
+
         } catch (e) {
             console.error('Load resume config error:', e);
         }
@@ -984,7 +1008,8 @@ export class UIManager {
         const currentConfig = this.managers.config.configData || {};
         const resumeConfig = {
             model_type: type,
-            model_name: name
+            model_name: name,
+            thinking_mode: dom.resumeEnableThinkingBtn?.classList.contains('active') || false
         };
 
         const newConfig = {
@@ -1044,5 +1069,291 @@ export class UIManager {
             showToast('上传出错', 'error');
             this.updateResumeStatus({ state: 'error', error: error.message });
         }
+    }
+
+    // --- Job Analysis Methods ---
+
+    initJobEvents() {
+        // Status Indicator Click
+        if (dom.jobStatusIndicator) {
+            dom.jobStatusIndicator.addEventListener('click', () => {
+                this.openJobModal();
+            });
+        }
+
+        // Modal Events
+        if (dom.jobModal) {
+            // Close button
+            if (dom.jobModalCloseBtn) {
+                dom.jobModalCloseBtn.addEventListener('click', () => {
+                    dom.jobModal.classList.remove('active');
+                });
+            }
+            // Overlay click
+            const overlay = dom.jobModal.querySelector('.modal-overlay');
+            if (overlay) {
+                overlay.addEventListener('click', () => {
+                    dom.jobModal.classList.remove('active');
+                });
+            }
+
+            // Generate Button
+            if (dom.jobGenerateBtn) {
+                dom.jobGenerateBtn.addEventListener('click', () => {
+                    this.handleJobGenerate();
+                });
+            }
+
+            // Clear Button
+            if (dom.jobClearBtn) {
+                dom.jobClearBtn.addEventListener('click', () => {
+                    this.handleJobClear();
+                });
+            }
+
+            // Model Type Change
+            // Model Type Change
+            if (dom.jobModelTypeSelect) {
+                dom.jobModelTypeSelect.addEventListener('change', (e) => {
+                    this.populateModelSelectForJob(e.target.value);
+                    if (this.managers.config && typeof this.managers.config.updateThinkingModeVisibility === 'function') {
+                        this.managers.config.updateThinkingModeVisibility('job', e.target.value);
+                    }
+                });
+            }
+        }
+    }
+
+    async openJobModal() {
+        if (!dom.jobModal) return;
+        dom.jobModal.classList.add('active');
+
+        // Initialize Model Select
+        const currentType = dom.jobModelTypeSelect ? dom.jobModelTypeSelect.value : 'api';
+        if (dom.jobModelTypeSelect) {
+            this.populateModelSelectForJob(currentType);
+        }
+
+        // Restore Thinking Mode
+        const jobConfig = this.managers.config.configData?.job_config || {};
+        if (jobConfig.thinking_mode) {
+            this.managers.config.updateThinkingModeUI('job', true);
+        } else {
+            this.managers.config.updateThinkingModeUI('job', false);
+        }
+
+        if (this.managers.config && typeof this.managers.config.updateThinkingModeVisibility === 'function') {
+            this.managers.config.updateThinkingModeVisibility('job', currentType);
+        }
+
+
+        // Fetch current status and info
+        try {
+            const response = await fetch('/api/job/status');
+            if (response.ok) {
+                const data = await response.json();
+
+                // Fill inputs if available
+                if (data.info && data.info.title) {
+                    if (dom.jobTitleInput) dom.jobTitleInput.value = data.info.title;
+                }
+
+                this.updateJobStatus(data);
+            }
+        } catch (e) {
+            console.error('Failed to open job modal:', e);
+        }
+    }
+
+    populateModelSelectForJob(type, selectedModel = null) {
+        if (!dom.jobModelSelect) return;
+
+        dom.jobModelSelect.innerHTML = '';
+        const group = document.getElementById('job-model-name-group');
+        if (group) group.style.display = 'block';
+
+        let items = [];
+        if (type === 'local') {
+            const localModels = this.managers.config.modelLocal || ['Qwen3-0.6B'];
+            items = localModels.map(m => ({ name: m, value: m }));
+        } else {
+            const configs = this.managers.config.configs || [];
+            items = configs.map(c => ({ name: c.name, value: c.name }));
+        }
+
+        if (items.length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "无可用模型";
+            dom.jobModelSelect.appendChild(option);
+            return;
+        }
+
+        let hasSelection = false;
+        items.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.value;
+            opt.textContent = item.name;
+            if (selectedModel && item.value === selectedModel) {
+                opt.selected = true;
+                hasSelection = true;
+            }
+            dom.jobModelSelect.appendChild(opt);
+        });
+
+        if (!hasSelection && items.length > 0) {
+            dom.jobModelSelect.selectedIndex = 0;
+        }
+    }
+
+    async handleJobGenerate() {
+        const title = dom.jobTitleInput.value.trim();
+        const jd = dom.jobJdInput.value.trim();
+
+        if (!title) {
+            showToast('请输入岗位名称', 'warning');
+            return;
+        }
+
+        const thinkingMode = dom.jobEnableThinkingBtn?.classList.contains('active') || false;
+        const modelType = dom.jobModelTypeSelect ? dom.jobModelTypeSelect.value : 'api';
+        const modelName = dom.jobModelSelect ? dom.jobModelSelect.value : '';
+
+        const config = {
+            title: title,
+            jd: jd,
+            thinking_mode: thinkingMode,
+            model_type: modelType,
+            model_name: modelName
+        };
+
+        // UI Feedback
+        if (dom.jobGenerateBtn) dom.jobGenerateBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/job/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            if (response.ok) {
+                showToast('开始生成岗位分析...', 'success');
+                this.pollJobStatus();
+            } else {
+                const err = await response.json();
+                showToast('生成失败: ' + err.message, 'error');
+                if (dom.jobGenerateBtn) dom.jobGenerateBtn.disabled = false;
+            }
+        } catch (e) {
+            showToast('请求失败: ' + e.message, 'error');
+            if (dom.jobGenerateBtn) dom.jobGenerateBtn.disabled = false;
+        }
+    }
+
+    async handleJobClear() {
+        if (!confirm('确定要清空岗位分析吗？这将删除已生成的文件。')) return;
+
+        try {
+            const response = await fetch('/api/job/clear', { method: 'POST' });
+            if (response.ok) {
+                showToast('已清空', 'success');
+                if (dom.jobTitleInput) dom.jobTitleInput.value = '';
+                if (dom.jobJdInput) dom.jobJdInput.value = '';
+                this.checkJobStatus();
+                this.updateJobPreview(''); // Clear preview
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    pollJobStatus() {
+        if (this.jobPollInterval) clearInterval(this.jobPollInterval);
+
+        this.jobPollInterval = setInterval(async () => {
+            const statusData = await this.checkJobStatus();
+            if (statusData && (statusData.status.state === 'completed' || statusData.status.state === 'error')) {
+                clearInterval(this.jobPollInterval);
+                if (dom.jobGenerateBtn) dom.jobGenerateBtn.disabled = false;
+            }
+        }, 1000);
+    }
+
+    async checkJobStatus() {
+        try {
+            const response = await fetch('/api/job/status');
+            if (response.ok) {
+                const data = await response.json();
+                this.updateJobStatus(data);
+                return data;
+            }
+        } catch (e) {
+            console.error('Job status check failed:', e);
+        }
+        return null;
+    }
+
+    async updateJobStatus(data) {
+        const { status, has_analysis, info } = data;
+
+        // 1. Update Indicator
+        if (dom.jobStatusIndicator) {
+            if (has_analysis && info && info.title) {
+                dom.jobStatusIndicator.style.display = 'flex';
+                dom.jobStatusIndicator.title = '岗位: ' + info.title + (status.state === 'processing' ? ' (生成中)' : '');
+
+                const icon = dom.jobStatusIndicator.querySelector('svg');
+                if (icon) {
+                    if (status.state === 'processing') {
+                        icon.style.color = '#fbbf24'; // Orange
+                    } else {
+                        icon.style.color = '#10b981'; // Green
+                    }
+                }
+            } else {
+                dom.jobStatusIndicator.style.display = 'flex'; // Always show
+                dom.jobStatusIndicator.title = '设置目标岗位';
+                const icon = dom.jobStatusIndicator.querySelector('svg');
+                if (icon) icon.style.color = 'currentColor';
+            }
+        }
+
+        // 2. Update Modal Status Text
+        if (dom.jobStatusText) {
+            if (status.state === 'processing') {
+                dom.jobStatusText.textContent = '生成中... ' + (status.message || '');
+            } else if (status.state === 'error') {
+                dom.jobStatusText.textContent = '错误: ' + status.error;
+            } else if (has_analysis) {
+                dom.jobStatusText.textContent = '已生成';
+            } else {
+                dom.jobStatusText.textContent = '';
+            }
+        }
+
+        // 3. Load Content if needed
+        if (has_analysis && status.state !== 'processing') {
+            try {
+                const contentRes = await fetch('/api/job/content');
+                if (contentRes.ok) {
+                    const contentData = await contentRes.json();
+                    this.updateJobPreview(contentData.content);
+                }
+            } catch (e) { }
+        } else if (!has_analysis) {
+            this.updateJobPreview('');
+        }
+    }
+
+    updateJobPreview(markdown) {
+        if (!dom.jobMarkdownContent) return;
+
+        if (!markdown) {
+            dom.jobMarkdownContent.innerHTML = `<div class="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary);"><p>等待生成...</p></div>`;
+            return;
+        }
+
+        renderMarkdown(dom.jobMarkdownContent, markdown);
     }
 }

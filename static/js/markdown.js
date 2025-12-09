@@ -4,24 +4,29 @@
    - 负责在前端安全地渲染 Markdown 文本
    ======================================== */
 
-import { marked } from './vendor/marked.esm.js';
-import DOMPurify from './vendor/purify.es.mjs';
+// Fallback to globals if imports fail or are not used
+const markedVal = typeof marked !== 'undefined' ? marked : (window.marked || {});
+const DOMPurifyVal = typeof DOMPurify !== 'undefined' ? DOMPurify : (window.DOMPurify || {});
 
 // 自定义链接渲染，默认在新标签页打开
-const renderer = new marked.Renderer();
-renderer.link = (href, title, text) => {
-    const safeHref = href ?? '';
-    const titleAttr = title ? ` title="${title}"` : '';
-    return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
-};
+const renderer = new markedVal.Renderer ? new markedVal.Renderer() : {};
+if (renderer.link) {
+    renderer.link = (href, title, text) => {
+        const safeHref = href ?? '';
+        const titleAttr = title ? ` title="${title}"` : '';
+        return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+    };
+}
 
-marked.setOptions({
-    gfm: true,
-    breaks: true,
-    headerIds: false,
-    mangle: false,
-    renderer
-});
+if (markedVal.setOptions) {
+    markedVal.setOptions({
+        gfm: true,
+        breaks: true,
+        headerIds: false,
+        mangle: false,
+        renderer
+    });
+}
 
 /**
  * 将 Markdown 渲染为安全的 HTML
@@ -37,11 +42,11 @@ export function renderMarkdown(target, markdownText) {
         return;
     }
 
-    const rawHtml = marked.parse(source);
-    const safeHtml = DOMPurify.sanitize(rawHtml, {
+    const rawHtml = markedVal.parse ? markedVal.parse(source) : source;
+    const safeHtml = DOMPurifyVal.sanitize ? DOMPurifyVal.sanitize(rawHtml, {
         ADD_ATTR: ['target', 'rel'],
         ADD_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td']
-    });
+    }) : rawHtml;
 
     target.innerHTML = safeHtml;
 

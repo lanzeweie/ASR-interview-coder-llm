@@ -23,7 +23,10 @@ except ImportError:
 
 from chat_manager import ChatManager
 from llm_client import LLMClient
+from chat_manager import ChatManager
+from llm_client import LLMClient
 from resume_manager import ResumeManager
+from job_manager import JobManager
 
 # Intelligent Agent imports
 try:
@@ -253,7 +256,29 @@ chat_manager = ChatManager()
 
 # Initialize Resume Manager
 resume_manager = ResumeManager(llm_client=llm_client)
+# Initialize Resume Manager
+resume_manager = ResumeManager(llm_client=llm_client)
 resume_personalization_enabled = False
+
+# Initialize Job Manager
+job_manager = JobManager(llm_client=llm_client)
+CACHED_JOB_CONTEXT = None
+
+def update_job_context_cache():
+    """Update the global cached job context."""
+    global CACHED_JOB_CONTEXT
+    content = None
+    if os.path.exists(job_manager.job_analysis_path):
+        try:
+            with open(job_manager.job_analysis_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except:
+            pass
+    CACHED_JOB_CONTEXT = content
+    print(f"[JobManager] Context cache updated. Size: {len(content) if content else 0}")
+
+# Load initial job context
+update_job_context_cache()
 
 # Load initial resume config
 _initial_config = load_config()
@@ -555,6 +580,9 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
                     print(f"[智囊团] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
                 else:
                     print(f"[智囊团] 未找到可用身份 Prompt: {normalized_tags}")
+
+            # Inject Job Analysis Context
+            inject_job_analysis_to_messages(current_messages)
 
             # [调试] 显示实际发送给模型的完整 prompt
             print(f"\n{'='*80}")
@@ -880,6 +908,8 @@ async def update_config(data: dict = Body(...)):
         )
         # Update ResumeManager's LLM client as well
         resume_manager.set_llm_client(llm_client)
+        # Update JobManager's LLM client too
+        job_manager.set_llm_client(llm_client)
     
     return {"status": "success", "message": "Configuration updated"}
 
@@ -1506,6 +1536,97 @@ async def get_resume_markdown():
         raise HTTPException(status_code=404, detail="Resume markdown not found")
     return {"markdown": md}
 
+    return {"markdown": md}
+
+# --- Job Analysis Endpoints ---
+
+@app.post("/api/job/generate")
+async def generate_job_analysis(data: dict = Body(...)):
+    """Generate job analysis background task."""
+    title = data.get("title")
+    jd = data.get("jd", "")
+    
+    if not title:
+        raise HTTPException(status_code=400, detail="Job Title is required")
+        
+    # Check if already processing
+    status = job_manager.processing_status
+    if status["state"] == "processing":
+         return JSONResponse(status_code=400, content={"status": "error", "message": "Another analysis is in progress"})
+
+    current_config_data = load_config()
+    # Merge transient options from request
+    if "thinking_mode" in data:
+         if "job_config" not in current_config_data:
+             current_config_data["job_config"] = {}
+         current_config_data["job_config"]["thinking_mode"] = data["thinking_mode"]
+
+    await job_manager.generate_analysis(title, jd, config_data=current_config_data)
+    
+    # Trigger cache update (optimistic or wait for completion? 
+    # Since it's async, we might not update immediately, but the client will poll status.
+    # The cache should be updated after completion. 
+    # For simplicity, we can't update cache here. 
+    # But we can update it in the status check or separate task.)
+    
+    return {"status": "success", "message": "Started job analysis generation"}
+
+@app.get("/api/job/status")
+async def get_job_status():
+    status = job_manager.processing_status.copy()
+    info = job_manager.get_job_info()
+    has_content = os.path.exists(job_manager.job_analysis_path)
+    
+    # If completed and cache is empty, update cache
+    if status["state"] == "completed" and not CACHED_JOB_CONTEXT:
+        update_job_context_cache()
+    
+    # Also if state is idle but file exists (restart case), ensure cache
+    if status["state"] == "idle" and has_content and not CACHED_JOB_CONTEXT:
+        update_job_context_cache()
+
+    return {
+        "status": status,
+        "info": info,
+        "has_analysis": has_content
+    }
+
+@app.get("/api/job/content")
+async def get_job_content():
+    content = await job_manager.get_analysis_content()
+    if not content:
+        raise HTTPException(status_code=404, detail="No analysis found")
+    return {"content": content}
+
+@app.post("/api/job/clear")
+async def clear_job_analysis():
+    job_manager.clear_analysis()
+    update_job_context_cache()
+    return {"status": "success", "message": "Job analysis cleared"}
+
+def inject_job_analysis_to_messages(messages: list[dict]):
+    """Inject job analysis context into system prompt if available."""
+    if not CACHED_JOB_CONTEXT:
+        return
+
+    prompt = f"\n\n<job_context_global>\n{CACHED_JOB_CONTEXT}\n</job_context_global>\n" \
+             f"请基于上述岗位分析背景，为用户提供更有针对性的回答（如该岗位面试官视角、技术专家视角等）。"
+
+    # Insert into system prompt if exists, or add new system prompt
+    # We append it to ensure it's present but maybe less dominant than direct Resume data?
+    # User said "Fourth level is Think Tank or Direct Answer", implying it's a foundational context.
+    
+    found_system = False
+    for msg in messages:
+        if msg.get("role") == "system":
+            if "<job_context_global>" not in msg["content"]:
+                msg["content"] += prompt
+            found_system = True
+            break
+            
+    if not found_system:
+        messages.insert(0, {"role": "system", "content": prompt})
+
 def inject_resume_to_messages(messages: list[dict]):
     """Inject resume XML into system prompt if enabled."""
     if not resume_personalization_enabled:
@@ -1541,6 +1662,7 @@ async def llm_websocket(websocket: WebSocket):
             model=curr_conf.get("model")
         )
         resume_manager.set_llm_client(llm_client)
+        job_manager.set_llm_client(llm_client)
 
     try:
         while True:
@@ -1607,6 +1729,9 @@ async def llm_websocket(websocket: WebSocket):
                             print(f"[智能分析] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
                         else:
                             print(f"[智能分析] 未找到标签 '{normalized_tags[0]}' 的 Prompt 定义")
+
+                    # Inject Job Analysis Context
+                    inject_job_analysis_to_messages(current_messages)
 
                     # [调试] 显示实际发送给模型的完整 prompt
                     print(f"\n{'='*80}")
@@ -1677,6 +1802,9 @@ async def llm_websocket(websocket: WebSocket):
 
             # Inject Resume if enabled
             inject_resume_to_messages(messages)
+            
+            # Inject Job Analysis Context (Always if available)
+            inject_job_analysis_to_messages(messages)
 
             if is_multi_llm:
                 await handle_multi_llm_request(websocket, messages, chat_id)

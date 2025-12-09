@@ -137,15 +137,27 @@
                         <span class="intent-recognition-text">意图识别</span>
                     </div>
                     <!-- 简历状态指示器 -->
-                    <div id="resume-status-indicator" class="resume-status-indicator" style="display: none;">
-                        <div class="resume-status-dot"></div>
-                        <span class="resume-status-text">简历就绪</span>
-                    </div>
-                    <button id="upload-resume-btn" class="control-btn" title="上传简历 (PDF)">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M8 12V4M8 4L5 7M8 4L11 7" stroke="currentColor" stroke-width="1.5"
-                                stroke-linecap="round" stroke-linejoin="round" />
-                            <path d="M3 14H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+
+                    <!-- 目标岗位状态指示器 -->
+                    <button id="job-status-indicator" class="control-btn" title="设置目标岗位">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="job-status-icon">
+                            <path d="M20 6c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V6z"
+                                stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" stroke="currentColor"
+                                stroke-width="1.5" />
+                            <path d="M12 2v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                        </svg>
+                    </button>
+                    <button id="upload-resume-btn" class="control-btn" title="简历个性化">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path
+                                d="M14 2H4C2.9 2 2 2.9 2 4V14C2 15.1 2.9 16 4 16H14C15.1 16 16 15.1 16 14V4C16 2.9 15.1 2 14 2Z"
+                                stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                            <text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle" font-size="6"
+                                font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                                fill="currentColor">
+                                PDF
+                            </text>
                         </svg>
                     </button>
                     <input type="file" id="resume-upload-input" accept=".pdf" style="display: none;">
@@ -696,10 +708,9 @@
     <!-- Resume Modal -->
     <div id="resume-modal" class="modal">
         <div class="modal-overlay"></div>
-        <div class="modal-content large"
-            style="max-width: 1200px; height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-content large" style="height: 85vh;">
             <div class="modal-header">
-                <h2 class="modal-title">简历</h2>
+                <h2 class="modal-title">简历个性化</h2>
                 <button id="resume-modal-close-btn" class="close-btn">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                         <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -710,8 +721,15 @@
             <div class="modal-body" style="display: flex; gap: 20px; padding: 20px; height: 100%; overflow: hidden;">
 
                 <!-- Left Column: Controls & Upload -->
-                <div class="resume-left-panel"
-                    style="flex: 0 0 320px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; padding-right: 10px;">
+                <div class="resume-left-panel">
+                    <!-- Description Section -->
+                    <div class="config-help-section">
+                        <div class="help-icon">💡</div>
+                        <div class="help-content">
+                            <strong>简历个性化：</strong><br>
+                            开启功能区按钮，让 AI 在最后输出回答时，能够根据您的个人简历信息进行定制化回复。
+                        </div>
+                    </div>
 
                     <!-- Settings Section -->
                     <div class="settings-section">
@@ -734,6 +752,18 @@
                         <div class="form-actions">
                             <button id="save-resume-config-btn" class="btn btn-primary small"
                                 style="width: 100%;">保存配置</button>
+                        </div>
+
+                        <!-- Resume Thinking Mode -->
+                        <div class="form-group" id="resume-thinking-mode-group" style="display: none;">
+                            <label>思考模式 (Thinking Mode)</label>
+                            <button id="resume-thinking-mode-toggle" class="feature-toggle-btn"
+                                onclick="configManager.toggleThinkingMode('resume')">
+                                <i class="fas fa-brain"></i>
+                                <span class="btn-text">启用思考模式 (Thinking Mode)</span>
+                                <span class="status-badge">OFF</span>
+                            </button>
+                            <div class="form-hint" style="margin-top: 8px;">本地专用：开启后模型将进行推理思考</div>
                         </div>
                     </div>
 
@@ -774,14 +804,11 @@
                 </div>
 
                 <!-- Right Column: Preview -->
-                <div class="resume-right-panel"
-                    style="flex: 1; display: flex; flex-direction: column; background: var(--bg-tertiary); border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden;">
-                    <div class="panel-header"
-                        style="padding: 15px; border-bottom: 1px solid var(--border-color); background: var(--bg-elevated); display: flex; justify-content: space-between; align-items: center;">
+                <div class="resume-right-panel">
+                    <div class="panel-header">
                         <h3 style="margin: 0; font-size: 16px; font-weight: 600;">简历解析</h3>
                     </div>
-                    <div id="resume-preview-area" class="panel-body"
-                        style="flex: 1; overflow-y: auto; padding: 20px; display: block;">
+                    <div id="resume-preview-area" class="panel-body">
                         <div id="resume-markdown-content" class="markdown-body"
                             style="font-size: 14px; line-height: 1.6;">
                             <div class="empty-state"
@@ -852,6 +879,99 @@
         </div>
     </div>
 
+    <!-- Job Analysis Modal -->
+    <div id="job-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content large" style="height: 85vh;">
+            <div class="modal-header">
+                <h2 class="modal-title">岗位分析</h2>
+                <div class="header-actions" style="margin-left: auto; display: flex; gap: 10px; margin-right: 15px;">
+                    <button id="job-generate-btn" class="btn btn-primary small">生成分析</button>
+                    <button id="job-clear-btn" class="btn btn-danger small">一键清空</button>
+                </div>
+                <button id="job-modal-close-btn" class="close-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="display: flex; gap: 20px; padding: 20px; height: 100%; overflow: hidden;">
+                <!-- Left Column: Inputs -->
+                <div class="job-left-panel">
+                    <!-- Description Section -->
+                    <div class="config-help-section">
+                        <div class="help-icon">💡</div>
+                        <div class="help-content">
+                            <strong>岗位分析：</strong><br>
+                            配置完成后默认全局开启，AI 将依据目标岗位的技术栈、职位要求等信息，辅助生成更有针对性的回复。
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3><i class="fas fa-briefcase"></i> 岗位信息</h3>
+                        <div class="form-group">
+                            <label>岗位名称 (必填)</label>
+                            <input type="text" id="job-title-input" class="form-input" placeholder="例如: 高级后端工程师">
+                        </div>
+                        <div class="form-group">
+                            <label>岗位介绍 (JD)</label>
+                            <textarea id="job-jd-input" class="form-input" rows="8" placeholder="粘贴岗位描述..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3><i class="fas fa-cog"></i> 生成设置</h3>
+                        <div class="form-group">
+                            <label>模型类型</label>
+                            <select id="job-model-type-select" class="form-select">
+                                <option value="api">API 模型</option>
+                                <option value="local">本地模型</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="job-model-name-group">
+                            <label>选择模型</label>
+                            <select id="job-model-select" class="form-select">
+                            </select>
+                        </div>
+
+                        <!-- Job Analysis Thinking Mode (Insert via JS Logic) -->
+                        <div class="form-group" id="job-thinking-mode-group" style="display: none;">
+                            <label>思考模式 (Thinking Mode)</label>
+                            <button id="job-thinking-mode-toggle" class="feature-toggle-btn"
+                                onclick="configManager.toggleThinkingMode('job')">
+                                <i class="fas fa-brain"></i>
+                                <span class="btn-text">启用思考模式 (Thinking Mode)</span>
+                                <span class="status-badge">OFF</span>
+                            </button>
+                            <div class="form-hint" style="margin-top: 8px;">本地专用：开启后模型将进行推理思考</div>
+                        </div>
+
+
+                    </div>
+                </div>
+
+                <!-- Right Column: Preview -->
+                <div class="job-right-panel">
+                    <div class="panel-header">
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 600;">分析报告</h3>
+                        <span id="job-status-text" style="font-size: 12px; color: var(--text-secondary);"></span>
+                    </div>
+                    <div id="job-preview-area" class="panel-body">
+                        <div id="job-markdown-content" class="markdown-body" style="font-size: 14px; line-height: 1.6;">
+                            <div class="empty-state"
+                                style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary);">
+                                <p>等待生成...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
     <script type="module" src="/static/js/main.js"></script>
 </body>
 

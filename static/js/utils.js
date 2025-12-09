@@ -494,3 +494,5 @@ export function formatTime(timestamp) {
 export function formatDuration(seconds) {
     return `${seconds.toFixed(1)}秒`;
 }
+
+

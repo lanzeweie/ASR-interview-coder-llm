@@ -206,15 +206,15 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--bg-tertiary);
+    background: var(--bg-secondary);
     border-radius: 12px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-subtle);
     overflow: hidden;
 }
 
 .resume-right-panel .panel-header {
-    padding: 15px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 16px;
+    border-bottom: 1px solid var(--border-subtle);
     background: var(--bg-elevated);
     display: flex;
     justify-content: space-between;
@@ -224,7 +224,46 @@
 .resume-right-panel .panel-body {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
+    padding: 24px;
+    display: block;
+}
+
+/* Job Analysis Modal Styles */
+.job-left-panel {
+    flex: 0 0 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+}
+
+.job-right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+}
+
+.job-right-panel .panel-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.job-right-panel .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
     display: block;
 }
 

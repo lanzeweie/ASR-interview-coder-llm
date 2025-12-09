@@ -102,7 +102,7 @@ export const dom = {
 
     // Resume Elements
     uploadResumeBtn: document.getElementById('upload-resume-btn'),
-    resumeStatusIndicator: document.getElementById('resume-status-indicator'),
+
     resumeToggleBtn: document.getElementById('resume-toggle'),
 
     // Resume Modal Elements
@@ -112,6 +112,8 @@ export const dom = {
     resumeModelSelect: document.getElementById('resume-model-select'),
     resumeLocalModelInput: document.getElementById('resume-local-model-input'),
     saveResumeConfigBtn: document.getElementById('save-resume-config-btn'),
+    resumeThinkingModeGroup: document.getElementById('resume-thinking-mode-group'),
+    resumeEnableThinkingBtn: document.getElementById('resume-thinking-mode-toggle'),
     resumeDropZone: document.getElementById('resume-drop-zone'),
     resumeFileInput: document.getElementById('resume-file-input'),
     resumeUploadStatus: document.getElementById('resume-upload-status'),
@@ -120,7 +122,24 @@ export const dom = {
     resumeStepText: document.getElementById('resume-step-text'),
     resumeStopBtn: document.getElementById('resume-stop-btn'),
     resumePreviewArea: document.getElementById('resume-preview-area'),
-    resumeMarkdownContent: document.getElementById('resume-markdown-content')
+    resumePreviewArea: document.getElementById('resume-preview-area'),
+    resumeMarkdownContent: document.getElementById('resume-markdown-content'),
+
+    // Job Analysis Elements
+    jobStatusIndicator: document.getElementById('job-status-indicator'),
+    jobModal: document.getElementById('job-modal'),
+    jobModalCloseBtn: document.getElementById('job-modal-close-btn'),
+    jobTitleInput: document.getElementById('job-title-input'),
+    jobJdInput: document.getElementById('job-jd-input'),
+    jobModelTypeSelect: document.getElementById('job-model-type-select'),
+    jobModelSelect: document.getElementById('job-model-select'),
+    jobThinkingModeGroup: document.getElementById('job-thinking-mode-group'),
+    jobEnableThinkingBtn: document.getElementById('job-thinking-mode-toggle'),
+    jobGenerateBtn: document.getElementById('job-generate-btn'),
+    jobClearBtn: document.getElementById('job-clear-btn'),
+    jobStatusText: document.getElementById('job-status-text'),
+    jobPreviewArea: document.getElementById('job-preview-area'),
+    jobMarkdownContent: document.getElementById('job-markdown-content')
 };
 
 // ===== DOM工具函数 =====

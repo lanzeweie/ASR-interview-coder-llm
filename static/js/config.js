@@ -556,15 +556,19 @@ export class ConfigManager {
     // 保存配置
     async saveConfigs() {
         try {
+            // Merge with existing configData to preserve other fields (agent_config, job_config, resume_config, etc.)
+            const payload = {
+                ...this.configData,
+                configs: this.configs,
+                current_config: this.currentConfigName,
+                multi_llm_active_names: Array.from(this.multiLLMActiveNames),
+                model_local: this.modelLocal || ["Qwen3-0.6B"]
+            };
+
             await fetch('/api/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    configs: this.configs,
-                    current_config: this.currentConfigName,
-                    multi_llm_active_names: Array.from(this.multiLLMActiveNames),
-                    model_local: this.modelLocal || ["Qwen3-0.6B"]
-                })
+                body: JSON.stringify(payload)
             });
             // 保存成功后刷新智囊团显示
             this.loadThinkTankRoles();
@@ -1019,16 +1023,36 @@ export class ConfigManager {
 
     // 切换思考模式UI状态
     toggleThinkingMode(type) {
-        const btn = type === 'agent' ? dom.agentEnableThinkingBtn : dom.intentRecognitionEnableThinkingBtn;
+        let btn;
+        if (type === 'agent') btn = dom.agentEnableThinkingBtn;
+        else if (type === 'intent') btn = dom.intentRecognitionEnableThinkingBtn;
+        else if (type === 'job') btn = dom.jobEnableThinkingBtn;
+        else if (type === 'resume') btn = dom.resumeEnableThinkingBtn;
+
         if (!btn) return;
 
         const willEnable = !btn.classList.contains('active');
         this.updateThinkingModeUI(type, willEnable);
+
+        // Persist state for Job and Resume
+        if (type === 'job' || type === 'resume') {
+            if (!this.configData) this.configData = {};
+            const configKey = type + '_config';
+            if (!this.configData[configKey]) this.configData[configKey] = {};
+
+            this.configData[configKey].thinking_mode = willEnable;
+            this.saveConfigs();
+        }
     }
 
     // 更新思考模式UI显示
     updateThinkingModeUI(type, isEnabled) {
-        const btn = type === 'agent' ? dom.agentEnableThinkingBtn : dom.intentRecognitionEnableThinkingBtn;
+        let btn;
+        if (type === 'agent') btn = dom.agentEnableThinkingBtn;
+        else if (type === 'intent') btn = dom.intentRecognitionEnableThinkingBtn;
+        else if (type === 'job') btn = dom.jobEnableThinkingBtn;
+        else if (type === 'resume') btn = dom.resumeEnableThinkingBtn;
+
         if (!btn) return;
 
         const badge = btn.querySelector('.status-badge');
@@ -1039,6 +1063,23 @@ export class ConfigManager {
         } else {
             btn.classList.remove('active');
             if (badge) badge.textContent = 'OFF';
+        }
+    }
+
+    // 更新思考模式可见性
+    updateThinkingModeVisibility(type, modelType) {
+        let group;
+        if (type === 'job') group = dom.jobThinkingModeGroup;
+        else if (type === 'resume') group = dom.resumeThinkingModeGroup;
+
+        if (!group) return;
+
+        if (modelType === 'local') {
+            group.style.display = 'block';
+        } else {
+            group.style.display = 'none';
+            // Optional: reset to off when hiding?
+            // this.updateThinkingModeUI(type, false);
         }
     }
 
