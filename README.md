@@ -1,326 +1,173 @@
-# 总流程
-第一层是 智能分析或用户手动发送消息
-第二层是 意图识别 （off/on）
+# 基于AST与多Agent辅助的程序员面试工具
+
+市面上的面试辅助工具，吃相可怕，功能也不是那么好。  
+做了一个基于ASR、CAM+、Multi-LLM的面试辅助工具   
+
+---
+
+## 项目概览
+
+ASR实时转语音，支持录入声纹即说话人识别与多个不同的智能体共同协作。   
+浏览器作为原生客户端。Python作为服务端。仅支持1对1   
+支持添加本地模型与不同服务商的api  
+
+**分为四层**
+```text
+第一层是 智能分析或用户手动发送消息    
+第二层是 意图识别 （off/on）  
 第三层是 用户个性化 （off/on）
-第四层是 智囊团或直接回答 
-
-```mermaid
-flowchart TD
-
-    %% --- 系统入口 ---
-    subgraph Entrances [系统入口]
-        ASR([ASR消息输入])
-        Manual([手动输入消息])
-    end
-
-    %% 第一层入口：ASR自动触发 或 手动消息
-    ASR --> SmartCheck{智能分析开启？}
-    Manual --> L1_Manual[手动进入第一层]
-
-    %% 第一层：智能分析（可关闭）
-    SmartCheck -- 否 --> L1_Manual
-    SmartCheck -- 是 --> SmartTrigger[第一层：智能分析 Agent]
-    SmartTrigger --> SmartResult{智能分析返回？}
-
-    SmartResult -- false --> ContinueListen[继续监听]
-    SmartResult -- true --> L1_Out[第一层完成]
-
-    L1_Manual --> IntentCheck
-    L1_Out --> IntentCheck
-
-    %% 第二层：意图识别（可关闭）
-    IntentCheck{意图识别开启？} -->|否| L3_Start
-    IntentCheck -->|是| IntentAgent[第二层：意图识别 Agent]
-    IntentAgent --> L2_Out[意图结果]
-    L2_Out --> L3_Start
-
-    %% 第三层：用户个性化（可关闭）
-    L3_Start --> PersonalCheck{用户个性化开启？}
-    PersonalCheck -- 否 --> L4_Start
-    PersonalCheck -- 是 --> Personal[第三层：用户个性化]
-    Personal --> L4_Start
-
-    %% 第四层：回答生成（必选）
-    subgraph Answering [第四层：回答生成]
-        L4_Start --> ModeCheck{智囊团模式？}
-
-        ModeCheck -- 是 --> ThinkTank[智囊团并行模型回答]
-        ModeCheck -- 否 --> SingleModel[单模型回答]
-
-        ThinkTank --> Collect[输出]
-        SingleModel --> Collect
-
-
-    end
-
+第四层是 智囊团或直接回答     
 ```
 
-## 智能分析流程
-```mermaid
-flowchart TD
-    Start([ASR消息输入]) --> CheckLen{长度 ≥ 3？}
-    CheckLen -- 否 --> Ignore[忽略消息]
-    CheckLen -- 是 --> UpdateTime[更新最后消息时间]
+### 核心功能
 
-    UpdateTime --> ExtractSpeaker[提取说话人信息]
-    ExtractSpeaker --> SameSpeaker{当前说话人<br/>已存在？}
+- **实时语音转文本（ASR）**: 基于 SenseVoice Small 模型，支持多语言识别
+- **说话人识别**: 基于 CAM++ 模型，支持声纹库管理和实时说话人识别
+- **语音活动检测（VAD）**: 基于 WebRTC VAD，准确检测语音片段
+- **大模型对话**: 集成多种 LLM API（OpenAI 兼容），支持流式对话
+- **智能分析助手**: 根据ASR结果智能判定是否需要启动智囊团
+- **智囊团模式**: 多个不同 LLM 同时给出提议，辅助主人公回复
+- **意图识别**: 自动提取对话中的核心问题和讨论大纲，发送给
+- **简历个性化**: 基于简历内容的个性化回答和建议
+- **目标岗位分析**: 智能分析职位描述（JD），提取技术栈、考察重点和面试要点
+- **Web 界面**: 响应式界面，支持实时显示转录结果和 LLM 对话
+- **多会话管理**: 支持聊天历史、会话切换等功能
 
-    SameSpeaker -- 否 --> NewSpeaker[设置当前说话人<br/>重置累积文本]
-    SameSpeaker -- 是 --> Accumulate[累积文本]
+---
 
-    Accumulate --> CheckThreshold{累积字符 ≥ 最小值（10）？}
-    NewSpeaker --> CheckThreshold
+## 系统架构
 
-    CheckThreshold -- 否 --> Wait[等待更多音频]
-    CheckThreshold -- 是 --> StartSilence{已启动静音检测？}
+### 架构总览
 
-    StartSilence -- 否 --> StartTimer[启动静音计时器]
-    StartSilence -- 是 --> CheckSilence{静音 ≥ 阈值（2秒）？}
+[核心模块流程图](README\Mermaid.md)
 
-    StartTimer --> Wait
-    CheckSilence -- 否 --> CheckForce{文本 ≥ 3倍阈值？}
-    CheckSilence -- 是 --> Trigger[触发分析]
+### 技术栈
 
-    CheckForce -- 是 --> Trigger
-    CheckForce -- 否 --> CheckTimeout{静音 ≥ 2倍阈值？}
+| 类别 | 技术/框架 | 版本/说明 |
+|------|-----------|-----------|
+| **ASR 模型** | [SenseVoice Small](https://www.modelscope.cn/models/iic/SenseVoiceSmall) | FunASR |
+| **说话人识别** | [CAM++](https://www.modelscope.cn/models/iic/speech_campplus_sv_zh-cn_16k-common) | ModelScope |
+| **VAD** | WebRTC VAD | webrtcvad |
+| **音频处理** | librosa, soundfile, numpy | 音频加载/处理 |
+| **录音** | PyAudio | 实时音频采集 |
+| **Web 框架** | FastAPI | 后端 API 服务 |
+| **前端** | HTML + JavaScript + CSS | 原生实现 |
+| **LLM 客户端** | OpenAI Python SDK | 兼容多厂商 API |
+| **配置管理** | JSON | 轻量级配置存储 |
 
-    CheckTimeout -- 是 --> Trigger
-    CheckTimeout -- 否 --> CheckSilence
+---
+项目结构 (Path Notation)
+```
+|-- api_config.json  // 配置: LLM API 配置信息
+|-- main.py          // 核心模块: ASR 实时处理核心 (语音转文本、声纹识别、VAD 检测)
+|-- server.py        // 核心模块: Web 服务 (FastAPI, WebSocket, REST API, 线程管理)
+|-- llm_client.py    // 核心模块: 客户端 (LLM API 集成, 流式响应)
+|-- chat_manager.py  // 核心模块: 管理器 (聊天会话管理, 历史存储)
+|-- resume_manager.py// 核心模块: 管理器 (简历解析管理, PDF 解析)
+|-- job_manager.py   // 核心模块: 管理器 (岗位分析管理, JD 分析, 技术栈提取)
+|-- intelligent_agent.py // 核心模块: 智能体 (智能分析核心, 意图识别, 分发)
+|-- trigger_manager.py // 核心模块: 管理器 (触发机制管理, 字数/静音检测)
+|
+|-- data/             // 配置与数据目录
+|   |-- agent.json    // 配置: 智囊团角色配置
+|   |-- ui_state.json // 数据: 前端界面状态
+|
+|-- static/           // 前端资源目录
+|   |-- index.html    // UI 页面: 主界面布局
+|   |-- css/          // 样式: UI 样式定义
+|   |-- js/           // 脚本: 前端交互逻辑
+|
+|-- voiceprints/      // 数据目录: 声纹库 (用户音频样本)
+|
+|-- output/           // 数据目录: 临时音频文件输出
+|
+|-- resumes/          // 数据目录: 简历数据和分析结果
+``` 
 
-    Trigger --> RunAnalysis[[运行智能分析]]
-    RunAnalysis --> CheckResult{模型判定结果}
+## 快速开始
 
-    CheckResult -- true --> NeedsAI[需要启动智囊团]
-    CheckResult -- false --> NoAI[普通对话，无需AI]
+### 环境依赖
 
-    NeedsAI --> Reset1[重置静音检测]
-    NoAI --> Reset2[重置静音检测]
+```bash
+# 核心依赖
+pip install funasr modelscope webrtcvad pyaudio librosa soundfile numpy fastapi uvicorn websockets openai
 
-    Reset1 --> ResetSpeakerState[重置状态变量]
-    Reset2 --> ResetSpeakerState
-    ResetSpeakerState --> Ready[准备接收新消息]
-    Ready --> Start
-
-    Ignore --> Ready
-    Wait --> Start
-
-    %% 用户配置参数详细说明
-    subgraph ConfigArea [⚙️ 用户可配置参数]
-        direction TB
-        subgraph Basic [基础参数]
-            Config1["最小消息长度: 3字符<br/>过滤过短无效消息"]
-            Config2["累积阈值: 10字符<br/>达到后启动静音检测"]
-        end
-        subgraph Timing [时间参数]
-            Config3["静音阈值: 2秒<br/>首次满足触发条件"]
-            Config4["强制阈值: 3倍累积<br/>30字符强制触发分析"]
-            Config5["超时阈值: 4秒<br/>静音超时自动触发"]
-        end
-        subgraph Speaker [说话人参数]
-            Config6["声纹识别<br/>区分不同说话人"]
-            Config7["累积逻辑<br/>同一说话人累积，不同说话人重置"]
-        end
-    end
-
-    style Trigger fill:#ff9999
-    style RunAnalysis fill:#8B4513
-    style NeedsAI fill:#FF6B6B
-    style NoAI fill:#90EE90
-    style ResetSpeakerState fill:#90EE90
-    style CheckThreshold fill:#e1f5fe
-    style CheckSilence fill:#e1f5fe
-    style CheckForce fill:#e1f5fe
-    style CheckTimeout fill:#e1f5fe
-    style SameSpeaker fill:#e1f5fe
+# 可选：CUDA 支持（用于 GPU 加速）
+# 确保已安装 CUDA 和 PyTorch
 ```
 
-## 意图识别
-```mermaid
-flowchart TD
-    Start([阶段2：意图识别启动<br/>前提：阶段1判定需要AI介入<br/>且用户开启意图识别]) --> CheckAgent{Agent可用？}
+或使用简化依赖（不含 torch）：
 
-    CheckAgent -- 否 --> Fallback[使用默认意图<br/>技术讨论/决策咨询/问题解决]
-    CheckAgent -- 是 --> BuildIntentPrompt[构建意图识别提示<br/>包含对话内容和主人公信息]
-
-    BuildIntentPrompt --> CallIntentModel[调用小模型<br/>提取核心问题和讨论大纲]
-
-    subgraph IntentDetails [意图识别详细流程]
-        direction TB
-        ExtractCore[1. 识别核心问题<br/>提取对话中的主要讨论话题]
-        ExtractOutline[2. 生成讨论大纲<br/>列出关键要点和子话题]
-        ExtractEntities[3. 提取实体信息<br/>涉及的技术、概念、决策点]
-    end
-
-    CallIntentModel --> ParseIntentJSON[解析JSON响应]
-
-    subgraph ParseProcess [解析过程]
-        direction TB
-        ExtractJSON[提取JSON对象<br/>使用正则匹配]
-        ValidateJSON[验证JSON格式<br/>检查必要字段]
-        ReturnResult[返回结构化结果<br/>包含core_question和outline]
-    end
-
-    ParseIntentJSON --> Success{解析成功？}
-    Success -- 是 --> ReturnIntent[返回意图识别结果<br/>传递给阶段3分发准备]
-    Success -- 否 --> LogError[记录解析错误]
-
-    ReturnIntent --> End([意图识别完成<br/>传递给智囊团/单模型])
-    LogError --> Fallback
-    Fallback --> End
-
-    %% 配置参数
-    subgraph IntentConfig [⚙️ 意图识别配置]
-        direction LR
-        Config1["启用开关：intent_recognition_enabled"]
-        Config2["模型选择：本地/云端API"]
-        Config3["上下文长度：最大50条消息"]
-        Config4["输出格式：JSON (core_question + outline)"]
-    end
-
-    %% 样式定义
-    style Start fill:#e1f5fe
-    style CheckAgent fill:#e1f5fe
-    style Success fill:#e1f5fe
-
-    style ReturnIntent fill:#c8e6c9
-    style Fallback fill:#fff3e0
-    style LogError fill:#ffcdd2
-    style End fill:#ffcdd2
-    style CallIntentModel fill:#8B4513
-    style IntentDetails fill:#f1f8e9,stroke:#4caf50,stroke-width:2px
-    style ParseProcess fill:#f1f8e9,stroke:#4caf50,stroke-width:2px
+```bash
+pip install -r requirements_notourch.txt
 ```
 
-## 智囊团
-```mermaid
-flowchart TD
-    Start([阶段3：分发准备启动<br/>基于阶段1和阶段2结果]) --> LoadConfig[加载配置信息<br/>• API配置列表<br/>• 活跃模型列表<br/>• 角色配置]
+### 模型下载
 
-    LoadConfig --> CheckMode{分发模式判断}
+系统会自动下载以下模型：
+- [**SenseVoiceSmall**](https://www.modelscope.cn/models/iic/SenseVoiceSmall): 约 200MB，用于语音识别 
+- [**CAM++**](https://www.modelscope.cn/models/iic/speech_campplus_sv_zh-cn_16k-common): 约 50MB，用于说话人识别
 
-    subgraph DistributionLogic [分发逻辑]
-        direction TB
-        CheckThinkTank[检查智囊团模式<br/>是否配置多模型]
-        LoadRoles[加载智囊团角色<br/>data/agent.json中的think_tank_roles]
-        MatchRoles[根据角色标签匹配模型<br/>匹配config中的tags字段]
-    end
+> 首次运行时会自动从 ModelScope 下载    
+可以自行配置路径`main.py`  
+```python
+        self.model_asr = AutoModel(
+            model="SenseVoiceSmall",   # 当前目录文件夹
+            trust_remote_code=True,
+            device="cuda" 
+        )
 
-    CheckMode -- 智囊团模式 --> DistributionLogic
-    CheckMode -- 单模型模式 --> SingleModelPath[使用当前配置模型<br/>跳过角色匹配]
-
-    DistributionLogic --> CheckMatches{找到匹配角色？}
-
-    CheckMatches -- 是 --> ThinkTankMode[智囊团模式<br/>多模型并行处理<br/>每个角色独立分析]
-    CheckMatches -- 否 --> DefaultSingleModel[回退到单模型模式<br/>使用当前激活模型]
-
-    subgraph ThinkTankProcess [智囊团处理流程]
-        direction TB
-        Broadcast[广播到所有目标模型<br/>WebSocket消息：agent_triggered]
-        ParallelAnalysis[并行调用多个LLM<br/>同时获取回答]
-        CollectResponses[收集所有回答<br/>流式接收每个模型的输出]
-        FormatResults[格式化结果<br/>为每个回答标注模型来源]
-    end
-
-    ThinkTankMode --> Broadcast
-    Broadcast --> ParallelAnalysis
-    ParallelAnalysis --> CollectResponses
-    CollectResponses --> FormatResults
-
-    subgraph SingleModelProcess [单模型处理流程]
-        direction TB
-        NotifyStart[发送开始通知<br/>"🤖 智能分析已启动"]
-        CallModel[调用当前配置模型<br/>流式获取回答]
-        SaveResponse[保存回答到聊天历史<br/>更新data/chat_history.json]
-    end
-
-    SingleModelPath --> SingleModelProcess
-    DefaultSingleModel --> SingleModelProcess
-
-    FormatResults --> Finalize[完成处理<br/>返回给前端UI]
-    SaveResponse --> Finalize
-
-    Finalize --> End([处理完成])
-
-    %% 配置参数
-    subgraph ThinkTankConfig [⚙️ 智囊团配置]
-        direction TB
-        Config1[multi_llm_active_names<br/>激活的模型名称列表]
-        Config2[think_tank_roles<br/>智囊团角色配置<br/>角色ID、标签、描述]
-        Config3[tags字段<br/>模型标签匹配<br/>如"技术专家"、"产品经理"等]
-        Config4[当前配置<br/>current_config<br/>单模型模式使用]
-    end
-
-    %% 样式定义
-    style Start fill:#e1f5fe
-    style CheckMode fill:#e1f5fe
-    style CheckMatches fill:#e1f5fe
-
-    style ThinkTankMode fill:#fff3e0
-    style DefaultSingleModel fill:#f3e5f5
-    style SingleModelPath fill:#f3e5f5
-    style End fill:#ffcdd2
-    style Broadcast fill:#8B4513
-    style ParallelAnalysis fill:#8B4513
-    style CallModel fill:#8B4513
-
-    style DistributionLogic fill:#f1f8e9,stroke:#4caf50,stroke-width:2px
-    style ThinkTankProcess fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
-    style SingleModelProcess fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+        print("正在加载 CAM++ 模型 (声纹识别)...")
+        # 使用你找到的正确 SV 模型 ID
+        self.sv_pipeline = pipeline(
+            task='speaker-verification',
+            model='speech_campplus_sv_zh-cn_16k-common', # 当前目录文件夹
+            model_revision='v1.0.0'
+        )
 ```
 
-## 用户个性化(简历)
+### 配置 LLM API
+
+**配置原理**：
+- **前端可配**：大部分配置通过 Web 界面设置即可
+- **必须手动**：本地模型列表需手动修改配置文件
+
+**快速配置**：
+
+1. **配置**：访问 http://localhost:8000 ，在设置面板中添加 API 配置
+2. **本地模型配置**：编辑 `api_config.json`
+
+```json
+{
+    // 本地模型列表（定义前端下拉框选项） 等同于路径，我是配在当前目录中，只实测过以下模型
+    // 来源：https://www.modelscope.cn/
+    "model_local": [
+        "Qwen3-0.6B",  //https://www.modelscope.cn/models/Qwen/Qwen3-0.6B   有思考模式
+        "Qwen2.5-0.5B-Instruct", //https://www.modelscope.cn/models/Qwen/Qwen2.5-0.5B-Instruct 
+    ],
+}
 ```
-flowchart TD
-    Start([用户入口：上传简历或开启简历解析模式]) --> CheckMode{是否开启简历模式？}
 
-    CheckMode -- 否 --> NormalFlow[进入普通对话模式\n不加载简历画像]
-    CheckMode -- 是 --> CheckCache{是否存在已解析的\nuser_profile.xml？}
+**操作步骤**：
+1. **前端配置**：打开 Web 界面 → 设置 → 添加/编辑 LLM 配置
+2. **手动补充**：编辑 `api_config.json`，添加 `model_local` 本地模型列表
+3. **核心逻辑**：如需自定义子智能体逻辑，编辑 `data/agent.json` 的 `sub_agents` 字段
 
-    %% 缓存逻辑
-    CheckCache -- 是 --> InjectXML[加载并注入\n已存在的用户画像 XML]
-    CheckCache -- 否 --> ExtractPipeline[启动简历解析流程]
+> 详细配置说明请参考：[README/操作手册.md](README/操作手册.md)
 
-    %% 文本提取
-    ExtractPipeline --> TextExtract[文本提取模块\nPyPDF2 / python-docx / OCR]
-    TextExtract --> CallResumeAgent[调用 Resume Parsing Agent\n输入: TEXT_INPUT\n输出: 画像维度数据]
+控制台实时显示转录结果
 
-    %% 核心解析流程
-    subgraph ResumeAnalysis [简历结构化画像构建流程]
-        direction TB
-        DimBasic[1. 基础画像抽取\n角色定位、年限、行业]
-        DimCareer[2. 职业目标抽取\n岗位、行业、动机、成长方向]
-        DimSkills[3. 核心技能抽取\n面试可推理的能力标签]
-        DimExp[4. 工作经历提炼\n职责定位 + 关键成果]
-        DimProjects[5. 项目结构化\n目标 / 角色 / 成果]
-        DimTech[6. 技术栈提取\n保持原文技术词汇]
-    end
+---
 
-    CallResumeAgent --> DimBasic
-    DimBasic --> DimCareer
-    DimCareer --> DimSkills
-    DimSkills --> DimExp
-    DimExp --> DimProjects
-    DimProjects --> DimTech
-    DimTech --> FormatXML[合并解析结果\n构建 XML 画像]
+## API 文档
 
-    %% 输出结构展示
-    subgraph OutputFormat [XML 构建与持久化]
-        direction TB
-        XMLBasic[basic_info 节点]
-        XMLCareer[career_target 节点]
-        XMLSkills[core_skills 节点]
-        XMLExp[experience_summary 节点]
-        XMLProj[projects 节点]
-        XMLTech[tech_stack_raw 节点]
-        XMLGrowth[growth_plan 节点]
-    end
+详细 API 文档请参考：[backend_api_documentation.md](README/backend_api_documentation.md)
 
-    FormatXML --> XMLBasic
-    XMLBasic --> SaveXML[持久化存储\nuser_profile.xml]
+---
 
-    SaveXML --> InjectXML
-
-    %% 最终注入
-    InjectXML --> End([完成：面试 Agent 可随时使用画像数据])
-
-```
+# 预览图
+![主界面](README\PNG\主界面.png)
+![配置设置](README\PNG\配置设计.png)
+![岗位分析](README\PNG\岗位分析.png)
+![声纹管理](README\PNG\声纹管理.png)
+!(简历分析)[README\PNG\简历分析.png]

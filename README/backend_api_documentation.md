@@ -16,7 +16,8 @@
     - [智能分析](#4-智能分析)
     - [声纹管理](#5-声纹管理)
     - [简历管理](#6-简历管理)
-    - [UI 状态管理](#7-ui-状态管理)
+    - [目标岗位分析](#7-目标岗位分析)
+    - [UI 状态管理](#8-ui-状态管理)
 3. [WebSocket 接口](#-websocket-接口)
 4. [数据模型](#-数据模型)
 5. [错误处理](#-错误处理)
@@ -314,14 +315,88 @@ AST 系统是一个集成多种 AI 能力的实时语音处理平台，提供：
 
 ---
 
-### 7. UI 状态管理
+### 7. 目标岗位分析
 
-#### 7.1 获取 UI 状态
+目标岗位分析功能允许用户输入职位描述（JD），系统会自动分析该岗位的技术栈、考察重点、面试要点等，为后续的面试准备和简历优化提供针对性建议。
+
+#### 7.1 生成岗位分析
+**POST** `/api/job/generate`
+
+生成指定岗位的分析报告。
+
+**请求体:**
+```json
+{
+    "title": "高级 Python 开发工程师",
+    "jd": "岗位职责：负责后端系统开发，要求熟悉 Python、MySQL、Redis 等技术...",
+    "thinking_mode": true  // 可选，是否启用思考模式
+}
+```
+
+**响应:**
+```json
+{
+    "status": "success",
+    "message": "已开始职位分析生成"
+}
+```
+
+#### 7.2 获取分析状态
+**GET** `/api/job/status`
+
+获取当前岗位分析的进度和状态。
+
+**响应:**
+```json
+{
+    "status": {
+        "state": "completed",  // idle, processing, completed, error
+        "message": "分析完成",
+        "error": null
+    },
+    "info": {
+        "title": "高级 Python 开发工程师",
+        "jd_preview": "岗位职责：负责后端系统开发..."
+    },
+    "has_analysis": true
+}
+```
+
+#### 7.3 获取分析内容
+**GET** `/api/job/content`
+
+获取完整的岗位分析报告内容。
+
+**响应:**
+```json
+{
+    "content": "# 岗位分析报告\n\n## 技术栈透视\n..."
+}
+```
+
+#### 7.4 清空分析
+**POST** `/api/job/clear`
+
+清空当前的岗位分析数据。
+
+**响应:**
+```json
+{
+    "status": "success",
+    "message": "职位分析已清空"
+}
+```
+
+---
+
+### 8. UI 状态管理
+
+#### 8.1 获取 UI 状态
 **GET** `/api/ui_state`
 
 获取前端保存的界面状态（如侧边栏宽度、展开状态等）。
 
-#### 7.2 更新 UI 状态
+#### 8.2 更新 UI 状态
 **POST** `/api/ui_state`
 
 增量更新 UI 状态。
@@ -424,6 +499,15 @@ interface ResumeStatus {
     error?: string;
     filename?: string;
     personalization_enabled: boolean;
+}
+```
+
+### JobStatus (岗位分析状态)
+```typescript
+interface JobStatus {
+    state: "idle" | "processing" | "completed" | "error";
+    message: string;
+    error?: string;
 }
 ```
 

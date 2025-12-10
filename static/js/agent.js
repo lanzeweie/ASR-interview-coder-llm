@@ -472,7 +472,13 @@ export class LLMManager {
         this.isProcessing = true;
 
         try {
-            this.chatHistory.push({ role: "user", content: text });
+            // 检查上一条消息是否与当前要发送的消息相同
+            // 这是为了防止在 ui.js 中已经通过 echoUserMessage -> ChatManager -> syncLLMHistory 流程添加过消息
+            // 导致此处再次添加，形成重复消息
+            const lastMsg = this.chatHistory[this.chatHistory.length - 1];
+            if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== text) {
+                this.chatHistory.push({ role: "user", content: text });
+            }
             if (this.chatManager && typeof this.chatManager.getCurrentChatId === 'function') {
                 this.setCurrentChatId(this.chatManager.getCurrentChatId());
             }

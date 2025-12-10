@@ -99,6 +99,8 @@ insert_after_symbol("class ChatManager", "chat_manager.py", "新方法")
 - **大模型对话**: 集成多种 LLM API（OpenAI 兼容），支持流式对话
 - **智能分析助手**: 基于底层小模型 Agent，智能判定是否需要启动智囊团
 - **智囊团**: 多个不同 LLM 同时给出提议，辅助主人公进行语音讨论
+- **目标岗位分析**: 智能分析职位描述（JD），提取技术栈、考察重点和面试要点
+- **简历个性化**: 基于目标岗位和简历内容的个性化回答和建议
 - **Web 界面**: 响应式界面，支持实时显示转录结果和 LLM 对话
 - **多会话管理**: 支持聊天历史、会话切换等功能
 
@@ -135,25 +137,29 @@ graph TB
         K[ChatManager 会话管理]
         L[LLMClient API 客户端]
         M[Multi-LLM Cluster<br/>多模型协作]
+        N[ResumeManager 简历管理]
+        O[JobManager 岗位分析]
     end
 
     subgraph "外部服务"
-        N[OpenAI 兼容 API<br/>DeepSeek/其他 LLM]
-        O[小模型 Agent API<br/>本地/云端判定]
+        P[OpenAI 兼容 API<br/>DeepSeek/其他 LLM]
+        Q[小模型 Agent API<br/>本地/云端判定]
     end
 
     subgraph "前端展示层"
-        Q[HTML 界面]
-        R[JavaScript 交互]
-        S[WebSocket 实时通信]
-        T[CSS 样式]
+        R[HTML 界面]
+        S[JavaScript 交互]
+        T[WebSocket 实时通信]
+        U[CSS 样式]
     end
 
     subgraph "数据存储"
-        U[Voiceprints/ 声纹库]
-        V[Output/ 音频输出]
-        W[Chat History 聊天记录]
-        X[API Config 配置]
+        V[Voiceprints/ 声纹库]
+        W[Output/ 音频输出]
+        X[Chat History 聊天记录]
+        Y[API Config 配置]
+        Z[Resumes/ 简历数据]
+        AA[Job Analysis/ 岗位分析]
     end
 
     %% 数据流
@@ -165,18 +171,22 @@ graph TB
     I --> J
     I --> K
     I --> L
-    L --> N
-    O --> P
+    I --> N
+    I --> O
+    L --> P
+    Q --> P
     I --> Q
-    Q --> S
-    S --> J
-    R --> L
+    Q --> T
+    T --> J
+    S --> L
 
     %% 存储连接
-    I --> U
     I --> V
-    K --> W
-    L --> X
+    I --> W
+    I --> Z
+    I --> AA
+    K --> X
+    L --> Y
 ```
 
 ### 技术栈
@@ -203,6 +213,10 @@ graph TB
 | **[server.py]** | Web 服务 | FastAPI 服务器 | WebSocket、REST API、线程管理 |
 | **[llm_client.py]** | 客户端 | LLM API 集成 | 多厂商 API、流式响应 |
 | **[chat_manager.py]** | 管理器 | 聊天会话管理 | 多会话、历史存储 |
+| **[resume_manager.py]** | 管理器 | 简历解析管理 | PDF 解析、个性化配置 |
+| **[job_manager.py]** | 管理器 | 岗位分析管理 | JD 分析、技术栈提取 |
+| **[intelligent_agent.py]** | 智能体 | 智能分析核心 | 智能判定、意图识别、分发 |
+| **[trigger_manager.py]** | 管理器 | 触发机制管理 | 字数积累、静音检测 |
 | **[test_chat_api.py]** | 测试 | API 测试脚本 | 端点功能验证 |
 
 ### 前端资源
@@ -222,6 +236,9 @@ graph TB
 | **[voiceprints/]** | 目录 | 声纹库（用户音频样本） |
 | **[output/]** | 目录 | 临时音频文件输出 |
 | **[chat_history.json]** | 数据 | 聊天会话历史记录 |
+| **[resumes/]** | 目录 | 简历数据和分析结果 |
+| **[data/agent.json]** | 配置 | 智囊团角色配置 |
+| **[data/ui_state.json]** | 数据 | 前端界面状态 |
 
 ## 🚀 快速开始
 
@@ -313,6 +330,29 @@ python test_chat_api.py
 
 #### `/ws` - ASR 实时数据推送
 
+#### `/ws/llm` - LLM 对话
+
+### REST API
+
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/chats` | GET | 获取聊天列表 |
+| `/api/chats` | POST | 创建新聊天 |
+| `/api/chats/{id}` | GET | 获取聊天详情 |
+| `/api/chats/{id}` | DELETE | 删除聊天 |
+| `/api/chats/{id}/clear` | POST | 清空聊天 |
+| `/api/config` | GET | 获取 LLM 配置 |
+| `/api/config` | POST | 更新 LLM 配置 |
+| `/api/job/generate` | POST | 生成岗位分析 |
+| `/api/job/status` | GET | 获取分析状态 |
+| `/api/job/content` | GET | 获取分析内容 |
+| `/api/job/clear` | POST | 清空分析数据 |
+| `/api/resume/upload` | POST | 上传简历 |
+| `/api/resume/status` | GET | 获取简历状态 |
+| `/api/resume/xml` | GET | 获取简历内容 |
+| `/api/voiceprints` | GET | 获取声纹列表 |
+| `/api/voiceprints` | POST | 创建声纹 |
+
 ```javascript
 // 接收消息格式
 {
@@ -356,7 +396,7 @@ python test_chat_api.py
 
 ### 功能概述
 
-智能分析功能是基于底层小模型 Agent 的智能判定系统，能够在语音讨论场景下自动分析对话内容，智能判定是否需要启动智囊团来辅助主人公获取更有利的回答。
+智能分析功能是基于底层小模型 Agent 的智能判定系统，能够在语音讨论场景下自动分析对话内容，智能判定是否需要启动智囊团来辅助主人公获取更有利的回答。同时，系统还集成了目标岗位分析功能，帮助用户更好地准备面试和优化简历。
 
 ### 核心特性
 
@@ -417,7 +457,18 @@ python test_chat_api.py
 4. 收集各方建议并展示给用户
 5. 保存对话历史
 
-### 使用场景
+#### 4. 目标岗位分析功能
+
+**岗位分析概述**:
+目标岗位分析功能允许用户输入职位描述（JD），系统会自动分析该岗位的技术栈、考察重点、面试要点等，为后续的面试准备和简历优化提供针对性建议。
+
+**核心功能**:
+- **技术栈透视**: 自动提取并分析岗位所需的技术栈
+- **面试要点识别**: 识别面试可能考察的重点领域
+- **能力要求分析**: 分析岗位对软技能和硬技能的要求
+- **背景匹配建议**: 结合简历内容提供匹配度分析
+
+**使用场景**:
 
 | 场景类型 | 示例 | 是否激活 |
 |----------|------|----------|
@@ -518,7 +569,58 @@ python test_chat_api.py
 }
 ```
 
-#### WebSocket 推送
+#### `/api/job/generate` - 生成岗位分析
+
+**请求方法**: `POST`
+
+**请求体**:
+```json
+{
+    "title": "高级 Python 开发工程师",
+    "jd": "岗位职责：负责后端系统开发，要求熟悉 Python、MySQL、Redis 等技术...",
+    "thinking_mode": true
+}
+```
+
+**响应**:
+```json
+{
+    "status": "success",
+    "message": "已开始职位分析生成"
+}
+```
+
+#### `/api/job/status` - 获取分析状态
+
+**请求方法**: `GET`
+
+**响应**:
+```json
+{
+    "status": {
+        "state": "completed",
+        "message": "分析完成"
+    },
+    "info": {
+        "title": "高级 Python 开发工程师",
+        "jd_preview": "岗位职责：负责后端系统开发..."
+    },
+    "has_analysis": true
+}
+```
+
+#### `/api/job/content` - 获取分析内容
+
+**请求方法**: `GET`
+
+**响应**:
+```json
+{
+    "content": "# 岗位分析报告\n\n## 技术栈透视\n..."
+}
+```
+
+### WebSocket 推送
 
 当智能分析激活时，前端会收到推送消息：
 
