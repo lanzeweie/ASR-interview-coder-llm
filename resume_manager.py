@@ -85,7 +85,7 @@ class ResumeManager:
             text = await loop.run_in_executor(None, _read_pdf)
             return text
         except Exception as e:
-            print(f"[ResumeManager] PDF extraction error: {e}")
+            print(f"[ResumeManager] PDF 提取错误: {e}")
             return None
 
     async def process_resume_task(self, pdf_path: str, config_data: Optional[Dict] = None):
@@ -105,7 +105,7 @@ class ResumeManager:
                     os.remove(pdf_path)
                     print(f"[ResumeManager] Deleted PDF: {pdf_path}")
             except Exception as e:
-                print(f"[ResumeManager] Failed to delete PDF: {e}")
+                print(f"[ResumeManager] 删除 PDF 失败: {e}")
 
             # 3. Analyze Markdown
             self.update_status("processing", "analyzing_Markdown", "正在生成 AI 分析数据 (Markdown)...")
@@ -197,7 +197,7 @@ class ResumeManager:
             clean_text = response_text.replace("```Markdown", "").replace("```", "").strip()
             return clean_text
         except Exception as e:
-            print(f"[ResumeManager] LLM Markdown analysis error: {e}")
+            print(f"[ResumeManager] LLM Markdown 分析错误: {e}")
             return None
 
     
@@ -232,7 +232,7 @@ class ResumeManager:
                         model=model_conf.get("model")
                     )
                 except Exception as e:
-                    print(f"[ResumeManager] Failed to create specific client: {e}")
+                    print(f"[ResumeManager] 创建特定客户端失败: {e}")
         return client_to_use
 
     def save_Markdown(self, Markdown_content: str):
@@ -249,7 +249,7 @@ class ResumeManager:
                 with open(self.resume_Markdown_path, "r", encoding="utf-8") as f:
                     return f.read()
             except Exception as e:
-                print(f"[ResumeManager] Error reading Markdown: {e}")
+                print(f"[ResumeManager] 读取 Markdown 错误: {e}")
                 return None
         return None
 
@@ -259,7 +259,7 @@ class ResumeManager:
                 with open(self.resume_md_path, "r", encoding="utf-8") as f:
                     return f.read()
             except Exception as e:
-                print(f"[ResumeManager] Error reading Markdown: {e}")
+                print(f"[ResumeManager] 读取 Markdown 错误: {e}")
                 return None
         return None
 

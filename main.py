@@ -329,7 +329,7 @@ class RealTimeASR_SV:
 
                 if is_active:
                     if not is_speaking:
-                        print("Detected speech...", end="\r")
+                        print("检测到语音...", end="\r")
                         is_speaking = True
                     silence_counter = 0
                     audio_buffer.append(data)
@@ -348,7 +348,7 @@ class RealTimeASR_SV:
                             is_speaking = False
                             silence_counter = 0
                             audio_buffer = []
-                            print("Waiting for speech...   ", end="\r")
+                            print("等待语音输入...   ", end="\r")
 
         except KeyboardInterrupt:
             print("\n停止录制...")

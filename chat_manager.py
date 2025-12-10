@@ -18,7 +18,7 @@ class ChatManager:
                 with open(self.file_path, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
-                print(f"Error loading chat history: {e}")
+                print(f"加载聊天历史错误: {e}")
                 return {"current_chat_id": None, "chats": {}}
         return {"current_chat_id": None, "chats": {}}
 
@@ -27,9 +27,9 @@ class ChatManager:
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=4, ensure_ascii=False)
         except Exception as e:
-            print(f"Error saving chat history: {e}")
+            print(f"保存聊天历史错误: {e}")
 
-    def create_chat(self, title="New Chat"):
+    def create_chat(self, title="新聊天"):
         chat_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
         new_chat = {

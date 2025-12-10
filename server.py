@@ -19,7 +19,7 @@ try:
     ASR_AVAILABLE = True
 except ImportError:
     ASR_AVAILABLE = False
-    print("Warning: ASR module not available. Use --no-asr to suppress this warning.")
+    print("警告: ASR 模块不可用。使用 --no-asr 取消此警告。")
 
 from chat_manager import ChatManager
 from llm_client import LLMClient
@@ -35,7 +35,7 @@ try:
     AGENT_AVAILABLE = True
 except ImportError:
     AGENT_AVAILABLE = False
-    print("Warning: Intelligent Agent module not available.")
+    print("警告: 智能 Agent 模块不可用。")
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='AST Real-time ASR and LLM Chat Server')
@@ -911,7 +911,7 @@ async def update_config(data: dict = Body(...)):
         # Update JobManager's LLM client too
         job_manager.set_llm_client(llm_client)
     
-    return {"status": "success", "message": "Configuration updated"}
+    return {"status": "success", "message": "配置已更新"}
 
 @app.post("/api/test_connection")
 async def test_connection_endpoint(data: dict = Body(...)):
@@ -923,7 +923,7 @@ async def test_connection_endpoint(data: dict = Body(...)):
     model = data.get("model")
     
     if not all([api_key, base_url, model]):
-        return {"success": False, "message": "Missing required fields"}
+        return {"success": False, "message": "缺少必需字段"}
         
     client = LLMClient(api_key=api_key, base_url=base_url, model=model)
     success, message = await client.test_connection()
@@ -940,7 +940,7 @@ async def get_chats():
 
 @app.post("/api/chats")
 async def create_chat(data: dict = Body(...)):
-    title = data.get("title", "New Chat")
+    title = data.get("title", "新聊天")
     new_chat = chat_manager.create_chat(title)
     return new_chat
 
@@ -948,21 +948,21 @@ async def create_chat(data: dict = Body(...)):
 async def get_chat(chat_id: str):
     chat = chat_manager.get_chat(chat_id)
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="未找到聊天")
     return chat
 
 @app.delete("/api/chats/{chat_id}")
 async def delete_chat(chat_id: str):
     success = chat_manager.delete_chat(chat_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="未找到聊天")
     return {"status": "success"}
 
 @app.post("/api/chats/{chat_id}/clear")
 async def clear_chat(chat_id: str):
     success = chat_manager.clear_chat_messages(chat_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="未找到聊天")
     return {"status": "success"}
 
 # --- Intelligent Agent Endpoints ---
@@ -1476,7 +1476,7 @@ async def get_voiceprint_audio(name: str):
 async def upload_resume(file: UploadFile = File(...)):
     """Upload and parse resume PDF."""
     if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        raise HTTPException(status_code=400, detail="仅支持 PDF 文件")
     
     # Check if already processing
     status = resume_manager.get_status()
@@ -1547,12 +1547,12 @@ async def generate_job_analysis(data: dict = Body(...)):
     jd = data.get("jd", "")
     
     if not title:
-        raise HTTPException(status_code=400, detail="Job Title is required")
+        raise HTTPException(status_code=400, detail="请提供职位标题")
         
     # Check if already processing
     status = job_manager.processing_status
     if status["state"] == "processing":
-         return JSONResponse(status_code=400, content={"status": "error", "message": "Another analysis is in progress"})
+         return JSONResponse(status_code=400, content={"status": "error", "message": "另一个分析正在进行中"})
 
     current_config_data = load_config()
     # Merge transient options from request
@@ -1569,7 +1569,7 @@ async def generate_job_analysis(data: dict = Body(...)):
     # For simplicity, we can't update cache here. 
     # But we can update it in the status check or separate task.)
     
-    return {"status": "success", "message": "Started job analysis generation"}
+    return {"status": "success", "message": "已开始职位分析生成"}
 
 @app.get("/api/job/status")
 async def get_job_status():
@@ -1595,14 +1595,14 @@ async def get_job_status():
 async def get_job_content():
     content = await job_manager.get_analysis_content()
     if not content:
-        raise HTTPException(status_code=404, detail="No analysis found")
+        raise HTTPException(status_code=404, detail="未找到分析结果")
     return {"content": content}
 
 @app.post("/api/job/clear")
 async def clear_job_analysis():
     job_manager.clear_analysis()
     update_job_context_cache()
-    return {"status": "success", "message": "Job analysis cleared"}
+    return {"status": "success", "message": "职位分析已清空"}
 
 def inject_job_analysis_to_messages(messages: list[dict]):
     """Inject job analysis context into system prompt if available."""
@@ -1809,7 +1809,7 @@ async def llm_websocket(websocket: WebSocket):
                 try:
                     # Check if client is ready
                     if not llm_client.client:
-                         await websocket.send_json({"type": "error", "content": "LLM Client not initialized. Please check settings."})
+                         await websocket.send_json({"type": "error", "content": "LLM 客户端未初始化。请检查设置。"})
                          continue
 
                     # 修复：处理当前配置的 System Prompt
@@ -1860,19 +1860,19 @@ async def llm_websocket(websocket: WebSocket):
                         chat_manager.update_chat_messages(chat_id, messages)
 
                 except Exception as e:
-                    print(f"LLM Stream Error: {e}")
+                    print(f"LLM 流式响应错误: {e}")
                     import traceback
                     traceback.print_exc()
                     try:
-                        await websocket.send_json({"type": "error", "content": f"Stream Error: {str(e)}"})
+                        await websocket.send_json({"type": "error", "content": f"流式响应错误: {str(e)}"})
                     except Exception as send_error:
                         print(f"发送错误消息失败: {send_error}")
 
     except WebSocketDisconnect:
-        print("LLM WebSocket disconnected")
+        print("LLM WebSocket 连接已断开")
         llm_manager.disconnect(websocket)
     except Exception as e:
-        print(f"LLM WebSocket Fatal Error: {e}")
+        print(f"LLM WebSocket 严重错误: {e}")
         import traceback
         traceback.print_exc()
         try:

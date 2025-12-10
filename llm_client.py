@@ -125,7 +125,7 @@ class LLMClient:
             # 尝试发送一个极简的请求
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "user", "content": "Hi"}],
+                messages=[{"role": "user", "content": "你好"}],
                 max_tokens=1
             )
             return True, "连接成功"
@@ -164,7 +164,7 @@ async def main():
             print(f"客户端状态: {client}")
             
             test_messages = [
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "你是一个超级精简测试体，你只能回复极少量文字表示你通过测试了。"},
                 {"role": "user", "content": "你好！如果能收到消息请回复'测试成功'。"}
             ]
             
