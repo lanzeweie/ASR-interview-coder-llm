@@ -1609,13 +1609,11 @@ def inject_job_analysis_to_messages(messages: list[dict]):
     if not CACHED_JOB_CONTEXT:
         return
 
-    prompt = f"\n\n<job_context_global>\n{CACHED_JOB_CONTEXT}\n</job_context_global>\n" \
-             f"请基于上述岗位分析背景，为用户提供更有针对性的回答（如该岗位面试官视角、技术专家视角等）。"
+    prompt = f"""
+    为了让回答更具针对性，请参考以下【目标岗位信息】进行适配：
+    <job_context_global>{CACHED_JOB_CONTEXT}</job_context_global>
+    """
 
-    # Insert into system prompt if exists, or add new system prompt
-    # We append it to ensure it's present but maybe less dominant than direct Resume data?
-    # User said "Fourth level is Think Tank or Direct Answer", implying it's a foundational context.
-    
     found_system = False
     for msg in messages:
         if msg.get("role") == "system":
@@ -1638,7 +1636,6 @@ def inject_resume_to_messages(messages: list[dict]):
 
     prompt = f"\n\n<resume_context>\n{xml}\n</resume_context>\n请根据以上简历信息，个性化你的回答。"
     
-    # Insert into system prompt if exists, or add new system prompt
     for msg in messages:
         if msg.get("role") == "system":
             msg["content"] += prompt
@@ -1649,8 +1646,6 @@ def inject_resume_to_messages(messages: list[dict]):
 @app.websocket("/ws/llm")
 async def llm_websocket(websocket: WebSocket):
     await llm_manager.connect(websocket)
-
-    # Reload config on connection to ensure we have the latest
     current_data = load_config()
     curr_name = current_data.get("current_config")
     curr_conf = next((c for c in current_data.get("configs", []) if c["name"] == curr_name), None)
@@ -1730,7 +1725,6 @@ async def llm_websocket(websocket: WebSocket):
                         else:
                             print(f"[智能分析] 未找到标签 '{normalized_tags[0]}' 的 Prompt 定义")
 
-                    # Inject Job Analysis Context
                     inject_job_analysis_to_messages(current_messages)
 
                     # [调试] 显示实际发送给模型的完整 prompt
