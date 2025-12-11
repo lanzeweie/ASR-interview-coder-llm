@@ -359,41 +359,34 @@ export class UIManager {
                 });
             }
 
+
+
             // File Upload
-            if (dom.resumeDropZone && dom.resumeFileInput) {
-                dom.resumeDropZone.addEventListener('click', () => {
-                    if (dom.resumeDropZone.classList.contains('disabled')) return;
+            if (dom.resumeUploadBtn && dom.resumeFileInput) {
+                console.log('[Resume] 上传按钮事件已绑定');
+                // Upload button click - trigger file input
+                dom.resumeUploadBtn.addEventListener('click', () => {
+                    console.log('[Resume] 上传按钮被点击');
                     dom.resumeFileInput.click();
                 });
 
-                dom.resumeDropZone.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    if (dom.resumeDropZone.classList.contains('disabled')) return;
-                    dom.resumeDropZone.classList.add('drag-over');
-                });
-
-                dom.resumeDropZone.addEventListener('dragleave', () => {
-                    dom.resumeDropZone.classList.remove('drag-over');
-                });
-
-                dom.resumeDropZone.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    if (dom.resumeDropZone.classList.contains('disabled')) return;
-                    dom.resumeDropZone.classList.remove('drag-over');
-                    const files = e.dataTransfer.files;
-                    if (files.length > 0) {
-                        this.handleResumeUpload(files[0]);
-                    }
-                });
-
+                // File input change - handle upload
                 dom.resumeFileInput.addEventListener('change', (e) => {
                     const files = e.target.files;
+                    console.log('[Resume] 文件选择:', files.length, '个文件');
                     if (files.length > 0) {
                         this.handleResumeUpload(files[0]);
                     }
                     dom.resumeFileInput.value = ''; // Reset
                 });
+            } else {
+                console.warn('[Resume] 上传按钮或文件输入框未找到', {
+                    uploadBtn: !!dom.resumeUploadBtn,
+                    fileInput: !!dom.resumeFileInput
+                });
             }
+
+
 
             // Stop Button
             const stopBtn = document.getElementById('resume-stop-btn');
@@ -767,18 +760,12 @@ export class UIManager {
         const progressBar = document.getElementById('resume-progress-bar');
         const stepText = document.getElementById('resume-step-text');
         const uploadStatus = document.getElementById('resume-upload-status');
-        const dropZone = dom.resumeDropZone;
         const previewArea = document.getElementById('resume-preview-area');
 
         if (status === 'processing') {
             // Show progress
             if (progressContainer) progressContainer.style.display = 'block';
             if (uploadStatus) uploadStatus.style.display = 'none';
-            if (dropZone) {
-                dropZone.classList.add('disabled');
-                dropZone.style.opacity = '0.5';
-                dropZone.style.pointerEvents = 'none';
-            }
             if (previewArea) previewArea.style.display = 'none';
 
             // Update progress bar based on step
@@ -800,11 +787,6 @@ export class UIManager {
                 uploadStatus.className = 'status-message success';
                 uploadStatus.textContent = '简历分析完成！';
             }
-            if (dropZone) {
-                dropZone.classList.remove('disabled');
-                dropZone.style.opacity = '1';
-                dropZone.style.pointerEvents = 'auto';
-            }
 
             // Load markdown if available
             if (statusData.has_markdown) {
@@ -818,19 +800,9 @@ export class UIManager {
                 uploadStatus.className = 'status-message error';
                 uploadStatus.textContent = statusData.error || '发生错误';
             }
-            if (dropZone) {
-                dropZone.classList.remove('disabled');
-                dropZone.style.opacity = '1';
-                dropZone.style.pointerEvents = 'auto';
-            }
         } else {
             // Idle
             if (progressContainer) progressContainer.style.display = 'none';
-            if (dropZone) {
-                dropZone.classList.remove('disabled');
-                dropZone.style.opacity = '1';
-                dropZone.style.pointerEvents = 'auto';
-            }
         }
     }
 

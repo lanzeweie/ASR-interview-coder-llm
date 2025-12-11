@@ -114,7 +114,7 @@ export const dom = {
     saveResumeConfigBtn: document.getElementById('save-resume-config-btn'),
     resumeThinkingModeGroup: document.getElementById('resume-thinking-mode-group'),
     resumeEnableThinkingBtn: document.getElementById('resume-thinking-mode-toggle'),
-    resumeDropZone: document.getElementById('resume-drop-zone'),
+    resumeUploadBtn: document.getElementById('resume-upload-btn'),
     resumeFileInput: document.getElementById('resume-file-input'),
     resumeUploadStatus: document.getElementById('resume-upload-status'),
     resumeProgressContainer: document.getElementById('resume-progress-container'),
