@@ -1046,16 +1046,26 @@ export class UIManager {
     // --- Job Analysis Methods ---
 
     initJobEvents() {
-        // Status Indicator Click
+        document.querySelectorAll('.job-tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const tabName = button.dataset.tab;
+
+                document.querySelectorAll('.job-tab-button').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.job-tab-content').forEach(content => content.classList.remove('active'));
+
+                button.classList.add('active');
+                const content = document.getElementById(`job-tab-${tabName}`);
+                if (content) content.classList.add('active');
+            });
+        });
+
         if (dom.jobStatusIndicator) {
             dom.jobStatusIndicator.addEventListener('click', () => {
                 this.openJobModal();
             });
         }
 
-        // Modal Events
         if (dom.jobModal) {
-            // Close button
             if (dom.jobModalCloseBtn) {
                 dom.jobModalCloseBtn.addEventListener('click', () => {
                     dom.jobModal.classList.remove('active');

@@ -908,8 +908,16 @@
                         </div>
                     </div>
 
-                    <div class="settings-section">
-                        <h3><i class="fas fa-briefcase"></i> 岗位信息</h3>
+                    <div class="job-tabs">
+                        <button class="job-tab-button active" data-tab="info">
+                            <i class="fas fa-briefcase"></i> 岗位信息
+                        </button>
+                        <button class="job-tab-button" data-tab="gen">
+                            <i class="fas fa-cog"></i> 生成设置
+                        </button>
+                    </div>
+
+                    <div id="job-tab-info" class="job-tab-content active">
                         <div class="form-group">
                             <label>岗位名称 (必填)</label>
                             <input type="text" id="job-title-input" class="form-input" placeholder="例如: 高级后端工程师">
@@ -920,8 +928,7 @@
                         </div>
                     </div>
 
-                    <div class="settings-section">
-                        <h3><i class="fas fa-cog"></i> 生成设置</h3>
+                    <div id="job-tab-gen" class="job-tab-content">
                         <div class="form-group">
                             <label>模型类型</label>
                             <select id="job-model-type-select" class="form-select">
@@ -935,7 +942,6 @@
                             </select>
                         </div>
 
-                        <!-- Job Analysis Thinking Mode (Insert via JS Logic) -->
                         <div class="form-group" id="job-thinking-mode-group" style="display: none;">
                             <label>思考模式 (Thinking Mode)</label>
                             <button id="job-thinking-mode-toggle" class="feature-toggle-btn"
@@ -946,12 +952,9 @@
                             </button>
                             <div class="form-hint" style="margin-top: 8px;">本地专用：开启后模型将进行推理思考</div>
                         </div>
-
-
                     </div>
                 </div>
 
-                <!-- Right Column: Preview -->
                 <div class="job-right-panel">
                     <div class="panel-header">
                         <h3 style="margin: 0; font-size: 16px; font-weight: 600;">分析报告</h3>

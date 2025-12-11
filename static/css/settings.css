@@ -1595,3 +1595,66 @@
     border-radius: 6px;
     border: 1px solid var(--border-subtle);
 }
+
+.job-tab-button {
+    padding: 14px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    position: relative;
+    white-space: nowrap;
+}
+
+.job-tab-button svg,
+.job-tab-button i {
+    width: 18px;
+    height: 18px;
+    color: currentColor;
+    transition: transform 0.2s ease;
+}
+
+.job-tab-button:hover {
+    color: var(--text-primary);
+    background: rgba(79, 70, 229, 0.05);
+}
+
+.job-tab-button.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+}
+
+.job-tab-content {
+    display: none;
+    padding: var(--gap-lg);
+}
+
+.job-tabs {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--gap-md);
+    background: transparent;
+}
+
+.job-tab-content.active {
+    display: block;
+}
+
+.job-tabs {
+    margin-bottom: 0 !important;
+    border-bottom: none !important;
+}
+
+.job-tab-content {
+    padding-top: 10px !important;
+}
