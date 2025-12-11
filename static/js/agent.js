@@ -345,8 +345,28 @@ export class LLMManager {
         else if (data.type === 'done' || data.type === 'done_all') {
             // All finished
             if (data.full_text) {
-                // Single mode legacy
+                // Single mode legacy or direct response (no chunks)
                 this.chatHistory.push({ role: "assistant", content: data.full_text });
+
+                // Ensure UI is updated, especially for cases with no chunks (e.g. immediate errors/prompts)
+                const model = data.model || 'default';
+                const div = this.streamManager.getOrCreateResponseDiv(model);
+                if (div) {
+                    const contentDiv = div.querySelector('.message-content, .content');
+                    if (contentDiv) {
+                        // Clear thinking state if present
+                        if (contentDiv.dataset.isPreResponse === 'true') {
+                            contentDiv.textContent = '';
+                            contentDiv.classList.remove('thinking');
+                            delete contentDiv.dataset.isPreResponse;
+                        }
+                        // Render full text
+                        renderMarkdown(contentDiv, data.full_text);
+                        if (dom.llmWindow) {
+                            dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
+                        }
+                    }
+                }
             } else {
                 // Multi mode: push all buffers to history
                 for (const [model, text] of Object.entries(this.streamManager.activeResponseBuffers)) {

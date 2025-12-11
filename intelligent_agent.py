@@ -15,6 +15,7 @@ from html import escape
 from typing import Callable, Dict, List, Optional, Tuple
 
 from llm_client import LLMClient
+from data.prompt import PromptTemplate
 
 # 尝试导入 transformers 和 torch
 try:
@@ -268,36 +269,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
     def build_analysis_prompt(self, messages: List[Dict], speaker_name: str) -> str:
         dialogue = format_messages_compact(messages)
         print(f"[智能分析] 构建Prompt，消息数: {len(messages)}，长度: {len(dialogue)}")
-        prompt = f"""
-        你是一个软件工程对话分析器，专门用于判断语音转文字后的对话片段是否明确涉及相关技术内容。请严格遵循以下规则，并仅输出一个标准 JSON 对象，不得包含任何额外文本、解释、格式符号或换行。
-
-        输入：
-        {dialogue}
-
-        处理原则：
-
-        主人公为 {speaker_name}。不存则在无视
-        语音转文字可能存在术语截断、错别字或不完整表达（如“Dock”、“调接口超时”、“React 的 useE”），你可基于上下文合理推测其指代的常见软件工程术语（如 Docker、API、useEffect）。
-        但必须采取激进策略：只要有证据表明对话明确涉及咨询/询问/问答技术主题时，才返回 {{"is": true}}：
-        例如：
-        • 编程语言、框架或库的具体使用问题（如 Python 装包失败、React 状态管理、TensorFlow 模型加载）
-        • 调试、错误排查、性能瓶颈分析
-        • 系统架构设计、API 规范、数据库 schema 或查询优化
-        • 开发工具链操作（如 Git 分支冲突、Docker 镜像构建、CI/CD 流水线配置）
-        • 算法实现、数据结构选择、代码可读性或审查反馈
-        • 软件工程实践（如单元测试覆盖、部署回滚、日志监控）
-        以下情况一律返回 {{"is": false}}
-
-        话题属于非软件领域（如硬件、生物、金融），即使含代码片段
-        仅泛泛提及“写代码”“搞开发”而无具体技术细节
-        表达模糊、缺乏可识别技术关键词，或推测依据不足
-        日常寒暄、情绪表达、非技术性计划讨论
-        输出要求：
-
-        严格输出：{{"is": true}} 或 {{"is": false}}
-        必须是合法 JSON，不包裹在 Markdown、反引号、代码块或任何额外字符中
-        """
-        return prompt
+        return PromptTemplate.get_analysis_prompt(dialogue, speaker_name)
 
     @staticmethod
     def validate_response(response: str) -> Tuple[bool, Optional[dict]]:
@@ -483,44 +455,7 @@ class IntentRecognitionAgent(BaseLLMAgent):
 
     def build_prompt(self, messages: List[Dict], speaker_name: str) -> str:
         dialogue = format_messages_compact(messages)
-        return f'''
-        你是一名面试场景专用的技术意图分析专家。请严格按以下规则处理输入：
-
-        🔹 处理逻辑：
-        1. 从对话末尾向前扫描整个对话，提取“最后出现的技术问题句子”（即：找到距离对话尾部最近、且属于编程/调试/架构/运维/工具/算法等领域的明确技术提问；不再限制于连续消息块）。
-        - 若对话中后部出现的消息为闲聊、生活内容、情绪表达等，则继续向前扫描，直到找到最近的一条技术类问题。
-        - 若对话全程均无技术问题，则视为“无技术问题”。
-
-        2. 判断该技术问题是否存在：
-        - 若找到技术问题 → 进入步骤 4
-        - 若未找到任何技术问题 → 输出固定结构：
-            <leader_analysis><summary>未检测到技术问题</summary><true_question></true_question><steps></steps></leader_analysis>
-
-        3. 如无技术问题 → 按上方固定结构输出（保持不变）
-
-        4. 如有技术问题 → 输出结构如下，且必须满足：
-        - <summary>：用15~30字精准概括意图，禁止超字数
-
-        🔹 示例（供你理解风格，不要复制）：
-        输入对话：
-        候选人A：装饰器那个@符号我老是搞不懂什么时候加括号。
-        面试官：你是说带参数和不带参数的区别？
-        候选人A：对，还有它怎么影响原函数的。
-
-        应输出：
-        <leader_analysis>
-            <summary>困惑装饰器语法与参数传递机制</summary>
-        </leader_analysis>
-
-        🔹 输出规范：
-        - 仅输出 XML，前后无任何字符、空行、注释
-        - 不使用 Markdown、不编号、不加粗
-        - 所有字段必须闭合，即使为空
-            
-        # 现在是实际内容：
-        🔹 输入对话：
-        {dialogue}
-        '''
+        return PromptTemplate.get_intent_prompt(dialogue)
     @staticmethod
     def _extract_xml(text: str) -> str:
         match = re.search(r'<leader_analysis[\s\S]*?</leader_analysis>', text, re.IGNORECASE)

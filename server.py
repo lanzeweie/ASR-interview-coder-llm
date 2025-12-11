@@ -544,6 +544,11 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
         await websocket.send_json({"type": "error", "content": "未选择任何模型加入集群 (请在设置中勾选)"})
         return
 
+    # Check if job analysis exists locally
+    if not os.path.exists(job_manager.job_analysis_path):
+        await websocket.send_json({"type": "error", "content": "请先设置目标岗位，完成岗位分析。助手对话框右上角→设置目标岗位"})
+        return
+
     # Prepare tasks
     async def stream_one(conf):
         name = conf["name"]
@@ -1725,6 +1730,15 @@ async def llm_websocket(websocket: WebSocket):
                         else:
                             print(f"[智能分析] 未找到标签 '{normalized_tags[0]}' 的 Prompt 定义")
 
+                    # Check if job analysis exists locally
+                    if not os.path.exists(job_manager.job_analysis_path):
+                        error_msg = "请先设置目标岗位，完成岗位分析。助手对话框右上角→设置目标岗位"
+                        await websocket.send_json({"type": "done", "full_text": error_msg})
+                        if chat_id:
+                            messages.append({"role": "assistant", "content": error_msg})
+                            chat_manager.update_chat_messages(chat_id, messages)
+                        continue
+
                     inject_job_analysis_to_messages(current_messages)
 
                     # [调试] 显示实际发送给模型的完整 prompt
@@ -1797,6 +1811,15 @@ async def llm_websocket(websocket: WebSocket):
             # Inject Resume if enabled
             inject_resume_to_messages(messages)
             
+            # Check if job analysis exists locally
+            if not os.path.exists(job_manager.job_analysis_path):
+                error_msg = "请先设置目标岗位，完成岗位分析。助手对话框右上角→设置目标岗位"
+                await websocket.send_json({"type": "done", "full_text": error_msg})
+                if chat_id:
+                    messages.append({"role": "assistant", "content": error_msg})
+                    chat_manager.update_chat_messages(chat_id, messages)
+                continue
+
             # Inject Job Analysis Context (Always if available)
             inject_job_analysis_to_messages(messages)
 
@@ -1828,6 +1851,9 @@ async def llm_websocket(websocket: WebSocket):
                             current_messages[sys_idx]["content"] = config_prompt
                         else:
                             current_messages.insert(0, {"role": "system", "content": config_prompt})
+
+                    # Ensure Job Analysis Context is present (in case it was overwritten)
+                    inject_job_analysis_to_messages(current_messages)
 
                     # [调试] 显示实际发送给模型的完整 prompt
                     print(f"\n{'='*80}")
