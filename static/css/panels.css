@@ -672,3 +672,105 @@
         transform: translateY(0);
     }
 }
+
+/* ========================================
+   Mic Visualizer Styles (In Panel Header)
+   ======================================== */
+.mic-visualizer-header {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    /* Slight gap between bars */
+    height: 32px;
+    /* Standardize with button height */
+    padding: 0 12px;
+    margin: 0 4px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    /* Pill shape like status */
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: scale(0.9);
+    animation: fadeIn 0.3s forwards;
+}
+
+.mic-bar {
+    width: 3px;
+    height: 4px;
+    background: var(--text-tertiary);
+    /* Default inactive color */
+    border-radius: 2px;
+    transition: height 0.05s ease, background-color 0.2s ease;
+}
+
+/* Active bars */
+.mic-visualizer-header.active {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.1);
+    background: var(--bg-elevated);
+}
+
+.mic-visualizer-header.active .mic-bar {
+    background: var(--accent-primary);
+}
+
+/* ========================================
+   Toggle Listening Button Styles
+   ======================================== */
+#asr-toggle-listening-btn {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Default State (Start Listening) - Green Accent on Hover */
+#asr-toggle-listening-btn:not(.active):hover {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: var(--color-success);
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+}
+
+/* Active State (Stop Listening) - Red/Error Color */
+#asr-toggle-listening-btn.active {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: var(--color-error);
+    animation: pulse-border 2s infinite;
+}
+
+#asr-toggle-listening-btn.active:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: var(--color-error);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Icon Animation */
+#asr-toggle-listening-btn svg {
+    transition: transform 0.3s ease;
+}
+
+#asr-toggle-listening-btn:hover svg {
+    transform: scale(1.1);
+}
+
+#asr-toggle-listening-btn.active svg {
+    animation: none;
+    /* Reset inner animation if any */
+}
+
+@keyframes pulse-border {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}

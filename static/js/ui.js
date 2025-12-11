@@ -37,7 +37,9 @@ export class UIManager {
         this.initSidebarToggle();
         this.initJobEvents();
         this.checkJobStatus();
+        this.initASRControls();
     }
+
 
     // 设置相关事件
     initSettingsEvents() {
@@ -1358,4 +1360,147 @@ export class UIManager {
 
         renderMarkdown(dom.jobMarkdownContent, markdown);
     }
+
+    // ===== ASR Control Methods =====
+    initASRControls() {
+        // Toggle Button
+        const toggleBtn = document.getElementById('asr-toggle-listening-btn');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => this.toggleASRListening());
+        }
+    }
+
+    async toggleASRListening() {
+        const toggleBtn = document.getElementById('asr-toggle-listening-btn');
+        const visualizer = document.getElementById('asr-mic-visualizer');
+        const playIcon = toggleBtn.querySelector('.icon-play');
+        const stopIcon = toggleBtn.querySelector('.icon-stop');
+
+        // Check if currently connected
+        const isConnected = this.managers.websocket.getConnectionStatus().asr;
+
+        if (isConnected) {
+            // Stop
+            this.managers.websocket.disconnectASR();
+            this.stopASRVisualizer();
+
+            // UI Update
+            if (visualizer) {
+                visualizer.style.display = 'none';
+                visualizer.classList.remove('active');
+            }
+            if (playIcon) playIcon.style.display = 'block';
+            if (stopIcon) stopIcon.style.display = 'none';
+            toggleBtn.classList.remove('active');
+            toggleBtn.title = "开始监听";
+
+            showToast('已停止监听', 'info');
+        } else {
+            // Start
+            try {
+                this.managers.websocket.connectASR();
+                await this.startASRVisualizer();
+
+                // UI Update
+                if (visualizer) {
+                    visualizer.style.display = 'flex';
+                    // Trigger reflow/anim
+                    setTimeout(() => { visualizer.classList.add('active'); }, 10);
+                }
+
+                if (playIcon) playIcon.style.display = 'none';
+                if (stopIcon) stopIcon.style.display = 'block';
+                toggleBtn.classList.add('active');
+                toggleBtn.title = "停止监听";
+
+                showToast('正在监听...', 'success');
+            } catch (err) {
+                console.error("Failed to start ASR:", err);
+                showToast('无法启动监听: ' + (err.message || '未知错误'), 'error');
+                // Cleanup if failed
+                this.managers.websocket.disconnectASR();
+                this.stopASRVisualizer();
+            }
+        }
+    }
+
+    async startASRVisualizer() {
+        if (this.asrAudioContext && this.asrAudioContext.state !== 'closed') {
+            if (this.asrAudioContext.state === 'suspended') {
+                await this.asrAudioContext.resume();
+            }
+            this.asrVisualizerActive = true;
+            this.animateASRVisualizer();
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.asrAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = this.asrAudioContext.createMediaStreamSource(stream);
+            const analyser = this.asrAudioContext.createAnalyser();
+            analyser.fftSize = 64; // Low res for 5 bars is enough (32 bins)
+
+            source.connect(analyser);
+
+            this.asrAnalyser = analyser;
+            this.asrStream = stream; // Keep ref to stop later
+            this.asrVisualizerActive = true;
+            this.animateASRVisualizer();
+
+        } catch (e) {
+            console.error('Mic access denied:', e);
+            throw new Error('无法访问麦克风'); // Propagate error
+        }
+    }
+
+    stopASRVisualizer() {
+        this.asrVisualizerActive = false;
+        if (this.asrStream) {
+            this.asrStream.getTracks().forEach(track => track.stop());
+            this.asrStream = null;
+        }
+        if (this.asrAudioContext) {
+            this.asrAudioContext.close().catch(e => console.error(e));
+            this.asrAudioContext = null;
+        }
+        this.asrAnalyser = null;
+    }
+
+    animateASRVisualizer() {
+        if (!this.asrVisualizerActive || !this.asrAnalyser) return;
+
+        const dataArray = new Uint8Array(this.asrAnalyser.frequencyBinCount);
+        this.asrAnalyser.getByteFrequencyData(dataArray);
+
+        const bars = document.querySelectorAll('#asr-mic-visualizer .mic-bar');
+
+        const step = Math.floor(dataArray.length / bars.length);
+
+        bars.forEach((bar, i) => {
+            let sum = 0;
+            for (let j = 0; j < step; j++) {
+                sum += dataArray[i * step + j];
+            }
+            const avg = sum / step;
+
+            let val = avg / 255;
+            val = val * 1.5; // Gain
+            if (val > 1) val = 1;
+
+            const height = Math.max(4, val * 24);
+            bar.style.height = `${height}px`;
+
+            if (avg > 100) {
+                bar.style.backgroundColor = 'var(--accent-primary)';
+            } else {
+                bar.style.backgroundColor = 'var(--text-tertiary)';
+            }
+        });
+
+        if (this.asrVisualizerActive) {
+            requestAnimationFrame(() => this.animateASRVisualizer());
+        }
+    }
 }
+

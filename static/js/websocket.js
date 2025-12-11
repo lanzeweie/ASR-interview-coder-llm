@@ -63,6 +63,18 @@ export class WebSocketManager {
         };
     }
 
+    disconnectASR() {
+        if (this.asrSocket) {
+            // Prevent auto-reconnect logic if manually closed
+            this.asrSocket.onclose = null;
+            this.asrSocket.close();
+            this.asrSocket = null;
+        }
+        this.isConnected.asr = false;
+        this.updateASRStatus(false);
+        console.log('[ASR] WebSocket 连接已手动关闭');
+    }
+
     // LLM WebSocket连接
     connectLLM() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -108,11 +120,60 @@ export class WebSocketManager {
             dom.asrStatusDiv.className = 'status connected';
             if (text) text.textContent = '已连接';
             console.log('[ASR] 实时语音转写功能已启用');
+
+            // Sync Toggle Button
+            const toggleBtn = document.getElementById('asr-toggle-listening-btn');
+            const visualizer = document.getElementById('asr-mic-visualizer');
+            if (toggleBtn) {
+                const playIcon = toggleBtn.querySelector('.icon-play');
+                const stopIcon = toggleBtn.querySelector('.icon-stop');
+
+                toggleBtn.classList.add('active');
+                toggleBtn.title = "停止监听";
+                if (playIcon) playIcon.style.display = 'none';
+                if (stopIcon) stopIcon.style.display = 'block';
+
+                // Auto-start visualizer if connected (optional, but consistent with "Listening")
+                // We can't easily access UI manager here to start visualizer, 
+                // but usually "Connected" means backend is listening.
+                // For local visualizer, user might need to click or we rely on them clicking "Start" if not auto-started.
+                // However, finding `ASTManagers` or dispatching event is better.
+                if (window.ASTManagers && window.ASTManagers.ui && typeof window.ASTManagers.ui.startASRVisualizer === 'function') {
+                    window.ASTManagers.ui.startASRVisualizer().catch(e => console.log("Auto-start visualizer failed/skipped:", e));
+                    if (visualizer) {
+                        visualizer.style.display = 'flex';
+                        setTimeout(() => visualizer.classList.add('active'), 10);
+                    }
+                }
+            }
+
         } else {
             dom.asrStatusDiv.className = 'status disconnected';
             if (text) text.textContent = 'ASR 未初始化';
             console.log('[ASR] 请使用正常模式启动服务器以启用实时语音转写功能');
+
+            // Sync Toggle Button
+            const toggleBtn = document.getElementById('asr-toggle-listening-btn');
+            const visualizer = document.getElementById('asr-mic-visualizer');
+            if (toggleBtn) {
+                const playIcon = toggleBtn.querySelector('.icon-play');
+                const stopIcon = toggleBtn.querySelector('.icon-stop');
+
+                toggleBtn.classList.remove('active');
+                toggleBtn.title = "开始监听";
+                if (playIcon) playIcon.style.display = 'block';
+                if (stopIcon) stopIcon.style.display = 'none';
+
+                if (window.ASTManagers && window.ASTManagers.ui && typeof window.ASTManagers.ui.stopASRVisualizer === 'function') {
+                    window.ASTManagers.ui.stopASRVisualizer();
+                    if (visualizer) {
+                        visualizer.style.display = 'none';
+                        visualizer.classList.remove('active');
+                    }
+                }
+            }
         }
+
     }
 
     // 添加ASR消息

@@ -95,7 +95,8 @@ async function initializeManagers() {
 // ===== 设置WebSocket连接 =====
 async function setupWebSocketConnections() {
     // 连接ASR WebSocket
-    managers.websocket.connectASR();
+    // managers.websocket.connectASR(); // 默认不自动连接，由用户手动点击按钮开启，以保持UI交互一致性（解决AudioContext自动播放策略问题）
+
 
     // 连接LLM WebSocket
     managers.websocket.connectLLM();
