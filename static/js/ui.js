@@ -352,12 +352,7 @@ export class UIManager {
                 });
             }
 
-            // Save Config
-            if (dom.saveResumeConfigBtn) {
-                dom.saveResumeConfigBtn.addEventListener('click', () => {
-                    this.saveResumeConfig();
-                });
-            }
+
 
 
 
@@ -966,6 +961,11 @@ export class UIManager {
         } else {
             this.populateResumeModelSelect(selected);
         }
+
+        // Update Thinking Mode Visibility
+        if (this.managers.config && typeof this.managers.config.updateThinkingModeVisibility === 'function') {
+            this.managers.config.updateThinkingModeVisibility('resume', type);
+        }
     }
 
 
@@ -1017,6 +1017,9 @@ export class UIManager {
 
         const formData = new FormData();
         formData.append('file', file);
+
+        // Auto-save config before upload as requested
+        await this.saveResumeConfig();
 
         // Initial UI update
         this.updateResumeStatus({ state: 'processing', step: 'uploading', message: '正在上传...' });
@@ -1111,13 +1114,16 @@ export class UIManager {
         dom.jobModal.classList.add('active');
 
         // Initialize Model Select
-        const currentType = dom.jobModelTypeSelect ? dom.jobModelTypeSelect.value : 'api';
+        const jobConfig = this.managers.config.configData?.job_config || {};
+        const savedType = jobConfig.model_type || 'api';
+        const savedModel = jobConfig.model_name || '';
+
         if (dom.jobModelTypeSelect) {
-            this.populateModelSelectForJob(currentType);
+            dom.jobModelTypeSelect.value = savedType;
+            this.populateModelSelectForJob(savedType, savedModel);
         }
 
         // Restore Thinking Mode
-        const jobConfig = this.managers.config.configData?.job_config || {};
         if (jobConfig.thinking_mode) {
             this.managers.config.updateThinkingModeUI('job', true);
         } else {
@@ -1125,7 +1131,7 @@ export class UIManager {
         }
 
         if (this.managers.config && typeof this.managers.config.updateThinkingModeVisibility === 'function') {
-            this.managers.config.updateThinkingModeVisibility('job', currentType);
+            this.managers.config.updateThinkingModeVisibility('job', savedType);
         }
 
 
@@ -1221,6 +1227,20 @@ export class UIManager {
 
             if (response.ok) {
                 showToast('开始生成岗位分析...', 'success');
+
+                // Save Job Config
+                if (this.managers.config) {
+                    if (!this.managers.config.configData) this.managers.config.configData = {};
+                    if (!this.managers.config.configData.job_config) this.managers.config.configData.job_config = {};
+
+                    this.managers.config.configData.job_config.model_type = modelType;
+                    this.managers.config.configData.job_config.model_name = modelName;
+                    // thinking_mode is already saved in toggleThinkingMode, but good to be safe/consistent if we wanted
+                    this.managers.config.configData.job_config.thinking_mode = thinkingMode;
+
+                    this.managers.config.saveConfigs();
+                }
+
                 this.pollJobStatus();
             } else {
                 const err = await response.json();
