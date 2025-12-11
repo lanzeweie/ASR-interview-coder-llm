@@ -274,7 +274,8 @@ class SmartAnalysisAgent(BaseLLMAgent):
     @staticmethod
     def validate_response(response: str) -> Tuple[bool, Optional[dict]]:
         try:
-            match = re.search(r'\{\s*"is"\s*:\s*(true|false)\s*\}', response, re.IGNORECASE)
+            # 支持带引号或不带引号的 boolean 值 (e.g. "true", "false", true, false)
+            match = re.search(r'\{\s*"is"\s*:\s*["\']?(true|false)["\']?\s*\}', response, re.IGNORECASE)
             if match:
                 is_true = match.group(1).lower() == 'true'
                 print(f"[智能分析] 判定结果: {is_true}")

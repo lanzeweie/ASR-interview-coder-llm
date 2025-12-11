@@ -1762,7 +1762,7 @@ async def llm_websocket(websocket: WebSocket):
                         role = msg.get('role', 'unknown')
                         content = msg.get('content', '')
                         print(f"\n[消息 {i+1}] 角色: {role}")
-                        print(f"[消息 {i+1}] 内容: {content[:200]}{'...' if len(content) > 200 else ''}")
+                        print(f"[消息 {i+1}] 内容: {content}")
                     print(f"\n{'='*80}\n")
 
                     # 直接使用当前配置的模型
@@ -1871,7 +1871,7 @@ async def llm_websocket(websocket: WebSocket):
                         role = msg.get('role', 'unknown')
                         content = msg.get('content', '')
                         print(f"\n[消息 {i+1}] 角色: {role}")
-                        print(f"[消息 {i+1}] 内容: {content[:200]}{'...' if len(content) > 200 else ''}")
+                        print(f"[消息 {i+1}] 内容: {content}")
                     print(f"\n{'='*80}\n")
 
                     async for chunk in llm_client.chat_stream(current_messages):
