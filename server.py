@@ -217,7 +217,7 @@ def save_config(config):
     configs = config.get("configs", [])
     config["configs"] = [normalize_config_tags(dict(conf)) for conf in configs]
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=4)
+        json.dump(config, f, indent=4, ensure_ascii=False)
 
 def load_ui_state():
     if os.path.exists(UI_STATE_FILE):
@@ -1643,7 +1643,8 @@ def inject_resume_to_messages(messages: list[dict]):
     
     for msg in messages:
         if msg.get("role") == "system":
-            msg["content"] += prompt
+            if "<resume_context>" not in msg["content"]:
+                msg["content"] += prompt
             return
             
     messages.insert(0, {"role": "system", "content": prompt})
@@ -1661,12 +1662,31 @@ async def llm_websocket(websocket: WebSocket):
             base_url=curr_conf.get("base_url"),
             model=curr_conf.get("model")
         )
-        resume_manager.set_llm_client(llm_client)
         job_manager.set_llm_client(llm_client)
+    
+    # Store initial config to detect changes
+    last_config_signature = None
 
     try:
         while True:
             data = await websocket.receive_json()
+
+            # Reload config for every request to ensure freshness
+            current_data = load_config()
+            curr_name = current_data.get("current_config")
+            curr_conf = next((c for c in current_data.get("configs", []) if c["name"] == curr_name), None)
+            
+            # Update LLM Client if config changed
+            if curr_conf:
+                # Create a signature to check if we really need to update LLM client (avoid overhead if possible, though update_config is cheap)
+                # But simple update is fine.
+                llm_client.update_config(
+                    api_key=curr_conf.get("api_key"),
+                    base_url=curr_conf.get("base_url"),
+                    model=curr_conf.get("model")
+                )
+                resume_manager.set_llm_client(llm_client)
+                job_manager.set_llm_client(llm_client)
 
             # 处理智能分析触发消息
             if data.get("type") == "agent_triggered":
@@ -1865,8 +1885,9 @@ async def llm_websocket(websocket: WebSocket):
                         else:
                             current_messages.insert(0, {"role": "system", "content": target_system_prompt})
 
-                    # Ensure Job Analysis Context is present (in case it was overwritten)
+                    # Ensure Job Analysis and Resume Context is present (in case it was overwritten)
                     inject_job_analysis_to_messages(current_messages)
+                    inject_resume_to_messages(current_messages)
 
                     # [调试] 显示实际发送给模型的完整 prompt
                     print(f"\n{'='*80}")
