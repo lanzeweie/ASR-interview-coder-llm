@@ -75,47 +75,39 @@ def sanitize_role_definition(role: Optional[Dict]) -> Optional[Dict]:
     }
 
 
-def get_sub_agent_system(agent_config_path: str = "data/agent.json", use_intent: bool = False, use_resume: bool = False) -> str:
+def get_sub_agent_system(agent_config_path: str = "data/agent.json", role_id: Optional[str] = None) -> str:
     """
-    根据开关状态获取对应的 sub-agent system prompt
-    
-    Args:
-        agent_config_path: agent配置文件路径
-        use_intent: 是否启用意图识别
-        use_resume: 是否启用简历个性化
-    
-    Returns:
-        对应场景的system prompt字符串
+    获取 system prompt
+    1. 默认使用 "direct_chat" (专业求职助手)
+    2. 如果指定了 role_id 且在 think_tank_roles 中找到，则使用该角色的 prompt
     """
+    default_system = "作为专业求职助手，请简洁、直接地响应用户指令，无需过多寒暄。"
     try:
         with open(agent_config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        sub_agents = data.get('sub_agents', {})
-        
-        # 根据功能组合选择对应的 sub-agent
-        if use_intent and use_resume:
-            agent_key = 'full_featured'
-        elif use_intent:
-            agent_key = 'with_intent'
-        elif use_resume:
-            agent_key = 'with_resume'
-        else:
-            agent_key = 'direct_chat'
-        
-        agent_config = sub_agents.get(agent_key, {})
-        system_prompt = agent_config.get('system', '')
-        
-        if system_prompt:
-            print(f"[Sub-Agent] 加载系统提示词: {agent_config.get('name', agent_key)}")
-        else:
-            print(f"[Sub-Agent] 警告: 未找到 {agent_key} 的系统提示词，使用默认")
-            system_prompt = "你是一名资深 Python 技术专家，正在参加高级工程师面试。"
-        
-        return system_prompt
+        # 1. 获取基础 Prompt (sub_agents.direct_chat.system)
+        base_system = data.get('sub_agents', {}).get('direct_chat', {}).get('system', '')
+        if not base_system:
+            base_system = default_system
+
+        # 2. 如果没有指定角色，直接返回基础 Prompt
+        if not role_id:
+            return base_system
+
+        # 3. 查找角色 Prompt
+        roles = data.get('think_tank_roles', [])
+        for role in roles:
+            if role.get('id') == role_id:
+                # 优先使用角色定义的 prompt，如果为空则回退到基础 prompt
+                return role.get('prompt') or base_system
+                
+        # 4. 角色未找到，返回基础 Prompt
+        return base_system
+
     except Exception as exc:
         print(f"[Sub-Agent] 加载配置失败: {exc}")
-        return "你是一名资深 Python 技术专家，正在参加高级工程师面试。"
+        return default_system
 
 
 def format_messages_compact(messages: List[Dict]) -> str:
@@ -548,21 +540,19 @@ class ThinkTankAgent:
             print(f"[智囊团] 加载 {path} 失败: {exc}")
             return {}
 
-    def get_system_prompt(self, use_intent: bool = False, use_resume: bool = False) -> str:
+    def get_system_prompt(self, role_id: Optional[str] = None) -> str:
         """
         获取当前场景对应的system prompt
         
         Args:
-            use_intent: 是否启用意图识别
-            use_resume: 是否启用简历个性化
+            role_id: 角色ID (可选)
         
         Returns:
             对应场景的system prompt
         """
         return get_sub_agent_system(
             agent_config_path=self.role_config_path,
-            use_intent=use_intent,
-            use_resume=use_resume
+            role_id=role_id
         )
 
     def prepare_distribution(
@@ -581,7 +571,7 @@ class ThinkTankAgent:
                 'mode': 'default',
                 'targets': [],
                 'intent': intent_result,
-                'system_prompt': self.get_system_prompt(use_intent, use_resume)
+                'system_prompt': self.get_system_prompt()
             }
 
         role_data = self._safe_load_json(self.role_config_path)
@@ -615,8 +605,11 @@ class ThinkTankAgent:
             if matching_configs:
                 role_targets[role_id] = matching_configs[0]
 
+        # 确定目标角色ID (如果有多个，取第一个)
+        target_role_id = next(iter(role_targets.keys())) if role_targets else None
+
         # 获取当前场景对应的system prompt
-        system_prompt = self.get_system_prompt(use_intent, use_resume)
+        system_prompt = self.get_system_prompt(role_id=target_role_id)
 
         if role_targets:
             print(f"[智囊团] 匹配到 {len(role_targets)} 个角色目标")
@@ -819,7 +812,7 @@ class AgentManager:
                 'mode': 'skipped',
                 'targets': [],
                 'intent': intent_result,
-                'system_prompt': self.think_tank_agent.get_system_prompt(use_intent, use_resume)
+                'system_prompt': self.think_tank_agent.get_system_prompt()
             }
 
         return {

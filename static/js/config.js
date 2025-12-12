@@ -1279,16 +1279,63 @@ export class ConfigManager {
     }
 
     // 获取当前配置的显示名称（根据智囊团状态决定）
-    getCurrentDisplayName() {
-        const config = this.configs.find(c => c.name === this.currentConfigName);
-        const baseName = config ? config.name : this.currentConfigName;
-        const isMultiActive = dom.multiLLMToggle?.classList.contains('active');
+    // 获取当前配置显示信息（标题和副标题）
+    getCurrentDisplayInfo(isMultiOverride = null) {
+        const isMultiActive = isMultiOverride !== null ? isMultiOverride : dom.multiLLMToggle?.classList.contains('active');
 
         if (isMultiActive) {
-            return THINK_TANK_DISPLAY_NAME;
+            return {
+                title: THINK_TANK_DISPLAY_NAME,
+                subtitle: ''
+            };
         }
 
-        return baseName;
+        const config = this.configs.find(c => c.name === this.currentConfigName);
+        if (!config) {
+            return {
+                title: this.currentConfigName || '未选择模型',
+                subtitle: ''
+            };
+        }
+
+        // Check for identity tag
+        if (config.tags && config.tags.length > 0) {
+            const tag = this.normalizeIdentityTag(config.tags[0]);
+            if (tag) {
+                let displayTitle = tag;
+                const identity = this.identities.find(i => i.id === tag);
+
+                if (identity && identity.name) {
+                    displayTitle = identity.name;
+                }
+
+                // Capitalize or format tag if it's raw
+                if (displayTitle === tag) {
+                    // Simple capitalization for niceness if it's just a raw tag
+                    if (displayTitle.includes('_')) {
+                        displayTitle = displayTitle.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    } else {
+                        displayTitle = displayTitle.charAt(0).toUpperCase() + displayTitle.slice(1);
+                    }
+                }
+
+                return {
+                    title: displayTitle,
+                    subtitle: config.name
+                };
+            }
+        }
+
+        return {
+            title: config.name,
+            subtitle: ''
+        };
+    }
+
+    // 获取当前配置的显示名称（已废弃但保留用于兼容性，返回 Title）
+    getCurrentDisplayName() {
+        const info = this.getCurrentDisplayInfo();
+        return info.title;
     }
 
     getConfigDisplayName(configName, preferIdentity = false) {
@@ -1312,11 +1359,13 @@ export class ConfigManager {
 
     // 更新全局显示名称（根据智囊团状态动态决定）
     updateCurrentDisplayName() {
-        const displayName = this.getCurrentDisplayName();
-        window.currentDisplayName = displayName;
+        // 更新 window.currentDisplayName 为简单的标题名称 (for backward compatibility)
+        const info = this.getCurrentDisplayInfo();
+        window.currentDisplayName = info.title;
+        window.currentDisplaySubtitle = info.subtitle; // New global
 
         // 返回显示名称，供调用者使用
-        return displayName;
+        return info.title;
     }
 
     // 根据智囊团开关状态更新显示名称
@@ -1330,23 +1379,30 @@ export class ConfigManager {
             }
         }
 
-        const config = this.configs.find(c => c.name === this.currentConfigName);
-        let displayName = config ? config.name : this.currentConfigName || '';
-
-        if (isMultiToggleActive) {
-            displayName = THINK_TANK_DISPLAY_NAME;
-        }
-
-        window.currentDisplayName = displayName;
+        const info = this.getCurrentDisplayInfo(isMultiToggleActive);
+        window.currentDisplayName = info.title;
+        window.currentDisplaySubtitle = info.subtitle;
+        window.currentConfigName = this.currentConfigName; // Sync global config name
 
         // 同时更新 UI 上的显示
         const displayElement = document.querySelector('.model-name-display');
         if (displayElement) {
-            displayElement.textContent = displayName;
+            displayElement.textContent = info.title;
+        }
+
+        const subtitleElement = document.querySelector('.model-subtitle');
+        if (subtitleElement) {
+            if (info.subtitle) {
+                subtitleElement.textContent = info.subtitle;
+                subtitleElement.style.display = 'block';
+            } else {
+                subtitleElement.textContent = '';
+                subtitleElement.style.display = 'none';
+            }
         }
 
         // 返回显示名称
-        return displayName;
+        return info.title;
     }
 
     // ===== 意图识别配置管理 =====

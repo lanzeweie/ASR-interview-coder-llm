@@ -40,3 +40,23 @@
    通过@import语句引入所有子模块CSS文件
    保持了原有的样式功能完整性
 */
+
+/* Model Display Info */
+.model-info-container {
+   display: flex;
+   flex-direction: column;
+   justify-content: center;
+   line-height: 1.2;
+}
+
+.model-title {
+   font-weight: 600;
+   font-size: 14px;
+   color: var(--text-primary);
+}
+
+.model-subtitle {
+   font-size: 11px;
+   color: var(--text-tertiary);
+   font-weight: 400;
+}

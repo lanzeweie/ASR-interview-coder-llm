@@ -190,15 +190,24 @@ export class ChatManager {
                 content = match[2];
             }
 
-            // 使用当前模型配置名称显示
-            // 智囊团时使用modelName，单模型时使用当前配置
-            const speakerName = modelName || 'AI 助手';
+            // Resolve proper names
+            // 1. Determine Model Name key
+            const modelKey = modelName || window.currentConfigName;
+
+            // 2. Resolve Identity Name
+            const identityName = window.resolveConfigDisplayName ? window.resolveConfigDisplayName(modelKey, true) : (modelKey || 'AI 助手');
 
             const header = document.createElement('div');
             header.className = 'message-header';
-            header.innerHTML = modelName
-                ? `<span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span>`
-                : `<span class="speaker-name">${speakerName}</span>`;
+
+            let headerHTML = `<span class="speaker-name">${identityName}</span>`;
+
+            // Display model name as tag if it exists and is different from identity
+            if (modelKey && modelKey !== identityName) {
+                headerHTML += `<span class="model-tag">${modelKey}</span>`;
+            }
+
+            header.innerHTML = headerHTML;
 
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content llm-markdown';
@@ -304,12 +313,18 @@ export class ChatManager {
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message ai';
 
-        const speakerName = modelName || 'AI 助手';
+        const modelKey = modelName || window.currentConfigName;
+        const identityName = window.resolveConfigDisplayName ? window.resolveConfigDisplayName(modelKey, true) : (modelKey || 'AI 助手');
+
         const header = document.createElement('div');
         header.className = 'message-header';
-        header.innerHTML = modelName
-            ? `<span class="speaker-name">${speakerName}</span><span class="model-tag">${modelName}</span>`
-            : `<span class="speaker-name">${speakerName}</span>`;
+
+        let headerHTML = `<span class="speaker-name">${identityName}</span>`;
+
+        if (modelKey && modelKey !== identityName) {
+            headerHTML += `<span class="model-tag">${modelKey}</span>`;
+        }
+        header.innerHTML = headerHTML;
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content llm-markdown';

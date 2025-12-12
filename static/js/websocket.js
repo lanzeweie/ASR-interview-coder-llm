@@ -401,11 +401,14 @@ export class LLMStreamManager {
             msgDiv = document.createElement('div');
             msgDiv.className = 'message ai';
 
-            // Header with Model Tag - 使用当前模型配置名称
+            // Header with Model Tag - Only show tag if different from speaker name
             const safeName = speakerName || 'AI 助手';
-            const headerHtml = modelName
-                ? `<div class="message-header"><span class="speaker-name">${safeName}</span><span class="model-tag">${modelName}</span></div>`
-                : `<div class="message-header"><span class="speaker-name">${safeName}</span></div>`;
+            let headerHtml = `<div class="message-header"><span class="speaker-name">${safeName}</span>`;
+
+            if (modelName && modelName !== safeName) {
+                headerHtml += `<span class="model-tag">${modelName}</span>`;
+            }
+            headerHtml += '</div>';
 
             msgDiv.innerHTML = `
                 ${headerHtml}
@@ -470,10 +473,12 @@ export class LLMStreamManager {
             const preDiv = document.createElement('div');
             preDiv.className = 'message ai';
 
-            const speakerName = resolveName(currentConfigName || '', false);
+            // Always prefer identity if available, even in single mode
+            const speakerName = resolveName(currentConfigName || '', true);
             preDiv.innerHTML = `
                 <div class="message-header">
                     <span class="speaker-name">${speakerName}</span>
+                    ${(currentConfigName && currentConfigName !== speakerName) ? `<span class="model-tag">${currentConfigName}</span>` : ''}
                 </div>
                 <div class="message-content llm-markdown thinking" data-is-pre-response="true">
                     正在输入<span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>

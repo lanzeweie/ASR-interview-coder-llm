@@ -1795,11 +1795,9 @@ async def llm_websocket(websocket: WebSocket):
             agent_config = config_data.get("agent_config", {})
             intent_enabled = agent_config.get("intent_recognition_enabled", False)
             
-            from intelligent_agent import get_sub_agent_system
+            from intelligent_agent import get_sub_agent_system, normalize_identity_identifier
             system_prompt = get_sub_agent_system(
-                agent_config_path=AGENT_ROLE_FILE,
-                use_intent=intent_enabled,
-                use_resume=resume_personalization_enabled
+                agent_config_path=AGENT_ROLE_FILE
             )
             
             # Add system prompt if not present or update existing one
@@ -1835,22 +1833,37 @@ async def llm_websocket(websocket: WebSocket):
                          await websocket.send_json({"type": "error", "content": "LLM 客户端未初始化。请检查设置。"})
                          continue
 
-                    # 修复：处理当前配置的 System Prompt
+                    # 修复：处理当前配置的 System Prompt 和 身份标签
                     current_messages = [m.copy() for m in messages]
-                    config_prompt = curr_conf.get("system_prompt", "") if curr_conf else ""
-
-                    # 检查是否选择了身份标签 - 如果选择了，禁用 system prompt
+                    config_prompt = (curr_conf.get("system_prompt", "") if curr_conf else "").strip()
                     tags = curr_conf.get("tags", []) if curr_conf else []
-                    has_tags = len(tags) > 0
+                    has_tags = bool(tags)
+                    
+                    target_system_prompt = None
+                    
+                    if tags:
+                        # 1. 优先使用身份标签 (即使是无效标签，也优先于 config_prompt，回退到默认)
+                        # 这里简单取第一个标签作为角色ID
+                        first_tag = tags[0]
+                        normalized_tag = normalize_identity_identifier(first_tag)
+                        target_system_prompt = get_sub_agent_system(
+                             agent_config_path=AGENT_ROLE_FILE,
+                             role_id=normalized_tag
+                        )
+                        print(f"[AgentAPI] 检测到身份标签: {tags} -> 使用角色: {normalized_tag}")
+                    elif config_prompt:
+                         # 2. 其次使用配置定义的 system prompt
+                         target_system_prompt = config_prompt
+                         print(f"[AgentAPI] 使用配置定义的 System Prompt")
 
-                    # 应用 System Prompt
-                    if config_prompt and not has_tags:
-                        # 替换或插入 system prompt
+                    # 应用目标 System Prompt (如果有)
+                    # 如果 target_system_prompt 为 None，则保持 messages 中的默认 Prompt (已在 loop 开始时插入)
+                    if target_system_prompt:
                         sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
                         if sys_idx != -1:
-                            current_messages[sys_idx]["content"] = config_prompt
+                            current_messages[sys_idx]["content"] = target_system_prompt
                         else:
-                            current_messages.insert(0, {"role": "system", "content": config_prompt})
+                            current_messages.insert(0, {"role": "system", "content": target_system_prompt})
 
                     # Ensure Job Analysis Context is present (in case it was overwritten)
                     inject_job_analysis_to_messages(current_messages)

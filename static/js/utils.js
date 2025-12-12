@@ -309,24 +309,45 @@ export function handleTextSelection(e, onSend) {
 }
 
 // ===== 模型显示管理 =====
+// ===== 模型显示管理 =====
 export function updateModelDisplay(isMultiMode = false, currentConfigName = '') {
     if (!dom.currentModelDisplay) return;
 
     const modelNameDisplay = dom.currentModelDisplay.querySelector('.model-name-display');
+    const modelSubtitleDisplay = dom.currentModelDisplay.querySelector('.model-subtitle');
     const modelIndicator = dom.currentModelDisplay.querySelector('.model-indicator');
 
     if (isMultiMode) {
         // 智囊团模式下统一显示“智囊团”
-        const displayName = '智囊团';
-        if (modelNameDisplay) modelNameDisplay.textContent = displayName;
+        if (modelNameDisplay) modelNameDisplay.textContent = '智囊团';
+        if (modelSubtitleDisplay) {
+            modelSubtitleDisplay.textContent = '';
+            modelSubtitleDisplay.style.display = 'none';
+        }
+
         if (modelIndicator) {
             modelIndicator.style.background = 'linear-gradient(135deg, #3b82f6, #60a5fa)';
             modelIndicator.style.boxShadow = '0 0 10px rgba(59, 130, 246, 0.5)';
         }
     } else {
         // 显示当前选择的模型 - 使用当前配置的显示名称
+        // window.currentDisplayName is now the Title (e.g. Identity Name)
+        // window.currentDisplaySubtitle is the Subtitle (e.g. Config Name)
         const displayName = window.currentDisplayName || currentConfigName || '';
+        const displaySubtitle = window.currentDisplaySubtitle || '';
+
         if (modelNameDisplay) modelNameDisplay.textContent = displayName;
+
+        if (modelSubtitleDisplay) {
+            if (displaySubtitle && displaySubtitle !== displayName) {
+                modelSubtitleDisplay.textContent = displaySubtitle;
+                modelSubtitleDisplay.style.display = 'block';
+            } else {
+                modelSubtitleDisplay.textContent = '';
+                modelSubtitleDisplay.style.display = 'none';
+            }
+        }
+
         if (modelIndicator) {
             modelIndicator.style.background = 'var(--accent-primary)';
             modelIndicator.style.boxShadow = '0 0 10px rgba(79, 70, 229, 0.5)';
