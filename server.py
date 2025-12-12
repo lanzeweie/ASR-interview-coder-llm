@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import re
+import logging
 import threading
 import time
 import wave
@@ -13,13 +14,40 @@ from fastapi import (Body, FastAPI, File, HTTPException, UploadFile, WebSocket,
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-# Conditional imports for optional features
+# --- Logger Setup ---
+try:
+    from logger_config import setup_logger, set_global_log_level
+    log_date = time.strftime("%Y%m%d")
+    logger = setup_logger(__name__, log_file=f"logs/{log_date}_server.log")
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    def set_global_log_level(level): pass
+
+parser = argparse.ArgumentParser(description='基于AST与多Agent辅助的程序员面试工具')
+parser.add_argument('--no', action='store_true', help='不启动本地模型相关功能（跳过ASR、声纹和本地代理模型）')
+parser.add_argument('--host', type=str, default='0.0.0.0', help='绑定主机地址（默认：0.0.0.0）')
+parser.add_argument('--port', type=int, default=8000, help='绑定端口（默认：8000）')
+parser.add_argument('--debug', action='store_true', help='开启调试模式（显示更多详细日志）')
+
+args = parser.parse_args()
+
+try:
+    level = logging.DEBUG if args.debug else logging.INFO
+    set_global_log_level(level)
+    logger.info(f"Log level set to: {'DEBUG' if args.debug else 'INFO'}")
+except Exception as e:
+    logger.error(f"Failed to set log level: {e}")
+
+
+
 try:
     from main import RealTimeASR_SV
     ASR_AVAILABLE = True
 except ImportError:
     ASR_AVAILABLE = False
-    print("警告: ASR 模块不可用。使用 --no-asr 取消此警告。")
+    RealTimeASR_SV = None
 
 from chat_manager import ChatManager
 from llm_client import LLMClient
@@ -28,27 +56,21 @@ from llm_client import LLMClient
 from resume_manager import ResumeManager
 from job_manager import JobManager
 
-# Intelligent Agent imports
 try:
-    from intelligent_agent import agent_manager, format_intent_analysis
+    from intelligent_agent import agent_manager
     from trigger_manager import trigger_manager
     AGENT_AVAILABLE = True
 except ImportError:
     AGENT_AVAILABLE = False
-    print("警告: 智能 Agent 模块不可用。")
+    agent_manager = None
+    # logger.warning("智能 Agent 模块不可用...")
 
-# Parse command line arguments
-parser = argparse.ArgumentParser(description='AST Real-time ASR and LLM Chat Server')
-parser.add_argument('--no', action='store_true', help='Skip ALL model initialization (disable ASR, voiceprint, and local agent models)')
-parser.add_argument('--no-asr', '--no-voice', action='store_true', help='[DEPRECATED] Use --no instead. Skip ASR and voiceprint model initialization')
-parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to bind (default: 0.0.0.0)')
-parser.add_argument('--port', type=int, default=8000, help='Port to bind (default: 8000)')
-args = parser.parse_args()
+# Log initial warnings for ASR and Agent if they were not available
+if not ASR_AVAILABLE:
+    logger.warning("警告: ASR 模块不可用，必须使用 --no 参数启动，或安装 funasr 和 modelscope")
+if not AGENT_AVAILABLE:
+    logger.warning("警告: 智能 Agent 模块不可用。")
 
-# Handle deprecated argument
-if args.no_asr:
-    print("[⚠️  警告] --no-asr 参数已弃用，请使用 --no 替代")
-    args.no = True
 
 app = FastAPI()
 
@@ -158,7 +180,7 @@ def load_think_tank_roles() -> list[dict]:
         with open(AGENT_ROLE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as exc:
-        print(f"[智囊团] 加载身份失败: {exc}")
+        logger.error(f"[智囊团] 加载身份失败: {exc}")
         return []
 
     roles: list[dict] = []
@@ -225,7 +247,7 @@ def load_ui_state():
             with open(UI_STATE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading UI state: {e}")
+            logger.error(f"Error loading UI state: {e}")
     return {}
 
 def save_ui_state(state):
@@ -234,7 +256,7 @@ def save_ui_state(state):
         with open(UI_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
     except Exception as e:
-        print(f"Error saving UI state: {e}")
+        logger.error(f"Error saving UI state: {e}")
 
 # Initialize LLM Client
 config_data = load_config()
@@ -275,7 +297,7 @@ def update_job_context_cache():
         except:
             pass
     CACHED_JOB_CONTEXT = content
-    print(f"[JobManager] Context cache updated. Size: {len(content) if content else 0}")
+    logger.info(f"[JobManager] Context cache updated. Size: {len(content) if content else 0}")
 
 # Load initial job context
 update_job_context_cache()
@@ -302,7 +324,7 @@ class ConnectionManager:
             try:
                 await connection.send_json(message)
             except Exception as e:
-                print(f"Error sending message: {e}")
+                logger.error(f"Error sending message: {e}")
 
 manager = ConnectionManager()
 
@@ -311,7 +333,7 @@ asr_system = None
 
 def asr_callback(message):
     """Callback function to be called by ASR system when a message is ready"""
-    print(f"Callback received: {message}")
+    logger.debug(f"Callback received: {message}")
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -375,22 +397,22 @@ async def agent_analysis_callback(result, messages, speaker_name):
         })
 
         if is_needed:
-            print(f"[智能分析] ✅ 检测到需要AI帮助分析，主人公: {speaker_name}")
+            logger.info(f"[智能分析] ✅ 检测到需要AI帮助分析，主人公: {speaker_name}")
 
             try:
                 # 获取当前聊天 ID
                 current_chat_id = chat_manager.get_current_chat_id()
-                print(f"[智能分析] 当前聊天ID: {current_chat_id}")
+                logger.info(f"[智能分析] 当前聊天ID: {current_chat_id}")
 
                 # 如果没有当前聊天，创建一个
                 if not current_chat_id:
                     new_chat = chat_manager.create_chat(f"智能分析 - {speaker_name}")
                     current_chat_id = new_chat['id']
-                    print(f"[智能分析] ✅ 创建新聊天: {current_chat_id}")
+                    logger.info(f"[智能分析] ✅ 创建新聊天: {current_chat_id}")
 
                 # 准备消息上下文（最近的 10 条消息）
                 recent_messages = messages[-10:] if len(messages) > 10 else messages
-                print(f"[智能分析] 准备发送 {len(recent_messages)} 条消息给AI")
+                logger.info(f"[智能分析] 准备发送 {len(recent_messages)} 条消息给AI")
 
                 # 获取分发配置
                 distribution_result = result.get('distribution', {})
@@ -415,7 +437,7 @@ async def agent_analysis_callback(result, messages, speaker_name):
                         {"role": "system", "content": system_prompt + " 请根据意图识别分析结果直接给出建议。"},
                         {"role": "user", "content": display_content}
                     ]
-                    print("[智能分析] 使用意图识别结果作为唯一上下文发送给下一阶段AI")
+                    logger.info("[智能分析] 使用意图识别结果作为唯一上下文发送给下一阶段AI")
                 else:
                     formatted_messages = [
                         {"role": "system", "content": f"你是AI助手，帮助{speaker_name}分析以下对话。{speaker_name}是主人公。"}
@@ -427,26 +449,26 @@ async def agent_analysis_callback(result, messages, speaker_name):
                             "role": role,
                             "content": content
                         })
-                    print(f"[智能分析] 使用完整对话上下文发送，共 {len(formatted_messages)} 条消息")
+                    logger.info(f"[智能分析] 使用完整对话上下文发送，共 {len(formatted_messages)} 条消息")
 
-                print(f"[智能分析] 消息内容预览:")
+                logger.debug(f"[智能分析] 消息内容预览:")
                 for i, msg in enumerate(formatted_messages):
                     preview = msg['content'][:50]
                     suffix = '...' if len(msg['content']) > 50 else ''
-                    print(f"  [{i}] {msg['role']}: {preview}{suffix}")
+                    logger.debug(f"  [{i}] {msg['role']}: {preview}{suffix}")
 
                 # 根据分发模式决定处理方式
                 is_multi_llm = (distribution_mode == 'think_tank')
 
                 # 打印发送前的调试信息
-                print(f"[智能分析] 📤 准备发送消息到AI:")
-                print(f"  - 分发模式: {'智囊团' if is_multi_llm else '单模型'}")
-                print(f"  - 聊天ID: {current_chat_id}")
-                print(f"  - 消息数量: {len(formatted_messages)}")
+                logger.info(f"[智能分析] 📤 准备发送消息到AI:")
+                logger.info(f"  - 分发模式: {'智囊团' if is_multi_llm else '单模型'}")
+                logger.info(f"  - 聊天ID: {current_chat_id}")
+                logger.info(f"  - 消息数量: {len(formatted_messages)}")
 
                 # 如果有智囊团目标，使用智囊团模式
                 if distribution_mode == 'halt':
-                    print(f"[智能分析] 🛑 分析流程已终止 (原因: {distribution_result.get('reason', 'Unknown')})")
+                    logger.info(f"[智能分析] 🛑 分析流程已终止 (原因: {distribution_result.get('reason', 'Unknown')})")
                 elif is_multi_llm and targets:
                     broadcast_message = {
                         "type": "agent_triggered",
@@ -458,9 +480,9 @@ async def agent_analysis_callback(result, messages, speaker_name):
                         "intent_recognition": intent_result is not None,
                         "intent_data": intent_result
                     }
-                    print(f"[智能分析] 📡 发送智囊团触发消息...")
+                    logger.info(f"[智能分析] 📡 发送智囊团触发消息...")
                     await llm_manager.broadcast(broadcast_message)
-                    print(f"[智能分析] ✅ 🤖 智囊团已触发，分发到{len(targets)}个目标")
+                    logger.info(f"[智能分析] ✅ 🤖 智囊团已触发，分发到{len(targets)}个目标")
                 else:
                     # 使用单模型模式
                     broadcast_message = {
@@ -473,18 +495,18 @@ async def agent_analysis_callback(result, messages, speaker_name):
                         "intent_recognition": intent_result is not None,
                         "intent_data": intent_result
                     }
-                    print(f"[智能分析] 📡 发送单模型触发消息...")
+                    logger.info(f"[智能分析] 📡 发送单模型触发消息...")
                     await llm_manager.broadcast(broadcast_message)
-                    print(f"[智能分析] ✅ 🤖 单模型模式已触发，等待AI回复...")
+                    logger.info(f"[智能分析] ✅ 🤖 单模型模式已触发，等待AI回复...")
             except Exception as broadcast_error:
-                print(f"[智能分析] ❌ 发送消息时出错: {broadcast_error}")
+                logger.error(f"[智能分析] ❌ 发送消息时出错: {broadcast_error}")
                 import traceback
                 traceback.print_exc()
         else:
-            print(f"[智能分析] ❌ 检测到无需AI帮助，不发送消息")
+            logger.info(f"[智能分析] ❌ 检测到无需AI帮助，不发送消息")
 
     except Exception as e:
-        print(f"[智能分析] ❌ 回调处理失败: {e}")
+        logger.error(f"[智能分析] ❌ 回调处理失败: {e}")
         import traceback
         traceback.print_exc()
 
@@ -496,27 +518,27 @@ class LLMConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        print(f"[LLM连接] 新连接加入，当前活跃连接数: {len(self.active_connections)}")
+        logger.info(f"[LLM连接] 新连接加入，当前活跃连接数: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            print(f"[LLM连接] 连接断开，当前活跃连接数: {len(self.active_connections)}")
+            logger.info(f"[LLM连接] 连接断开，当前活跃连接数: {len(self.active_connections)}")
         else:
-            print(f"[LLM连接] 尝试断开不存在的连接")
+            logger.warning(f"[LLM连接] 尝试断开不存在的连接")
 
     async def broadcast(self, message: dict):
-        print(f"[LLM广播] 开始广播到 {len(self.active_connections)} 个连接")
-        print(f"[LLM广播] 消息类型: {message.get('type', 'unknown')}")
-        print(f"[LLM广播] 消息内容: {str(message)[:100]}{'...' if len(str(message)) > 100 else ''}")
+        logger.info(f"[LLM广播] 开始广播到 {len(self.active_connections)} 个连接")
+        logger.debug(f"[LLM广播] 消息类型: {message.get('type', 'unknown')}")
+        logger.debug(f"[LLM广播] 消息内容: {str(message)[:100]}{'...' if len(str(message)) > 100 else ''}")
 
         disconnected = []
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
-                print(f"[LLM广播] ✅ 成功发送到连接")
+                logger.debug(f"[LLM广播] ✅ 成功发送到连接")
             except Exception as e:
-                print(f"[LLM广播] ❌ 广播失败: {e}")
+                logger.error(f"[LLM广播] ❌ 广播失败: {e}")
                 disconnected.append(connection)
 
         # 移除断开的连接
@@ -524,7 +546,7 @@ class LLMConnectionManager:
             if conn in self.active_connections:
                 self.active_connections.remove(conn)
 
-        print(f"[LLM广播] 广播完成，剩余 {len(self.active_connections)} 个活跃连接")
+        logger.info(f"[LLM广播] 广播完成，剩余 {len(self.active_connections)} 个活跃连接")
 
 llm_manager = LLMConnectionManager()
 
@@ -573,7 +595,7 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
                 else:
                     current_messages.insert(0, {"role": "system", "content": tag_prompt})
                 identity_applied = True
-                print(f"[智囊团] 应用身份标签 Prompt: {active_role['name']} → 模型 {name}")
+                logger.info(f"[智囊团] 应用身份标签 Prompt: {active_role['name']} → 模型 {name}")
             elif config_prompt:
                 sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
                 if sys_idx != -1:
@@ -582,36 +604,36 @@ async def handle_multi_llm_request(websocket: WebSocket, messages: list, chat_id
                     current_messages.insert(0, {"role": "system", "content": config_prompt})
             elif normalized_tags:
                 if disabled_candidates:
-                    print(f"[智囊团] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
+                    logger.info(f"[智囊团] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
                 else:
-                    print(f"[智囊团] 未找到可用身份 Prompt: {normalized_tags}")
+                    logger.info(f"[智囊团] 未找到可用身份 Prompt: {normalized_tags}")
 
             # Inject Job Analysis Context
             inject_job_analysis_to_messages(current_messages)
 
             # [调试] 显示实际发送给模型的完整 prompt
-            print(f"\n{'='*80}")
-            print(f"[调试] [智囊团] 正在发送请求到模型: {conf.get('model', 'Unknown')} (Stream=True)")
-            print(f"{'='*80}")
-            print(f"[调试] [智囊团] 模型名称: {name}")
-            print(f"[调试] [智囊团] 使用 System Prompt: {config_prompt if (config_prompt and not identity_applied) else '否'}")
+            logger.debug(f"\n{'='*80}")
+            logger.debug(f"[调试] [智囊团] 正在发送请求到模型: {conf.get('model', 'Unknown')} (Stream=True)")
+            logger.debug(f"{'='*80}")
+            logger.debug(f"[调试] [智囊团] 模型名称: {name}")
+            logger.debug(f"[调试] [智囊团] 使用 System Prompt: {config_prompt if (config_prompt and not identity_applied) else '否'}")
             if normalized_tags:
                 if identity_applied and active_role:
-                    print(f"[调试] [智囊团] 身份标签: {normalized_tags} → 激活: {active_role['name']} ({active_tag})")
+                    logger.debug(f"[调试] [智囊团] 身份标签: {normalized_tags} → 激活: {active_role['name']} ({active_tag})")
                 elif disabled_candidates:
-                    print(f"[调试] [智囊团] 身份标签: {normalized_tags} (停用: {', '.join(disabled_candidates)})")
+                    logger.debug(f"[调试] [智囊团] 身份标签: {normalized_tags} (停用: {', '.join(disabled_candidates)})")
                 else:
-                    print(f"[调试] [智囊团] 身份标签: {normalized_tags} (未找到可用身份)")
-            print(f"[调试] [智囊团] 消息总数: {len(current_messages)}")
-            print(f"{'-'*80}")
-            print("[调试] [智囊团] 完整 Prompt 内容:")
-            print(f"{'-'*80}")
+                    logger.debug(f"[调试] [智囊团] 身份标签: {normalized_tags} (未找到可用身份)")
+            logger.debug(f"[调试] [智囊团] 消息总数: {len(current_messages)}")
+            logger.debug(f"{'-'*80}")
+            logger.debug("[调试] [智囊团] 完整 Prompt 内容:")
+            logger.debug(f"{'-'*80}")
             for i, msg in enumerate(current_messages):
                 role = msg.get('role', 'unknown')
                 content = msg.get('content', '')
-                print(f"\n[消息 {i+1}] 角色: {role}")
-                print(f"[消息 {i+1}] 内容: {content[:200]}{'...' if len(content) > 200 else ''}")
-            print(f"\n{'='*80}\n")
+                logger.debug(f"\n[消息 {i+1}] 角色: {role}")
+                logger.debug(f"[消息 {i+1}] 内容: {content[:200]}{'...' if len(content) > 200 else ''}")
+            logger.debug(f"\n{'='*80}\n")
 
             full_resp = ""
             async for chunk in client.chat_stream(current_messages):
@@ -649,7 +671,7 @@ async def startup_event():
 
     # Initialize ASR system only if not skipped
     if not args.no and ASR_AVAILABLE:
-        print("[初始化] 启动 ASR 系统...")
+        logger.info("[初始化] 启动 ASR 系统...")
         asr_system_initialized = False
 
         def thread_safe_callback(message):
@@ -662,7 +684,7 @@ async def startup_event():
                 try:
                     trigger_manager.add_message(message)
                 except Exception as e:
-                    print(f"[触发机制] 处理消息失败: {e}")
+                    logger.error(f"[触发机制] 处理消息失败: {e}")
 
         try:
             asr_system = RealTimeASR_SV(on_message_callback=thread_safe_callback)
@@ -670,15 +692,15 @@ async def startup_event():
             thread = threading.Thread(target=asr_system.run, daemon=True)
             thread.start()
             asr_system_initialized = True
-            print("[成功] ASR 系统已在后台线程启动")
+            logger.info("[成功] ASR 系统已在后台线程启动")
         except Exception as e:
-            print(f"[错误] ASR 系统初始化失败: {e}")
-            print("[提示] 使用 --no 参数跳过所有模型初始化")
+            logger.error(f"[错误] ASR 系统初始化失败: {e}")
+            logger.warning("[提示] 使用 --no 参数跳过所有模型初始化")
     else:
         if args.no:
-            print("[配置] 已跳过所有模型初始化 (--no)")
+            logger.info("[配置] 已跳过所有模型初始化 (--no)")
         else:
-            print("[配置] ASR 系统不可用")
+            logger.info("[配置] ASR 系统不可用")
 
     # Initialize Intelligent Agent
     if AGENT_AVAILABLE and not args.no:
@@ -694,13 +716,13 @@ async def startup_event():
 
                 if model_type == 'local':
                     # 显式指定为本地模型
-                    print(f"[配置] 使用本地模型: {agent_model_name}")
+                    logger.info(f"[配置] 使用本地模型: {agent_model_name}")
                     model_config = {
                         'model_type': 'local',
                         'model': agent_model_name
                     }
                     agent_manager.load_agent(agent_config, model_config)
-                    print(f"[成功] 智能 Agent 已加载（本地模型）: {agent_model_name}")
+                    logger.info(f"[成功] 智能 Agent 已加载（本地模型）: {agent_model_name}")
                 else:
                     # 未显式指定或指定为API，先尝试从configs中查找
                     model_config = next(
@@ -712,53 +734,53 @@ async def startup_event():
                         # 在API配置中找到了，使用API模式
                         model_config['model_type'] = 'api'
                         agent_manager.load_agent(agent_config, model_config)
-                        print(f"[成功] 智能 Agent 已加载（API模型）: {agent_model_name}")
+                        logger.info(f"[成功] 智能 Agent 已加载（API模型）: {agent_model_name}")
                     else:
                         # API配置中没找到，作为本地模型处理
-                        print(f"[配置] 在API配置中未找到 '{agent_model_name}'，作为本地模型加载")
+                        logger.info(f"[配置] 在API配置中未找到 '{agent_model_name}'，作为本地模型加载")
                         model_config = {
                             'model_type': 'local',
                             'model': agent_model_name
                         }
                         agent_manager.load_agent(agent_config, model_config)
-                        print(f"[成功] 智能 Agent 已加载（本地模型）: {agent_model_name}")
+                        logger.info(f"[成功] 智能 Agent 已加载（本地模型）: {agent_model_name}")
             else:
-                print("[配置] 未配置智能 Agent 模型")
+                logger.info("[配置] 未配置智能 Agent 模型")
 
             # 注册智能分析回调
             trigger_manager.add_callback(agent_analysis_callback)
-            print("[成功] 智能分析回调已注册")
+            logger.info("[成功] 智能分析回调已注册")
 
             # 设置trigger manager的event loop引用
             trigger_manager.set_event_loop(main_event_loop)
-            print("[成功] Trigger Manager event loop已设置")
+            logger.info("[成功] Trigger Manager event loop已设置")
 
             # 设置广播回调，用于发送WebSocket消息
             async def broadcast_to_asr(message):
                 """向ASR面板广播消息"""
                 await manager.broadcast(message)
             trigger_manager.set_broadcast_callback(broadcast_to_asr)
-            print("[成功] 智能分析广播回调已设置")
+            logger.info("[成功] 智能分析广播回调已设置")
 
             # 加载触发阈值和消息上限
             min_characters = agent_config.get("min_characters", 10)
             silence_threshold = agent_config.get("silence_threshold", 2)
             trigger_manager.set_thresholds(min_characters, silence_threshold)
-            print(f"[成功] 触发参数已加载: {min_characters}字, {silence_threshold}秒")
+            logger.info(f"[成功] 触发参数已加载: {min_characters}字, {silence_threshold}秒")
 
             # 加载主人公配置
             protagonist = config_data.get("protagonist", "")
             if protagonist:
                 trigger_manager.set_protagonist(protagonist)
-                print(f"[成功] 主人公已加载: {protagonist}")
+                logger.info(f"[成功] 主人公已加载: {protagonist}")
 
         except Exception as e:
-            print(f"[错误] 智能 Agent 初始化失败: {e}")
+            logger.error(f"[错误] 智能 Agent 初始化失败: {e}")
     else:
         if args.no:
-            print("[配置] 已跳过智能分析初始化 (--no)")
+            logger.info("[配置] 已跳过智能分析初始化 (--no)")
         elif not AGENT_AVAILABLE:
-            print("[配置] 智能 Agent 模块不可用")
+            logger.info("[配置] 智能 Agent 模块不可用")
 
 @app.get("/")
 async def get():
@@ -1937,6 +1959,7 @@ async def llm_websocket(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+    import webbrowser
 
     # Print startup banner
     print("=" * 60)
@@ -1948,7 +1971,14 @@ if __name__ == "__main__":
     print("=" * 60)
     print("")
 
+    # Automatically open browser
+    try:
+        webbrowser.open(f"http://{args.host}:{args.port}")
+    except Exception as e:
+        print(f"Failed to open browser: {e}")
+
     uvicorn.run(app, host=args.host, port=args.port)
+
 def format_intent_analysis(intent_result: dict) -> str:
     """将意图识别结果格式化为系统消息"""
     summary_xml = intent_result.get("summary_xml", "")
@@ -1973,5 +2003,4 @@ def format_intent_analysis(intent_result: dict) -> str:
     if steps:
         parts.append("下一步行动：")
         parts.extend(f"- {step}" for step in steps)
-    return "\n".join(parts)
     return "\n".join(parts)

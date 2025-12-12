@@ -1,0 +1,11 @@
+funasr
+modelscope
+webrtcvad
+pyaudio
+librosa
+soundfile
+numpy
+fastapi
+uvicorn
+websockets
+openai

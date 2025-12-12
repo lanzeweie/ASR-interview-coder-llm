@@ -20,3 +20,5 @@ output/
 data/chat_history.json
 resumes
 data/ui_state.json
+
+logs/server.log

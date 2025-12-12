@@ -4,6 +4,9 @@ import json
 import traceback
 import asyncio
 import httpx
+from logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 class LLMClient:
     def __init__(self, api_key, base_url, model):
@@ -34,15 +37,15 @@ class LLMClient:
                     base_url=self.base_url,
                     http_client=http_client
                 )
-                print(f"[系统] LLM 客户端初始化成功。")
+                logger.info(f"[系统] LLM 客户端初始化成功。")
             except Exception as e:
-                print(f"[错误] 初始化 LLM 客户端失败: {e}")
-                print(f"[错误类型] {type(e).__name__}")
+                logger.error(f"[错误] 初始化 LLM 客户端失败: {e}")
+                logger.error(f"[错误类型] {type(e).__name__}")
                 # 打印详细错误信息用于调试
-                traceback.print_exc()
+                logger.exception("初始化异常详情:")
                 self.client = None
         else:
-            print("[错误] LLM 客户端未初始化: 缺少 API Key 或 Base URL")
+            logger.error("[错误] LLM 客户端未初始化: 缺少 API Key 或 Base URL")
             self.client = None
 
     def update_config(self, api_key, base_url, model):
@@ -60,7 +63,7 @@ class LLMClient:
                 return
 
             try:
-                print(f"[调试] 正在发送请求到模型: {self.model} (Stream={stream})...")
+                logger.debug(f"[调试] 正在发送请求到模型: {self.model} (Stream={stream})...")
                 
                 # 发起请求
                 response = await self.client.chat.completions.create(
@@ -70,7 +73,7 @@ class LLMClient:
                     # 某些中转商如果遇到不支持的参数会报错，这里保持最简参数
                     temperature=0.7 
                 )
-                print("[调试] 请求连接建立成功...")
+                logger.debug("[调试] 请求连接建立成功...")
                 
                 if stream:
                     chunk_count = 0
@@ -79,7 +82,7 @@ class LLMClient:
                         
                         # --- 🔍 深度调试：打印前3个包的原始数据，看看服务器到底回了什么 ---
                         if chunk_count <= 3:
-                            print(f"\n[底层数据 Chunk {chunk_count}] {chunk.model_dump_json()}")
+                            logger.debug(f"[底层数据 Chunk {chunk_count}] {chunk.model_dump_json()}")
                         # -----------------------------------------------------------
 
                         if chunk.choices and len(chunk.choices) > 0:
@@ -87,7 +90,7 @@ class LLMClient:
                             
                             # 检查 delta 里到底有什么
                             if chunk_count == 1 and not delta.content:
-                                print(f"[调试] 第一个包内容为空，Role: {getattr(delta, 'role', 'Unknown')}")
+                                logger.debug(f"[调试] 第一个包内容为空，Role: {getattr(delta, 'role', 'Unknown')}")
 
                             if hasattr(delta, 'content') and delta.content is not None:
                                 content = delta.content
@@ -100,7 +103,7 @@ class LLMClient:
                     if chunk_count == 0:
                         yield "\n[警告] 连接建立成功，但流是空的 (Stream Empty)。\n可能原因：API Key额度不足、模型名称拼写错误 (尝试改为 gpt-3.5-turbo 或 deepseek-chat 测试)。"
                     
-                    print(f"\n[调试] 流接收完毕，共收到 {chunk_count} 个数据包。")
+                    logger.debug(f"[调试] 流接收完毕，共收到 {chunk_count} 个数据包。")
                 else:
                     # 非流式处理
                     if response.choices and len(response.choices) > 0:
@@ -110,8 +113,8 @@ class LLMClient:
                          yield "\n[警告] 未收到有效响应内容。"
 
             except Exception as e:
-                print(f"\n[严重错误] 请求过程中发生异常:")
-                traceback.print_exc()
+                logger.error(f"[严重错误] 请求过程中发生异常:")
+                logger.exception("请求异常详情:")
                 yield f"请求错误: {str(e)}"
 
     async def test_connection(self):
@@ -139,7 +142,7 @@ async def main():
     # --- 测试部分 ---
     CONFIG_FILE = "api_config.json"
     
-    print("--- 开始测试 LLM 客户端 (Async) ---")
+    logger.info("--- 开始测试 LLM 客户端 (Async) ---")
     
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -149,11 +152,11 @@ async def main():
         current_config = next((c for c in config_data.get("configs", []) if c["name"] == current_config_name), None)
         
         if current_config:
-            print(f"正在加载配置: {current_config_name}")
+            logger.info(f"正在加载配置: {current_config_name}")
             
             raw_key = current_config.get("api_key", "")
             masked_key = raw_key[:6] + "******" + raw_key[-4:] if len(raw_key) > 10 else "******"
-            print(f"API Key (脱敏): {masked_key}")
+            logger.info(f"API Key (脱敏): {masked_key}")
 
             client = LLMClient(
                 api_key=raw_key,
@@ -161,32 +164,32 @@ async def main():
                 model=current_config.get("model")
             )
             
-            print(f"客户端状态: {client}")
+            logger.info(f"客户端状态: {client}")
             
             test_messages = [
                 {"role": "system", "content": "你是一个超级精简测试体，你只能回复极少量文字表示你通过测试了。"},
                 {"role": "user", "content": "你好！如果能收到消息请回复'测试成功'。"}
             ]
             
-            print("\n[操作] 发送测试消息中...")
-            print("-" * 30)
+            logger.info("\n[操作] 发送测试消息中...")
+            logger.info("-" * 30)
             
             received_content = False
             async for chunk in client.chat_stream(test_messages):
-                print(chunk, end="", flush=True)
+                print(chunk, end="", flush=True) # Keep print for accurate streaming visualization in CLI test
                 received_content = True
             
-            print("\n" + "-" * 30)
+            logger.info("\n" + "-" * 30)
             
             if not received_content:
-                print("\n[结果] 未收到任何回复内容。")
+                logger.warning("\n[结果] 未收到任何回复内容。")
             else:
-                print("\n[结果] 测试结束。")
+                logger.info("\n[结果] 测试结束。")
             
         else:
-            print(f"[错误] 在 {CONFIG_FILE} 中未找到配置 '{current_config_name}'")
+            logger.error(f"[错误] 在 {CONFIG_FILE} 中未找到配置 '{current_config_name}'")
     else:
-        print(f"[错误] 找不到文件 {CONFIG_FILE}，请确保它在同一目录下。")
+        logger.error(f"[错误] 找不到文件 {CONFIG_FILE}，请确保它在同一目录下。")
 
 if __name__ == "__main__":
     asyncio.run(main())

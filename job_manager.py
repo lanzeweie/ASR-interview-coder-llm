@@ -3,6 +3,9 @@ import json
 import asyncio
 from typing import Optional, Dict
 from llm_client import LLMClient
+from logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 class JobManager:
     def __init__(self, data_dir: str = "resumes", llm_client: Optional[LLMClient] = None):
@@ -46,7 +49,7 @@ class JobManager:
                 with open(self.job_analysis_path, "r", encoding="utf-8") as f:
                     return f.read()
             except Exception as e:
-                print(f"[JobManager] 读取分析文件错误: {e}")
+                logger.error(f"[JobManager] 读取分析文件错误: {e}")
                 return None
         return None
     
@@ -70,7 +73,7 @@ class JobManager:
             self.update_status("idle", "已清空")
             return True
         except Exception as e:
-            print(f"[JobManager] 清空错误: {e}")
+            logger.error(f"[JobManager] 清空错误: {e}")
             return False
 
     async def generate_analysis(self, job_title: str, job_jd: str = "", config_data: Optional[Dict] = None):
@@ -168,7 +171,7 @@ class JobManager:
             self.update_status("completed", "生成完成")
 
         except Exception as e:
-            print(f"[JobManager] Generation error: {e}")
+            logger.error(f"[JobManager] Generation error: {e}")
             self.update_status("error", error=str(e))
 
     def _get_client(self, config_data: Optional[Dict]) -> Optional[LLMClient]:
@@ -204,7 +207,7 @@ class JobManager:
                          model=model_conf.get("model")
                      )
                  except Exception as e:
-                     print(f"[JobManager] Failed to create specific client: {e}")
+                     logger.error(f"[JobManager] Failed to create specific client: {e}")
         
         return client_to_use
 

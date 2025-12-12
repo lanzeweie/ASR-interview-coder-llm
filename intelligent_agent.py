@@ -16,6 +16,9 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from llm_client import LLMClient
 from data.prompt import PromptTemplate
+from logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 # 尝试导入 transformers 和 torch
 try:
@@ -24,7 +27,7 @@ try:
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
-    print("[智能Agent] 未安装 transformers/torch，本地模型功能不可用")
+    logger.warning("[智能Agent] 未安装 transformers/torch，本地模型功能不可用")
 
 LEGACY_IDENTITY_MAP = {
     "思考": "tech_assistant",
@@ -106,7 +109,7 @@ def get_sub_agent_system(agent_config_path: str = "data/agent.json", role_id: Op
         return base_system
 
     except Exception as exc:
-        print(f"[Sub-Agent] 加载配置失败: {exc}")
+        logger.error(f"[Sub-Agent] 加载配置失败: {exc}")
         return default_system
 
 
@@ -137,7 +140,7 @@ def format_messages_compact(messages: List[Dict]) -> str:
 
     xml_lines.append('</conversation>')
     result = '\n'.join(xml_lines)
-    print(f"[格式化] 原始消息数: {len(messages)}, 格式化后长度: {len(result)} 字符")
+    logger.debug(f"[格式化] 原始消息数: {len(messages)}, 格式化后长度: {len(result)} 字符")
     return result
 
 
@@ -161,16 +164,16 @@ class BaseLLMAgent:
                 base_url=self.config.get('base_url', ''),
                 model=self.config.get('model', '')
             )
-            print(f"[{self.agent_label}] API客户端已初始化")
+            logger.info(f"[{self.agent_label}] API客户端已初始化")
         elif self.model_type == 'local':
             model_name = self.config.get('model_name', 'Qwen/Qwen2-0.5B-Instruct')
             if TRANSFORMERS_AVAILABLE:
                 self._load_local_model(model_name)
             else:
-                print(f"[{self.agent_label}] 缺少本地推理依赖，无法加载 {model_name}")
+                logger.error(f"[{self.agent_label}] 缺少本地推理依赖，无法加载 {model_name}")
 
     def _load_local_model(self, model_name: str) -> bool:
-        print(f"[{self.agent_label}] 正在加载本地模型: {model_name}")
+        logger.info(f"[{self.agent_label}] 正在加载本地模型: {model_name}")
         try:
             self.local_tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.local_model = AutoModelForCausalLM.from_pretrained(
@@ -179,10 +182,10 @@ class BaseLLMAgent:
                 device_map="auto"
             )
             self.local_model.eval()
-            print(f"[{self.agent_label}] ✅ 本地模型加载成功: {model_name}")
+            logger.info(f"[{self.agent_label}] ✅ 本地模型加载成功: {model_name}")
             return True
         except Exception as exc:
-            print(f"[{self.agent_label}] ❌ 本地模型加载失败: {exc}")
+            logger.error(f"[{self.agent_label}] ❌ 本地模型加载失败: {exc}")
             self.local_model = None
             self.local_tokenizer = None
             return False
@@ -233,11 +236,17 @@ class BaseLLMAgent:
         else:
             raise RuntimeError(f"未知的模型类型: {self.model_type}")
 
-        print(f"[{self.agent_label}] 模型完整响应内容:")
-        print("=" * 80)
-        print(response_text)
-        print("=" * 80)
-        print(f"[{self.agent_label}] 响应长度: {len(response_text)} 字符")
+        if self.model_type != 'api' and self.model_type != 'local':
+             # This check is just to ensure safety if logic flows here, though previous branch covers it.
+             # Actually the previous code structure was:
+             # if api: ...
+             # elif local: ...
+             # else: raise ...
+             # So I should just remove the extra else block I added.
+             pass
+
+        logger.debug(f"[{self.agent_label}] 模型完整响应内容:\n{'=' * 80}\n{response_text}\n{'=' * 80}")
+        logger.debug(f"[{self.agent_label}] 响应长度: {len(response_text)} 字符")
         return response_text
 
 
@@ -256,11 +265,11 @@ class SmartAnalysisAgent(BaseLLMAgent):
         self.last_analysis_time = 0
         self.force_trigger_threshold = self.threshold * 3
         self._pending_trigger_message = None
-        print(f"[智能分析] Agent 初始化，阈值:{self.threshold} 字，静音:{self.silence_seconds} 秒")
+        logger.info(f"[智能分析] Agent 初始化，阈值:{self.threshold} 字，静音:{self.silence_seconds} 秒")
 
     def build_analysis_prompt(self, messages: List[Dict], speaker_name: str) -> str:
         dialogue = format_messages_compact(messages)
-        print(f"[智能分析] 构建Prompt，消息数: {len(messages)}，长度: {len(dialogue)}")
+        logger.debug(f"[智能分析] 构建Prompt，消息数: {len(messages)}，长度: {len(dialogue)}")
         return PromptTemplate.get_analysis_prompt(dialogue, speaker_name)
 
     @staticmethod
@@ -270,17 +279,17 @@ class SmartAnalysisAgent(BaseLLMAgent):
             match = re.search(r'\{\s*"is"\s*:\s*["\']?(true|false)["\']?\s*\}', response, re.IGNORECASE)
             if match:
                 is_true = match.group(1).lower() == 'true'
-                print(f"[智能分析] 判定结果: {is_true}")
+                logger.info(f"[智能分析] 判定结果: {is_true}")
                 return True, {'is': is_true}
         except Exception as exc:
-            print(f"[智能分析] 响应解析出错: {exc}")
+            logger.error(f"[智能分析] 响应解析出错: {exc}")
         return False, None
 
     async def analyze(self, messages: List[Dict], speaker_name: str) -> Dict:
         model_name = self.config.get('model_name') or self.config.get('model') or '未知模型'
         try:
             prompt = self.build_analysis_prompt(messages, speaker_name)
-            print(f"[智能分析] 开始分析，主人公: {speaker_name}")
+            logger.info(f"[智能分析] 开始分析，主人公: {speaker_name}")
             if self.model_type == 'local':
                 chat_messages = [
                     {
@@ -291,7 +300,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
                 ]
             else:
                 chat_messages = [{"role": "user", "content": prompt}]
-            print(chat_messages)
+            logger.debug(chat_messages)
             response_text = await self._run_chat(chat_messages)
             
             # 去除 <think> 标签内容
@@ -322,7 +331,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
                 'model_name': model_name
             }
         except Exception as exc:
-            print(f"[智能分析] 分析过程出错: {exc}")
+            logger.error(f"[智能分析] 分析过程出错: {exc}")
             return {
                 'is': False,
                 'reason': f'分析失败: {str(exc)}',
@@ -333,7 +342,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
     def process_message(self, message: Dict, conversation_history: List[Dict]) -> Tuple[bool, Optional[str]]:
         text = message.get('text', '').strip()
         if len(text) < 3:
-            print(f"[智能分析] 消息长度不足3字符，忽略: {len(text)} 字符")
+            logger.debug(f"[智能分析] 消息长度不足3字符，忽略: {len(text)} 字符")
             return False, None
 
         current_time = time.time()
@@ -341,21 +350,21 @@ class SmartAnalysisAgent(BaseLLMAgent):
 
         speaker_info = message.get('speaker', '')
         speaker_name = speaker_info.split(' (')[0] if '(' in speaker_info else speaker_info
-        print(f"[智能分析] 处理消息: {speaker_name} - {text[:20]}... (长度: {len(text)})")
+        logger.debug(f"[智能分析] 处理消息: {speaker_name} - {text[:20]}... (长度: {len(text)})")
 
         if self.current_speaker is None:
             self.current_speaker = speaker_name
             self.accumulated_text = text
         elif self.current_speaker == speaker_name:
             self.accumulated_text += text
-            print(f"[智能分析] 同一说话人累积，长度: {len(self.accumulated_text)}")
+            logger.debug(f"[智能分析] 同一说话人累积，长度: {len(self.accumulated_text)}")
         else:
-            print(f"[智能分析] 说话人变更: {self.current_speaker} -> {speaker_name}")
+            logger.debug(f"[智能分析] 说话人变更: {self.current_speaker} -> {speaker_name}")
             self.current_speaker = speaker_name
             self.accumulated_text = text
 
         if len(self.accumulated_text) < self.threshold:
-            print(f"[智能分析] 累积字符不足: {len(self.accumulated_text)}/{self.threshold}")
+            logger.debug(f"[智能分析] 累积字符不足: {len(self.accumulated_text)}/{self.threshold}")
             return False, None
 
         if not self.silence_detection_started:
@@ -363,7 +372,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
             if self.silence_timer:
                 self.silence_timer.cancel()
             self.silence_timer = asyncio.create_task(self._monitor_silence())
-            print(f"[智能分析] 已启动静音检测，阈值: {self.silence_seconds}秒")
+            logger.debug(f"[智能分析] 已启动静音检测，阈值: {self.silence_seconds}秒")
             return False, None
         else:
             triggered = self._check_trigger_conditions(text)
@@ -391,7 +400,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
         # 注意：这里我们比较引用，如果需要在内容上判重可能需要调整
         if self._pending_trigger_message not in messages:
             messages = [*messages, self._pending_trigger_message]
-            print(f"[智能分析] 已追加触发消息: {self._pending_trigger_message.get('text', '')[:20]}...")
+            logger.debug(f"[智能分析] 已追加触发消息: {self._pending_trigger_message.get('text', '')[:20]}...")
         
         self._pending_trigger_message = None
         return messages
@@ -399,32 +408,32 @@ class SmartAnalysisAgent(BaseLLMAgent):
     async def _monitor_silence(self):
         try:
             await asyncio.sleep(self.silence_seconds)
-            print(f"[智能分析] 静音超时，触发分析")
+            logger.info(f"[智能分析] 静音超时，触发分析")
             self.silence_detection_started = False
             self.silence_timer = None
         except asyncio.CancelledError:
-            print(f"[智能分析] 静音检测被取消")
+            logger.debug(f"[智能分析] 静音检测被取消")
 
     def _check_trigger_conditions(self, current_text: str) -> bool:
         current_time = time.time()
         silence_duration = current_time - self.last_message_time
-        print(f"[智能分析] 静音时长: {silence_duration:.2f}秒")
+        logger.debug(f"[智能分析] 静音时长: {silence_duration:.2f}秒")
 
         if silence_duration >= self.silence_seconds:
-            print(f"[智能分析] 条件1满足：静音 ≥ {self.silence_seconds}")
+            logger.debug(f"[智能分析] 条件1满足：静音 ≥ {self.silence_seconds}")
             return True
 
         current_length = len(self.accumulated_text)
         if current_length >= self.force_trigger_threshold:
-            print(f"[智能分析] 条件2满足：累积 ≥ 3倍阈值 ({current_length})")
+            logger.debug(f"[智能分析] 条件2满足：累积 ≥ 3倍阈值 ({current_length})")
             return True
 
         double_threshold = self.silence_seconds * 2
         if silence_duration >= double_threshold:
-            print(f"[智能分析] 条件3满足：静音 ≥ {double_threshold}")
+            logger.debug(f"[智能分析] 条件3满足：静音 ≥ {double_threshold}")
             return True
 
-        print(f"[智能分析] 条件不足，继续等待")
+        logger.debug(f"[智能分析] 条件不足，继续等待")
         return False
 
     def reset_state(self):
@@ -437,7 +446,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
             self.silence_timer = None
         self.last_analysis_time = 0
         self._pending_trigger_message = None
-        print(f"[智能分析] 状态已重置")
+        logger.debug(f"[智能分析] 状态已重置")
 
 
 class IntentRecognitionAgent(BaseLLMAgent):
@@ -468,13 +477,10 @@ class IntentRecognitionAgent(BaseLLMAgent):
     async def analyze(self, messages: List[Dict], speaker_name: str) -> Dict:
         prompt = self.build_prompt(messages, speaker_name)
         try:
-            print(f"\n[DEBUG_INTENT] 🚀 正在执行意图识别 prompt...")
-            print(f"[DEBUG_INTENT] 主人公: {speaker_name}")
-            print(f"[DEBUG_INTENT] 上下文消息数: {len(messages)}")
-            print("[DEBUG_INTENT] 完整 Prompt 内容:")
-            print("=" * 80)
-            print(prompt)
-            print("=" * 80)
+            logger.debug(f"\n[DEBUG_INTENT] 🚀 正在执行意图识别 prompt...")
+            logger.debug(f"[DEBUG_INTENT] 主人公: {speaker_name}")
+            logger.debug(f"[DEBUG_INTENT] 上下文消息数: {len(messages)}")
+            logger.debug("[DEBUG_INTENT] 完整 Prompt 内容:\n" + "=" * 80 + "\n" + prompt + "\n" + "=" * 80)
             if self.model_type == 'local':
                 chat_messages = [
                     {"role": "system", "content": "你是意图识别Agent，只能输出严格的XML分析结果。"},
@@ -489,8 +495,7 @@ class IntentRecognitionAgent(BaseLLMAgent):
             response_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL)
             
             xml_content = self._extract_xml(response_text)
-            print("[意图识别] XML结果: ")
-            print(xml_content)
+            logger.debug(f"[意图识别] XML结果:\n{xml_content}")
             return {
                 'success': True,
                 'summary_xml': xml_content,
@@ -504,7 +509,7 @@ class IntentRecognitionAgent(BaseLLMAgent):
         except RuntimeError as exc:
             return {'success': False, 'error': str(exc)}
         except Exception as exc:
-            print(f"[意图识别] 分析失败: {exc}")
+            logger.error(f"[意图识别] 分析失败: {exc}")
             return {'success': False, 'error': str(exc)}
 
 def format_intent_analysis(intent_result: Optional[Dict]) -> str:
@@ -537,7 +542,7 @@ class ThinkTankAgent:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as exc:
-            print(f"[智囊团] 加载 {path} 失败: {exc}")
+            logger.error(f"[智囊团] 加载 {path} 失败: {exc}")
             return {}
 
     def get_system_prompt(self, role_id: Optional[str] = None) -> str:
@@ -566,7 +571,7 @@ class ThinkTankAgent:
     ) -> Dict:
         phase1_is_positive = bool(phase1_result and phase1_result.get('is'))
         if not force and not phase1_is_positive:
-            print(f"[智囊团] 阶段1判定无需AI，直接返回默认模式")
+            logger.info(f"[智囊团] 阶段1判定无需AI，直接返回默认模式")
             return {
                 'mode': 'default',
                 'targets': [],
@@ -612,7 +617,7 @@ class ThinkTankAgent:
         system_prompt = self.get_system_prompt(role_id=target_role_id)
 
         if role_targets:
-            print(f"[智囊团] 匹配到 {len(role_targets)} 个角色目标")
+            logger.info(f"[智囊团] 匹配到 {len(role_targets)} 个角色目标")
             return {
                 'mode': 'think_tank',
                 'targets': role_targets,
@@ -621,7 +626,7 @@ class ThinkTankAgent:
             }
 
         default_targets = list(active_names)[:1]
-        print(f"[智囊团] 未匹配到角色，使用默认目标: {default_targets}")
+        logger.info(f"[智囊团] 未匹配到角色，使用默认目标: {default_targets}")
         return {
             'mode': 'default',
             'targets': default_targets,
@@ -639,7 +644,7 @@ class AgentManager:
         self.think_tank_agent = ThinkTankAgent()
         self.enabled = False
         self.auto_trigger = True
-        print("[智能分析] Agent 管理器已初始化")
+        logger.info("[智能分析] Agent 管理器已初始化")
 
     def _build_llm_runtime_config(self, overrides: dict, model_config: Optional[dict], fallback_model_name: str) -> dict:
         runtime = {
@@ -681,10 +686,10 @@ class AgentManager:
             self.agents[model_name] = agent
             self.enabled = config.get('enabled', False)
             self.auto_trigger = config.get('auto_trigger', True)
-            print(f"[智能分析] 已加载 Agent: {model_name}, 启用: {self.enabled}")
+            logger.info(f"[智能分析] 已加载 Agent: {model_name}, 启用: {self.enabled}")
             return True
         except Exception as exc:
-            print(f"[智能分析] 加载 Agent 失败: {exc}")
+            logger.error(f"[智能分析] 加载 Agent 失败: {exc}")
             return False
 
     def configure_intent_agent(self, config: dict, model_config: Optional[dict]) -> bool:
@@ -697,10 +702,10 @@ class AgentManager:
             }
             agent_config = self._build_llm_runtime_config(overrides, model_config, fallback)
             self.intent_agent = IntentRecognitionAgent(agent_config)
-            print(f"[意图识别] 已配置: {agent_config.get('model_name')}")
+            logger.info(f"[意图识别] 已配置: {agent_config.get('model_name')}")
             return True
         except Exception as exc:
-            print(f"[意图识别] 配置失败: {exc}")
+            logger.error(f"[意图识别] 配置失败: {exc}")
             self.intent_agent = None
             return False
 
@@ -742,7 +747,7 @@ class AgentManager:
         force_modules: bool = False,
         status_callback: Optional[Callable[[str, Dict], asyncio.Future]] = None
     ) -> Dict:
-        print(
+        logger.debug(
             "[智能分析] run_pipeline -> "
             f"analysis={use_analysis}, intent={use_intent}, resume={use_resume}, "
             f"think_tank={use_think_tank}, bypass={bypass_enabled}, force={force_modules}"
@@ -767,7 +772,7 @@ class AgentManager:
 
         intent_result = None
         if use_intent and not should_halt:
-            print("[意图识别] 模块启用，即将运行 IntentRecognitionAgent")
+            logger.info("[意图识别] 模块启用，即将运行 IntentRecognitionAgent")
             if status_callback:
                 intent_model = (
                     self.intent_agent.config.get('model_name') 
@@ -785,7 +790,7 @@ class AgentManager:
             if intent_result and intent_result.get('success'):
                 summary_xml = intent_result.get('summary_xml', '')
                 if '未检测到技术问题' in summary_xml:
-                    print("[智能分析] 意图识别结果为'未检测到技术问题'，终止后续流程")
+                    logger.info("[智能分析] 意图识别结果为'未检测到技术问题'，终止后续流程")
                     should_halt = True
 
         distribution_result = None

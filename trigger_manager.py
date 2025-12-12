@@ -12,6 +12,9 @@ import uuid
 from typing import List, Dict, Optional, Callable
 from dataclasses import dataclass
 from intelligent_agent import agent_manager
+from logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 # 配置文件路径
 CONFIG_FILE = "api_config.json"
@@ -61,7 +64,7 @@ class TriggerManager:
         # 启动后台监控任务
         self.monitor_task = None
         self._start_background_monitor()
-        print("[触发机制] 管理器已初始化 (含后台轮询)")
+        logger.info("[触发机制] 管理器已初始化 (含后台轮询)")
     
     def _start_background_monitor(self):
         """启动后台静音检测线程/任务"""
@@ -80,14 +83,14 @@ class TriggerManager:
                     if self.state.silence_start_time and not self.state.pending_analysis:
                         silence_duration = current_time - self.state.silence_start_time
                         if silence_duration >= self.silence_threshold:
-                            print(f"[触发机制(后台)] 静音超时 {silence_duration:.1f}秒，自动触发分析")
+                            logger.debug(f"[触发机制(后台)] 静音超时 {silence_duration:.1f}秒，自动触发分析")
                             
                             # 需要在event loop中执行触发逻辑，确保线程安全（虽然这里主要是状态更新）
                             # 但最好保持一致性。如果直接调用 _trigger_analysis，它会通过 run_coroutine_threadsafe 提交任务，是安全的。
                             self._trigger_analysis()
                             
                 except Exception as e:
-                    print(f"[触发机制] 后台监控出错: {e}")
+                    logger.error(f"[触发机制] 后台监控出错: {e}")
                     
         # 使用守护线程运行监控
         self.monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
@@ -97,22 +100,22 @@ class TriggerManager:
         """设置触发阈值"""
         self.min_characters = min_chars
         self.silence_threshold = silence_secs
-        print(f"[触发机制] 阈值已更新: {min_chars}字, {silence_secs}秒静音")
+        logger.info(f"[触发机制] 阈值已更新: {min_chars}字, {silence_secs}秒静音")
 
     def set_event_loop(self, loop):
         """设置主event loop引用"""
         self.event_loop = loop
-        print("[触发机制] 已设置event loop引用")
+        logger.debug("[触发机制] 已设置event loop引用")
 
     def set_broadcast_callback(self, callback):
         """设置广播回调函数，用于发送WebSocket消息"""
         self.broadcast_callback = callback
-        print("[触发机制] 已设置广播回调")
+        logger.debug("[触发机制] 已设置广播回调")
 
     def set_protagonist(self, name: str):
         """设置主人公姓名"""
         self.protagonist = name
-        print(f"[触发机制] 主人公已设置: {name}")
+        logger.info(f"[触发机制] 主人公已设置: {name}")
 
     def add_message(self, message: Dict) -> bool:
         """
@@ -136,7 +139,7 @@ class TriggerManager:
         if not text or len(text) < 3:
             return False
 
-        print(f"[触发机制] 收到消息: {speaker[:20]} - {text[:30]}...")
+        logger.debug(f"[触发机制] 收到消息: {speaker[:20]} - {text[:30]}...")
 
         # 更新最后消息时间
         self.state.last_message_time = current_time
@@ -166,13 +169,13 @@ class TriggerManager:
         # 如果没有启动静音检测，且累积文本达到阈值，则启动
         if self.state.silence_start_time is None and len(self.state.accumulated_text) >= self.min_characters:
             self.state.silence_start_time = current_time
-            print(f"[触发机制] 达到字数阈值 {self.min_characters}，启动静音检测...")
+            logger.debug(f"[触发机制] 达到字数阈值 {self.min_characters}，启动静音检测...")
 
         # 如果已启动静音检测，检查是否需要立即触发（字数过多）
         if self.state.silence_start_time is not None and not self.state.pending_analysis:
             # 如果累积文本超过阈值的3倍，强制触发（避免累积过长）
             if len(self.state.accumulated_text) >= self.min_characters * 3:
-                print(f"[触发机制] 累积文本过长（{len(self.state.accumulated_text)}字），强制触发分析")
+                logger.info(f"[触发机制] 累积文本过长（{len(self.state.accumulated_text)}字），强制触发分析")
                 self._trigger_analysis()
 
         # 检查是否超时自动触发
@@ -198,12 +201,12 @@ class TriggerManager:
         if self.state.silence_start_time:
             silence_duration = current_time - self.state.silence_start_time
             if silence_duration >= self.silence_threshold:
-                print(f"[触发机制] 静音 {silence_duration:.1f}秒，触发智能分析")
+                logger.info(f"[触发机制] 静音 {silence_duration:.1f}秒，触发智能分析")
                 self._trigger_analysis()
         else:
             # 没有启动静音检测，直接触发（如果字数足够）
             if len(self.state.accumulated_text) >= self.min_characters * 2:
-                print("[触发机制] 字数充足，触发智能分析")
+                logger.info("[触发机制] 字数充足，触发智能分析")
                 self._trigger_analysis()
 
     def _check_silence_timeout(self, current_time: float):
@@ -215,14 +218,14 @@ class TriggerManager:
         if self.state.silence_start_time and not self.state.pending_analysis:
             silence_duration = current_time - self.state.silence_start_time
             if silence_duration >= self.silence_threshold * 2:
-                print(f"[触发机制] 静音超时 {silence_duration:.1f}秒，强制触发")
+                logger.info(f"[触发机制] 静音超时 {silence_duration:.1f}秒，强制触发")
                 self._trigger_analysis()
 
     def _trigger_analysis(self):
         """触发智能分析"""
         # 首先检查智能分析是否启用
         if not agent_manager.enabled:
-            print("[触发机制] ⚠️ 智能分析未启用，重置触发状态")
+            logger.info("[触发机制] ⚠️ 智能分析未启用，重置触发状态")
             # 重置所有状态
             self.state.pending_analysis = False
             self.state.silence_start_time = None
@@ -261,16 +264,16 @@ class TriggerManager:
                         **analysis_meta
                     })
                 except Exception as e:
-                    print(f"[触发机制] 发送分析开始消息失败: {e}")
+                    logger.error(f"[触发机制] 发送分析开始消息失败: {e}")
 
             # 使用配置的主人公，如果没有配置则从消息中提取
             if self.protagonist:
                 speaker_name = self.protagonist
-                print(f"[触发机制] 📤 使用配置的主人公: {speaker_name}, 增量消息数={len(messages)} [{start_index}-{end_index-1}]/总{len(self.conversation_history)}")
+                logger.debug(f"[触发机制] 📤 使用配置的主人公: {speaker_name}, 增量消息数={len(messages)} [{start_index}-{end_index-1}]/总{len(self.conversation_history)}")
             else:
                 last_message = messages[-1]
                 speaker_name = last_message.get('speaker', '').split(' (')[0]  # 提取说话人姓名
-                print(f"[触发机制] 📤 未配置主人公，使用最后说话人: {speaker_name}, 增量消息数={len(messages)} [{start_index}-{end_index-1}]/总{len(self.conversation_history)}")
+                logger.debug(f"[触发机制] 📤 未配置主人公，使用最后说话人: {speaker_name}, 增量消息数={len(messages)} [{start_index}-{end_index-1}]/总{len(self.conversation_history)}")
 
             # 异步执行分析 - 使用保存的event loop
             if self.event_loop and self.event_loop.is_running():
@@ -278,10 +281,10 @@ class TriggerManager:
                     self._run_analysis(messages, speaker_name, start_index, analysis_id, analysis_meta),
                     self.event_loop
                 )
-                print("[触发机制] ✅ 分析任务已提交到主event loop")
+                logger.debug("[触发机制] ✅ 分析任务已提交到主event loop")
             else:
-                print("[触发机制] ⚠️ Event loop未设置或未运行，分析任务未启动")
-                print("[触发机制] 💡 提示: 请在server启动时调用trigger_manager.set_event_loop(loop)")
+                logger.error("[触发机制] ⚠️ Event loop未设置或未运行，分析任务未启动")
+                logger.warning("[触发机制] 💡 提示: 请在server启动时调用trigger_manager.set_event_loop(loop)")
                 self.state.pending_analysis = False
 
     async def _run_analysis(
@@ -294,7 +297,7 @@ class TriggerManager:
     ):
         """运行智能分析"""
         try:
-            print(f"[触发机制] 🤖 开始调用本地模型分析...")
+            logger.info(f"[触发机制] 🤖 开始调用本地模型分析...")
 
             # 加载配置以检查是否启用意图识别
             config_data = load_config()
@@ -309,7 +312,7 @@ class TriggerManager:
                     
                     if stage == "intent_started":
                         model = data.get("model", "Unknown")
-                        print(f"[触发机制] 📡 发送意图识别开始广播: {model}")
+                        logger.debug(f"[触发机制] 📡 发送意图识别开始广播: {model}")
                         try:
                             await self.broadcast_callback({
                                 "time": time.strftime("%H:%M:%S"),
@@ -321,7 +324,7 @@ class TriggerManager:
                                 "text": f"正在进行意图识别..."
                             })
                         except Exception as e:
-                            print(f"[触发机制] ❌ 广播失败: {e}")
+                            logger.error(f"[触发机制] ❌ 广播失败: {e}")
 
             # 运行完整的三阶段智能分析
             result = await agent_manager.run_intelligent_analysis(
@@ -343,51 +346,52 @@ class TriggerManager:
             confidence = phase1_result.get('confidence', 0.0)
 
             if is_needed:
-                print(f"[触发机制] ✅ 智能分析结果: 需要让AI帮助分析 (置信度: {confidence:.0%})")
-                print(f"[触发机制] 📋 原因: {reason}")
+                logger.info(f"[触发机制] ✅ 智能分析结果: 需要让AI帮助分析 (置信度: {confidence:.0%})")
+                logger.info(f"[触发机制] 📋 原因: {reason}")
 
                 # 输出阶段2和阶段3的结果
                 phase2_result = result.get('phase2')
                 if phase2_result:
-                    print(f"[触发机制] 📊 意图识别: {'完成' if phase2_result.get('success') else '跳过'}")
+                    logger.info(f"[触发机制] 📊 意图识别: {'完成' if phase2_result.get('success') else '跳过'}")
                     if phase2_result.get('success'):
-                        print(f"[触发机制] 🎯 核心问题: {phase2_result.get('core_question', '')[:50]}...")
+                        logger.info(f"[触发机制] 🎯 核心问题: {phase2_result.get('core_question', '')[:50]}...")
 
                 distribution_result = result.get('distribution', {})
                 distribution_mode = distribution_result.get('mode', 'unknown')
                 targets = distribution_result.get('targets', [])
-                print(f"[触发机制] 🎭 分发模式: {distribution_mode}, 目标数量: {len(targets)}")
+                logger.info(f"[触发机制] 🎭 分发模式: {distribution_mode}, 目标数量: {len(targets)}")
             else:
-                print(f"[触发机制] ❌ 智能分析结果: 普通对话，无需AI介入")
-                print(f"[触发机制] 📋 原因: {reason}")
+                logger.info(f"[触发机制] ❌ 智能分析结果: 普通对话，无需AI介入")
+                logger.info(f"[触发机制] 📋 原因: {reason}")
 
             # 触发回调
             if self.callbacks:
-                print(f"[触发机制] 📢 触发{len(self.callbacks)}个回调函数...")
+                logger.debug(f"[触发机制] 📢 触发{len(self.callbacks)}个回调函数...")
                 for callback in self.callbacks:
                     try:
                         await callback(result, messages, speaker_name)
                     except Exception as e:
-                        print(f"[触发机制] ❌ 回调执行失败: {e}")
+                        logger.error(f"[触发机制] ❌ 回调执行失败: {e}")
             else:
-                print(f"[触发机制] ⚠️ 没有注册回调函数")
+                logger.warning(f"[触发机制] ⚠️ 没有注册回调函数")
 
         except Exception as e:
-            print(f"[触发机制] ❌ 分析过程出错: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"[触发机制] ❌ 分析过程出错: {e}")
+            # import traceback
+            # traceback.print_exc() # Use logger exception instead
+            logger.exception("分析异常详情:")
         finally:
             # 更新分析位置：指向这次分析的最后一条消息
             if messages:
                 self.state.last_analysis_index = start_index + len(messages) - 1
-                print(f"[触发机制] 📍 更新分析位置: {self.state.last_analysis_index} (下次从 {self.state.last_analysis_index + 1} 开始)")
+                logger.debug(f"[触发机制] 📍 更新分析位置: {self.state.last_analysis_index} (下次从 {self.state.last_analysis_index + 1} 开始)")
 
             # 重置累积文本
             self.state.accumulated_text = ""
             self.state.pending_analysis = False
             self.state.current_analysis_id = None
             self.state.last_analysis_meta = None
-            print(f"[触发机制] 🔄 已重置触发状态")
+            logger.debug(f"[触发机制] 🔄 已重置触发状态")
 
     def add_callback(self, callback: Callable):
         """添加分析完成回调"""
@@ -408,7 +412,7 @@ class TriggerManager:
         self.silence_threshold = old_silence_threshold
         self.protagonist = old_protagonist
 
-        print("[触发机制] 已清空对话历史")
+        logger.info("[触发机制] 已清空对话历史")
 
     def reset_analysis_position(self):
         """重置分析位置，下次分析从头开始"""
@@ -452,7 +456,7 @@ class TriggerManager:
         if not enabled:
             # 清空累积状态
             self.state = TriggerState()
-        print(f"[触发机制] 已{'启用' if enabled else '禁用'}")
+        logger.info(f"[触发机制] 已{'启用' if enabled else '禁用'}")
 
 
 # 全局触发管理器实例

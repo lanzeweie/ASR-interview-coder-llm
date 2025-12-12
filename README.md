@@ -90,7 +90,7 @@ ASR实时转语音，支持录入声纹即说话人识别与多个不同的智�
 
 ```bash
 # 核心依赖
-pip install funasr modelscope webrtcvad pyaudio librosa soundfile numpy fastapi uvicorn websockets openai
+pip install -r requirements.txt
 
 # 可选：CUDA 支持（用于 GPU 加速）
 # 确保已安装 CUDA 和 PyTorch

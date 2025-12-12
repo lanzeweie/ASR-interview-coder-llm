@@ -2,6 +2,9 @@ import json
 import os
 import uuid
 from datetime import datetime
+from logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 CHAT_HISTORY_FILE = "data/chat_history.json"
 
@@ -18,7 +21,7 @@ class ChatManager:
                 with open(self.file_path, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
-                print(f"加载聊天历史错误: {e}")
+                logger.error(f"加载聊天历史错误: {e}")
                 return {"current_chat_id": None, "chats": {}}
         return {"current_chat_id": None, "chats": {}}
 
@@ -27,7 +30,7 @@ class ChatManager:
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=4, ensure_ascii=False)
         except Exception as e:
-            print(f"保存聊天历史错误: {e}")
+            logger.error(f"保存聊天历史错误: {e}")
 
     def create_chat(self, title="新聊天"):
         chat_id = str(uuid.uuid4())
