@@ -88,7 +88,7 @@ export const dom = {
     agentModelTypeSelect: document.getElementById('agent-model-type-select'),
     agentMinCharsInput: document.getElementById('agent-min-chars'),
     agentSilenceThresholdInput: document.getElementById('agent-silence-threshold'),
-    agentMaxMessagesInput: document.getElementById('agent-max-messages'),
+
 
     // 意图识别配置元素
     intentRecognitionModelSelect: document.getElementById('intent-recognition-model-select'),

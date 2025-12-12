@@ -1012,9 +1012,7 @@ export class ConfigManager {
             if (agentConfig.silence_threshold) {
                 dom.agentSilenceThresholdInput.value = agentConfig.silence_threshold;
             }
-            if (agentConfig.max_history_messages) {
-                dom.agentMaxMessagesInput.value = agentConfig.max_history_messages;
-            }
+
 
         } catch (e) {
             console.error('加载智能分析配置失败:', e);
@@ -1135,7 +1133,6 @@ export class ConfigManager {
                 enable_thinking: agentThinkingEnabled,
                 min_chars_threshold: parseInt(dom.agentMinCharsInput?.value) || 10,
                 silence_threshold: parseFloat(dom.agentSilenceThresholdInput?.value) || 2.0,
-                max_history_messages: parseInt(dom.agentMaxMessagesInput?.value) || 50,
 
                 // 意图识别参数
                 intent_model_type: intentModelType,

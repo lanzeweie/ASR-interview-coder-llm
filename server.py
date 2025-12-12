@@ -743,10 +743,8 @@ async def startup_event():
             # 加载触发阈值和消息上限
             min_characters = agent_config.get("min_characters", 10)
             silence_threshold = agent_config.get("silence_threshold", 2)
-            max_messages = agent_config.get("max_messages", 50)
             trigger_manager.set_thresholds(min_characters, silence_threshold)
-            trigger_manager.set_max_history(max_messages)
-            print(f"[成功] 触发参数已加载: {min_characters}字, {silence_threshold}秒, {max_messages}条消息")
+            print(f"[成功] 触发参数已加载: {min_characters}字, {silence_threshold}秒")
 
             # 加载主人公配置
             protagonist = config_data.get("protagonist", "")
@@ -1046,8 +1044,7 @@ async def update_agent_config(data: dict = Body(...)):
     if "silence_threshold" in data:
         agent_config["silence_threshold"] = data["silence_threshold"]
         
-    if "max_messages" in data:
-        agent_config["max_messages"] = data["max_messages"]
+
         
     if "model_name" in data:
         agent_config["model_name"] = data["model_name"]
@@ -1067,11 +1064,9 @@ async def update_agent_config(data: dict = Body(...)):
     # Update trigger manager thresholds if changed
     min_chars = agent_config.get("min_characters", 10)
     silence_thresh = agent_config.get("silence_threshold", 2)
-    max_msgs = agent_config.get("max_messages", 50)
     
     trigger_manager.set_thresholds(min_chars, silence_thresh)
-    trigger_manager.set_max_history(max_msgs)
-
+    
     config_data["agent_config"] = agent_config
     save_config(config_data)
 

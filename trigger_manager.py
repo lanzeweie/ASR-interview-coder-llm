@@ -45,28 +45,59 @@ class TriggerManager:
         self.state = TriggerState()
         self.conversation_history: List[Dict] = []
         self.callbacks: List[Callable] = []
-        self.min_characters = 10
-        self.silence_threshold = 2.0  # 秒
-        self.max_history = 50  # 最大历史记录数
-        self.event_loop = None  # 保存主event loop引用
-        self.protagonist = None  # 主人公姓名
-        self.broadcast_callback = None  # 用于发送WebSocket消息的回调
-        print("[触发机制] 管理器已初始化")
+        
+        # --- 核心触发阈值 (可调优) ---
+        self.min_characters = 10         # 最小触发字数：累积多少个字符才开始考虑触发
+        self.silence_threshold = 2.0     # 静音检测阈值：说话停顿多少秒才触发
+        
+        # --- 分析窗口设置 (可调优) ---
+        self.max_increment_messages = 15 # 增量分析窗口大小：每次分析最多包含多少条最新消息
+                                         # 此参数决定了意图识别能看到多长的最近对话
+                                         
+        self.event_loop = None           # 保存主event loop引用
+        self.protagonist = None          # 主人公姓名
+        self.broadcast_callback = None   # 用于发送WebSocket消息的回调
+        
+        # 启动后台监控任务
+        self.monitor_task = None
+        self._start_background_monitor()
+        print("[触发机制] 管理器已初始化 (含后台轮询)")
+    
+    def _start_background_monitor(self):
+        """启动后台静音检测线程/任务"""
+        import threading
+        
+        def _monitor_loop():
+            while True:
+                time.sleep(0.5)  # 每0.5秒检查一次
+                try:
+                    if not agent_manager.enabled:
+                        continue
+                        
+                    current_time = time.time()
+                    
+                    # 检查是否静音超时
+                    if self.state.silence_start_time and not self.state.pending_analysis:
+                        silence_duration = current_time - self.state.silence_start_time
+                        if silence_duration >= self.silence_threshold:
+                            print(f"[触发机制(后台)] 静音超时 {silence_duration:.1f}秒，自动触发分析")
+                            
+                            # 需要在event loop中执行触发逻辑，确保线程安全（虽然这里主要是状态更新）
+                            # 但最好保持一致性。如果直接调用 _trigger_analysis，它会通过 run_coroutine_threadsafe 提交任务，是安全的。
+                            self._trigger_analysis()
+                            
+                except Exception as e:
+                    print(f"[触发机制] 后台监控出错: {e}")
+                    
+        # 使用守护线程运行监控
+        self.monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
+        self.monitor_thread.start()
 
     def set_thresholds(self, min_chars: int, silence_secs: float):
         """设置触发阈值"""
         self.min_characters = min_chars
         self.silence_threshold = silence_secs
         print(f"[触发机制] 阈值已更新: {min_chars}字, {silence_secs}秒静音")
-
-    def set_max_history(self, max_history: int):
-        """设置最大历史记录数"""
-        self.max_history = max_history
-        print(f"[触发机制] 消息上限已更新: {max_history}条")
-        # 如果当前历史记录超过新上限，立即裁剪
-        if len(self.conversation_history) > self.max_history:
-            self.conversation_history = self.conversation_history[-self.max_history:]
-            print(f"[触发机制] 已裁剪历史记录，当前保留 {len(self.conversation_history)} 条")
 
     def set_event_loop(self, loop):
         """设置主event loop引用"""
@@ -130,10 +161,6 @@ class TriggerManager:
             'speaker': speaker,
             'timestamp': current_time
         })
-
-        # 限制历史长度
-        if len(self.conversation_history) > self.max_history:
-            self.conversation_history = self.conversation_history[-self.max_history:]
 
         # 检查当前累积文本是否达到阈值
         # 如果没有启动静音检测，且累积文本达到阈值，则启动
@@ -214,8 +241,7 @@ class TriggerManager:
             start_index = 0
 
         # 取增量消息，但限制最大条数（避免一次分析太多）
-        max_increment_messages = 15  # 每次最多分析15条增量消息
-        end_index = min(start_index + max_increment_messages, len(self.conversation_history))
+        end_index = min(start_index + self.max_increment_messages, len(self.conversation_history))
         messages = self.conversation_history[start_index:end_index]
 
         if messages:
@@ -373,7 +399,6 @@ class TriggerManager:
         # 保留配置参数，只重置状态
         old_min_chars = self.min_characters
         old_silence_threshold = self.silence_threshold
-        old_max_history = self.max_history
         old_protagonist = self.protagonist
 
         self.state = TriggerState()
@@ -381,7 +406,6 @@ class TriggerManager:
         # 恢复配置参数
         self.min_characters = old_min_chars
         self.silence_threshold = old_silence_threshold
-        self.max_history = old_max_history
         self.protagonist = old_protagonist
 
         print("[触发机制] 已清空对话历史")
