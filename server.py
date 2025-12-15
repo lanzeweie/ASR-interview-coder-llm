@@ -57,12 +57,13 @@ from resume_manager import ResumeManager
 from job_manager import JobManager
 
 try:
-    from intelligent_agent import agent_manager
+    from intelligent_agent import agent_manager, format_intent_analysis
     from trigger_manager import trigger_manager
     AGENT_AVAILABLE = True
 except ImportError:
     AGENT_AVAILABLE = False
     agent_manager = None
+    format_intent_analysis = None
     # logger.warning("智能 Agent 模块不可用...")
 
 # Log initial warnings for ASR and Agent if they were not available
@@ -1707,20 +1708,20 @@ async def llm_websocket(websocket: WebSocket):
 
             # 处理智能分析触发消息
             if data.get("type") == "agent_triggered":
-                print(f"[智能分析] ✅ WebSocket 收到触发消息")
+                logger.info(f"[智能分析] ✅ WebSocket 收到触发消息")
                 messages = data.get("messages", [])
                 chat_id = data.get("chat_id")
                 is_multi_llm = data.get("is_multi_llm", False)
                 intent_recognition = data.get("intent_recognition", False)
 
-                print(f"[智能分析] 📋 消息详情:")
-                print(f"  - 分发模式: {'智囊团' if is_multi_llm else '单模型'}")
-                print(f"  - 意图识别: {'开启' if intent_recognition else '关闭'}")
-                print(f"  - 消息数量: {len(messages)}")
-                print(f"  - 聊天ID: {chat_id}")
-                print(f"[智能分析] 📝 消息内容预览:")
+                logger.info(f"[智能分析] 📋 消息详情:")
+                logger.info(f"  - 分发模式: {'智囊团' if is_multi_llm else '单模型'}")
+                logger.info(f"  - 意图识别: {'开启' if intent_recognition else '关闭'}")
+                logger.info(f"  - 消息数量: {len(messages)}")
+                logger.info(f"  - 聊天ID: {chat_id}")
+                logger.debug(f"[智能分析] 📝 消息内容预览:")
                 for i, msg in enumerate(messages):
-                    print(f"  [{i}] {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:50]}{'...' if len(str(msg.get('content', ''))) > 50 else ''}")
+                    logger.debug(f"  [{i}] {msg.get('role', 'unknown')}: {str(msg.get('content', ''))[:50]}{'...' if len(str(msg.get('content', ''))) > 50 else ''}")
 
                 # 根据模式处理
                 if is_multi_llm:
@@ -1728,11 +1729,6 @@ async def llm_websocket(websocket: WebSocket):
                     await handle_multi_llm_request(websocket, messages, chat_id)
                 else:
                     # 处理单模型模式
-                    await websocket.send_json({
-                        "type": "agent_notification",
-                        "content": "🤖 智能分析已启动，将为您提供专业建议"
-                    })
-
                     # 修复：处理当前配置的 System Prompt
                     current_messages = [m.copy() for m in messages]
                     config_prompt = (curr_conf.get("system_prompt", "") if curr_conf else "").strip()
@@ -1749,7 +1745,7 @@ async def llm_websocket(websocket: WebSocket):
                     if active_role:
                         tag_prompt = active_role["prompt"]
                         identity_applied = True
-                        print(f"[智能分析] 应用身份标签 Prompt: {active_role['name']}")
+                        logger.info(f"[智能分析] 应用身份标签 Prompt: {active_role['name']}")
                         sys_idx = next((i for i, m in enumerate(current_messages) if m["role"] == "system"), -1)
                         if sys_idx != -1:
                             current_messages[sys_idx]["content"] = tag_prompt
@@ -1763,9 +1759,9 @@ async def llm_websocket(websocket: WebSocket):
                             current_messages.insert(0, {"role": "system", "content": config_prompt})
                     elif normalized_tags:
                         if disabled_candidates:
-                            print(f"[智能分析] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
+                            logger.info(f"[智能分析] 身份已停用，跳过 Prompt: {', '.join(disabled_candidates)}")
                         else:
-                            print(f"[智能分析] 未找到标签 '{normalized_tags[0]}' 的 Prompt 定义")
+                            logger.warning(f"[智能分析] 未找到标签 '{normalized_tags[0]}' 的 Prompt 定义")
 
                     # Check if job analysis exists locally
                     if not os.path.exists(job_manager.job_analysis_path):
@@ -1779,28 +1775,29 @@ async def llm_websocket(websocket: WebSocket):
                     inject_job_analysis_to_messages(current_messages)
 
                     # [调试] 显示实际发送给模型的完整 prompt
-                    print(f"\n{'='*80}")
-                    print(f"[调试] [智能分析] 正在发送请求到模型: {curr_conf.get('model', 'Unknown')} (Stream=True)")
-                    print(f"{'='*80}")
-                    print(f"[调试] [智能分析] 当前配置: {curr_conf.get('name', 'Unknown')}")
-                    print(f"[调试] [智能分析] 使用 System Prompt: {config_prompt if (config_prompt and not identity_applied) else '否'}")
+                    # [调试] 显示实际发送给模型的完整 prompt
+                    logger.debug(f"\n{'='*80}")
+                    logger.debug(f"[调试] [智能分析] 正在发送请求到模型: {curr_conf.get('model', 'Unknown')} (Stream=True)")
+                    logger.debug(f"{'='*80}")
+                    logger.debug(f"[调试] [智能分析] 当前配置: {curr_conf.get('name', 'Unknown')}")
+                    logger.debug(f"[调试] [智能分析] 使用 System Prompt: {config_prompt if (config_prompt and not identity_applied) else '否'}")
                     if normalized_tags:
                         if identity_applied and active_role:
-                            print(f"[调试] [智能分析] 身份标签: {normalized_tags} → 激活: {active_role['name']} ({active_tag})")
+                            logger.debug(f"[调试] [智能分析] 身份标签: {normalized_tags} → 激活: {active_role['name']} ({active_tag})")
                         elif disabled_candidates:
-                            print(f"[调试] [智能分析] 身份标签: {normalized_tags} (停用: {', '.join(disabled_candidates)})")
+                            logger.debug(f"[调试] [智能分析] 身份标签: {normalized_tags} (停用: {', '.join(disabled_candidates)})")
                         else:
-                            print(f"[调试] [智能分析] 身份标签: {normalized_tags} (未找到可用身份)")
-                    print(f"[调试] [智能分析] 消息总数: {len(current_messages)}")
-                    print(f"{'-'*80}")
-                    print("[调试] [智能分析] 完整 Prompt 内容:")
-                    print(f"{'-'*80}")
+                            logger.debug(f"[调试] [智能分析] 身份标签: {normalized_tags} (未找到可用身份)")
+                    logger.debug(f"[调试] [智能分析] 消息总数: {len(current_messages)}")
+                    logger.debug(f"{'-'*80}")
+                    logger.debug("[调试] [智能分析] 完整 Prompt 内容:")
+                    logger.debug(f"{'-'*80}")
                     for i, msg in enumerate(current_messages):
                         role = msg.get('role', 'unknown')
                         content = msg.get('content', '')
-                        print(f"\n[消息 {i+1}] 角色: {role}")
-                        print(f"[消息 {i+1}] 内容: {content}")
-                    print(f"\n{'='*80}\n")
+                        logger.debug(f"\n[消息 {i+1}] 角色: {role}")
+                        logger.debug(f"[消息 {i+1}] 内容: {content}")
+                    logger.debug(f"\n{'='*80}\n")
 
                     # 直接使用当前配置的模型
                     response_text = ""
@@ -1817,7 +1814,7 @@ async def llm_websocket(websocket: WebSocket):
                             chat_manager.update_chat_messages(chat_id, messages)
 
                     except Exception as e:
-                        print(f"单模型流式响应错误: {e}")
+                        logger.error(f"单模型流式响应错误: {e}")
                         await websocket.send_json({"type": "error", "content": f"流式响应错误: {str(e)}"})
 
                 continue
@@ -1832,7 +1829,7 @@ async def llm_websocket(websocket: WebSocket):
             agent_config = config_data.get("agent_config", {})
             intent_enabled = agent_config.get("intent_recognition_enabled", False)
             
-            from intelligent_agent import get_sub_agent_system, normalize_identity_identifier
+            from intelligent_agent import get_sub_agent_system
             system_prompt = get_sub_agent_system(
                 agent_config_path=AGENT_ROLE_FILE
             )
@@ -1887,11 +1884,11 @@ async def llm_websocket(websocket: WebSocket):
                              agent_config_path=AGENT_ROLE_FILE,
                              role_id=normalized_tag
                         )
-                        print(f"[AgentAPI] 检测到身份标签: {tags} -> 使用角色: {normalized_tag}")
+                        logger.info(f"[AgentAPI] 检测到身份标签: {tags} -> 使用角色: {normalized_tag}")
                     elif config_prompt:
                          # 2. 其次使用配置定义的 system prompt
                          target_system_prompt = config_prompt
-                         print(f"[AgentAPI] 使用配置定义的 System Prompt")
+                         logger.info(f"[AgentAPI] 使用配置定义的 System Prompt")
 
                     # 应用目标 System Prompt (如果有)
                     # 如果 target_system_prompt 为 None，则保持 messages 中的默认 Prompt (已在 loop 开始时插入)
@@ -1907,23 +1904,24 @@ async def llm_websocket(websocket: WebSocket):
                     inject_resume_to_messages(current_messages)
 
                     # [调试] 显示实际发送给模型的完整 prompt
-                    print(f"\n{'='*80}")
-                    print(f"[调试] 正在发送请求到模型: {curr_conf.get('model', 'Unknown')} (Stream=True)")
-                    print(f"{'='*80}")
-                    print(f"[调试] 当前配置: {curr_conf.get('name', 'Unknown')}")
-                    print(f"[调试] 使用 System Prompt: {config_prompt if (config_prompt and not has_tags) else '否'}")
+                    # [调试] 显示实际发送给模型的完整 prompt
+                    logger.debug(f"\n{'='*80}")
+                    logger.debug(f"[调试] 正在发送请求到模型: {curr_conf.get('model', 'Unknown')} (Stream=True)")
+                    logger.debug(f"{'='*80}")
+                    logger.debug(f"[调试] 当前配置: {curr_conf.get('name', 'Unknown')}")
+                    logger.debug(f"[调试] 使用 System Prompt: {config_prompt if (config_prompt and not has_tags) else '否'}")
                     if has_tags:
-                        print(f"[调试] 身份标签: {tags} (System Prompt 被禁用)")
-                    print(f"[调试] 消息总数: {len(current_messages)}")
-                    print(f"{'-'*80}")
-                    print("[调试] 完整 Prompt 内容:")
-                    print(f"{'-'*80}")
+                        logger.debug(f"[调试] 身份标签: {tags} (System Prompt 被禁用)")
+                    logger.debug(f"[调试] 消息总数: {len(current_messages)}")
+                    logger.debug(f"{'-'*80}")
+                    logger.debug("[调试] 完整 Prompt 内容:")
+                    logger.debug(f"{'-'*80}")
                     for i, msg in enumerate(current_messages):
                         role = msg.get('role', 'unknown')
                         content = msg.get('content', '')
-                        print(f"\n[消息 {i+1}] 角色: {role}")
-                        print(f"[消息 {i+1}] 内容: {content}")
-                    print(f"\n{'='*80}\n")
+                        logger.debug(f"\n[消息 {i+1}] 角色: {role}")
+                        logger.debug(f"[消息 {i+1}] 内容: {content}")
+                    logger.debug(f"\n{'='*80}\n")
 
                     async for chunk in llm_client.chat_stream(current_messages):
                         await websocket.send_json({"type": "chunk", "content": chunk})
@@ -1937,45 +1935,42 @@ async def llm_websocket(websocket: WebSocket):
                         chat_manager.update_chat_messages(chat_id, messages)
 
                 except Exception as e:
-                    print(f"LLM 流式响应错误: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    logger.exception(f"LLM 流式响应错误: {e}")
                     try:
                         await websocket.send_json({"type": "error", "content": f"流式响应错误: {str(e)}"})
                     except Exception as send_error:
-                        print(f"发送错误消息失败: {send_error}")
+                        logger.error(f"发送错误消息失败: {send_error}")
 
     except WebSocketDisconnect:
-        print("LLM WebSocket 连接已断开")
+        logger.info("LLM WebSocket 连接已断开")
         llm_manager.disconnect(websocket)
     except Exception as e:
-        print(f"LLM WebSocket 严重错误: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"LLM WebSocket 严重错误: {e}")
         try:
             llm_manager.disconnect(websocket)
         except Exception as disconnect_error:
-            print(f"断开连接失败: {disconnect_error}")
+            logger.error(f"断开连接失败: {disconnect_error}")
 
 if __name__ == "__main__":
     import uvicorn
     import webbrowser
 
     # Print startup banner
-    print("=" * 60)
-    print("🚀 AST 实时语音转文本与大模型分析系统")
-    print("=" * 60)
-    print(f"[配置] ASR 系统: {'✅ 启用' if not args.no else '❌ 禁用 (--no)'}")
-    print(f"[配置] LLM 客户端: ✅ 启用")
-    print(f"[配置] 服务地址: http://{args.host}:{args.port}")
-    print("=" * 60)
-    print("")
+    # Print startup banner
+    logger.info("=" * 60)
+    logger.info("🚀 AST 实时语音转文本与大模型分析系统")
+    logger.info("=" * 60)
+    logger.info(f"[配置] ASR 系统: {'✅ 启用' if not args.no else '❌ 禁用 (--no)'}")
+    logger.info(f"[配置] LLM 客户端: ✅ 启用")
+    logger.info(f"[配置] 服务地址: http://{args.host}:{args.port}")
+    logger.info("=" * 60)
+    logger.info("")
 
     # Automatically open browser
     try:
         webbrowser.open(f"http://{args.host}:{args.port}")
     except Exception as e:
-        print(f"Failed to open browser: {e}")
+        logger.error(f"Failed to open browser: {e}")
 
     uvicorn.run(app, host=args.host, port=args.port)
 

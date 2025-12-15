@@ -422,36 +422,7 @@ export class LLMManager {
             if (this.wsManager) {
                 console.log('[智能分析] 正在请求服务器开始生成回复...');
 
-                // 如果包含意图识别数据，显示意图识别分析卡片 (Mimic manual Intent Recognition style)
-                if (data.intent_data) {
-                    try {
-                        const modelName = data.intent_data.model_name || data.intent_data.model || 'Wiki_QA';
-
-                        const analyzingDiv = document.createElement('div');
-                        analyzingDiv.className = 'message system-message intent-analysis';
-                        analyzingDiv.dataset.analysisId = `intent-analysis-${Date.now()}`;
-                        // Use the exact same structure as processWithIntentRecognition
-                        analyzingDiv.innerHTML = `
-                            <div class="message-content intent-analysis-card compact">
-                                <div class="intent-meta">
-                                    <div class="intent-model">调用模型：${modelName}</div>
-                                    <div class="intent-status-text intent-status-progress">正在收集上下文...</div>
-                                </div>
-                                <div class="intent-summary" style="display: none;"></div>
-                            </div>
-                        `;
-
-                        if (dom.llmWindow) {
-                            dom.llmWindow.appendChild(analyzingDiv);
-                            dom.llmWindow.scrollTop = dom.llmWindow.scrollHeight;
-                        }
-
-                        this.displayIntentAnalysisResult(data.intent_data, analyzingDiv);
-
-                    } catch (e) {
-                        console.error('[智能分析] 显示意图识别卡片失败:', e);
-                    }
-                }
+                // 语音厅意图识别已在ASR面板展示，LLM窗口不再重复渲染意图总结
 
                 // 创建预响应提示 (Visual feedback)
                 const isMulti = data.is_multi_llm || false;

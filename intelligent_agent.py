@@ -14,8 +14,8 @@ import time
 from html import escape
 from typing import Callable, Dict, List, Optional, Tuple
 
-from llm_client import LLMClient
 from data.prompt import PromptTemplate
+from llm_client import LLMClient
 from logger_config import setup_logger
 
 logger = setup_logger(__name__)
@@ -788,9 +788,17 @@ class AgentManager:
             
             # 检查意图识别结果，如果未检测到技术问题，则终止后续流程
             if intent_result and intent_result.get('success'):
-                summary_xml = intent_result.get('summary_xml', '')
-                if '未检测到技术问题' in summary_xml:
-                    logger.info("[智能分析] 意图识别结果为'未检测到技术问题'，终止后续流程")
+                summary_xml = intent_result.get('summary_xml', '') or ''
+                # 提取核心输出后做正则匹配，避免指令文本干扰
+                summary_texts = []
+                for tag in ("summary", "true_question"):
+                    match = re.search(rf"<{tag}>([\s\S]*?)</{tag}>", summary_xml, re.IGNORECASE)
+                    if match:
+                        summary_texts.append(match.group(1))
+
+                text_to_check = "\n".join(summary_texts) if summary_texts else summary_xml
+                if re.search(r"(无技术问题)", text_to_check):
+                    logger.info("[智能分析] 意图识别结果判定为无技术问题，终止后续流程")
                     should_halt = True
 
         distribution_result = None
@@ -832,16 +840,17 @@ class AgentManager:
         speaker_name: str,
         intent_recognition: bool = False,
         resume_personalization: bool = False,
+        use_think_tank: bool = True,
         status_callback: Optional[Callable[[str, Dict], asyncio.Future]] = None
     ) -> Dict:
-        print(f"[智能分析] 开始三阶段分析，意图识别: {intent_recognition}, 简历个性化: {resume_personalization}")
+        print(f"[智能分析] 开始三阶段分析，意图识别: {intent_recognition}, 简历个性化: {resume_personalization}, 智囊团: {use_think_tank}")
         result = await self.run_pipeline(
             messages,
             speaker_name,
             use_analysis=True,
             use_intent=intent_recognition,
             use_resume=resume_personalization,
-            use_think_tank=True,
+            use_think_tank=use_think_tank,
             bypass_enabled=True,
             force_modules=False,
             status_callback=status_callback

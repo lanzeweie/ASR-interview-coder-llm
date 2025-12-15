@@ -15,6 +15,27 @@ export class WebSocketManager {
         };
         this.agentStatusHandler = null;
         this.analysisFlags = new Map();
+        this.intentModel = null;
+        this.intentModelFetchPromise = null;
+    }
+
+    async fetchIntentModelName() {
+        if (this.intentModel) return this.intentModel;
+        if (this.intentModelFetchPromise) return this.intentModelFetchPromise;
+        this.intentModelFetchPromise = fetch('/api/agent/status')
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                const name = data?.config?.intent_model_name || null;
+                if (name) {
+                    this.intentModel = name;
+                }
+                return this.intentModel || null;
+            })
+            .catch(() => null)
+            .finally(() => {
+                this.intentModelFetchPromise = null;
+            });
+        return this.intentModelFetchPromise;
     }
 
     // ASR WebSocket连接
@@ -318,17 +339,84 @@ export class WebSocketManager {
         if (noteEl) {
             noteEl.innerHTML = '';
 
+            const buildIntentCard = ({ model, status, summary, needsModelUpdate }) => {
+                const statusMap = {
+                    success: '✅ 意图识别完成',
+                    progress: '🔄 正在分析意图...',
+                    error: '⚠️ 意图识别失败'
+                };
+                const statusClass = status ? `status-${status}` : '';
+                const intentDiv = document.createElement('div');
+                intentDiv.className = ['intent-result-compact', statusClass].filter(Boolean).join(' ');
+
+                const safeModel = model || 'Unknown';
+                const statusText = statusMap[status] || 'ℹ️ 状态更新';
+
+                const metaRow = document.createElement('div');
+                metaRow.className = 'intent-meta-compact';
+
+                const labelEl = document.createElement('span');
+                labelEl.className = 'intent-label-compact';
+                labelEl.textContent = `调用模型: ${safeModel}`;
+
+                const statusEl = document.createElement('span');
+                statusEl.className = 'intent-status-compact';
+                statusEl.textContent = statusText;
+
+                metaRow.appendChild(labelEl);
+                metaRow.appendChild(statusEl);
+                intentDiv.appendChild(metaRow);
+
+                if (summary) {
+                    const cleanedSummary = summary.replace(/^意图总结[:：]\s*/i, '');
+                    const summaryRow = document.createElement('div');
+                    summaryRow.className = 'intent-summary-compact';
+
+                    const summaryLabel = document.createElement('span');
+                    summaryLabel.className = 'intent-summary-label';
+                    summaryLabel.textContent = '意图总结';
+
+                    const summaryText = document.createElement('span');
+                    summaryText.className = 'intent-summary-text';
+                    summaryText.textContent = cleanedSummary;
+
+                    summaryRow.appendChild(summaryLabel);
+                    summaryRow.appendChild(summaryText);
+                    intentDiv.appendChild(summaryRow);
+                }
+
+                // 如果需要异步补全模型名，尝试获取后更新
+                if (needsModelUpdate) {
+                    this.fetchIntentModelName().then(fetched => {
+                        if (fetched) {
+                            this.intentModel = fetched;
+                            labelEl.textContent = `调用模型: ${fetched}`;
+                        }
+                    });
+                }
+
+                return intentDiv;
+            };
+
+            // 捕获/缓存模型，确保一开始就显示真实模型
+            const configModel = (window.intentRecognitionConfig && window.intentRecognitionConfig.model_name) || null;
+            const incomingModel = data.model || data.intent_model || (data.intent_info && data.intent_info.model);
+            if (incomingModel) {
+                this.intentModel = incomingModel;
+            } else if (!this.intentModel && configModel) {
+                this.intentModel = configModel;
+            }
+            const resolvedModel = incomingModel || this.intentModel || configModel || 'Unknown';
+            const needsModelUpdate = resolvedModel === 'Unknown';
+
             // 显示意图识别进行中状态
             if (data.analysis_status === 'intent_started') {
-                const model = data.intent_model || 'Unknown';
-                const intentDiv = document.createElement('div');
-                intentDiv.className = 'intent-result-compact'; // Updated class
-                intentDiv.innerHTML = `
-                    <div class="intent-meta-compact">
-                        <span class="intent-label-compact">调用模型: ${model}</span>
-                        <span class="intent-status-compact" style="color: var(--accent-primary);">🔄 正在分析意图...</span>
-                    </div>
-                `;
+                const intentDiv = buildIntentCard({
+                    model: resolvedModel,
+                    status: 'progress',
+                    summary: '',
+                    needsModelUpdate
+                });
                 noteEl.appendChild(intentDiv);
                 noteEl.style.display = 'block';
                 return;
@@ -343,27 +431,25 @@ export class WebSocketManager {
 
             // 显示意图识别结果
             if (data.intent_info) {
-                const { model, summary } = data.intent_info;
-                const intentDiv = document.createElement('div');
-                intentDiv.className = 'intent-result-compact'; // Updated class
-
-                // Format summary to include label "意图总结: " if not present
-                let displaySummary = summary;
-                if (!displaySummary.startsWith('意图总结') && !displaySummary.startsWith('Intent Summary')) {
-                    displaySummary = `意图总结: ${displaySummary}`;
-                }
-
-                intentDiv.innerHTML = `
-                    <div class="intent-meta-compact">
-                        <span class="intent-label-compact">调用模型: ${model}</span>
-                        <span class="intent-status-compact">✅ 意图识别完成</span>
-                    </div>
-                    <div class="intent-summary-compact">${displaySummary}</div>
-                `;
+                const { summary } = data.intent_info;
+                const intentDiv = buildIntentCard({
+                    model: resolvedModel,
+                    status: 'success',
+                    summary,
+                    needsModelUpdate
+                });
+                noteEl.appendChild(intentDiv);
+            } else if (data.analysis_status === 'intent_error' || data.analysis_status === 'error' || data.intent_error) {
+                const intentDiv = buildIntentCard({
+                    model: resolvedModel,
+                    status: 'error',
+                    summary: data.intent_error || '意图识别出现问题，请稍后重试。',
+                    needsModelUpdate
+                });
                 noteEl.appendChild(intentDiv);
             }
 
-            noteEl.style.display = (noteText || data.intent_info) ? 'block' : 'none';
+            noteEl.style.display = (noteText || data.intent_info || data.analysis_status === 'intent_error' || data.intent_error) ? 'block' : 'none';
         }
     }
 }

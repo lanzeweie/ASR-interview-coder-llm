@@ -303,6 +303,7 @@ class TriggerManager:
             config_data = load_config()
             agent_config = config_data.get("agent_config", {})
             intent_recognition_enabled = agent_config.get("intent_recognition_enabled", False)
+            think_tank_enabled = agent_config.get("think_tank_enabled", False)
 
             # 定义进度回调
             async def progress_callback(stage: str, data: Dict):
@@ -331,6 +332,7 @@ class TriggerManager:
                 messages,
                 speaker_name,
                 intent_recognition=intent_recognition_enabled,
+                use_think_tank=think_tank_enabled,
                 status_callback=progress_callback
             )
             result['analysis_id'] = analysis_id or self.state.current_analysis_id
