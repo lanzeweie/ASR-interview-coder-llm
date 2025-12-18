@@ -507,7 +507,7 @@ export class LLMManager {
             analyzingDiv.innerHTML = `
                 <div class="message-content intent-analysis-card compact">
                     <div class="intent-meta">
-                        <div class="intent-model">调用模型：待定</div>
+                        <!-- 不显示模型信息，等待后端返回真实数据 -->
                         <div class="intent-status-text intent-status-progress">正在收集上下文...</div>
                     </div>
                     <div class="intent-summary" style="display: none;"></div>
@@ -521,10 +521,11 @@ export class LLMManager {
 
             // 4. 调用意图识别API（使用后端的 /api/agent/analyze 端点）
             console.log('[LLM] 调用智能分析API...');
-            // 获取意图识别配置
+            // 获取意图识别配置 - 但不显示，等待后端返回真实信息
             const intentConfig = window.intentRecognitionConfig || { model_type: 'local', model_name: 'Qwen3-0.6B' };
             console.log('[LLM] 意图识别配置:', intentConfig);
-            this.updateIntentModelInfo(analyzingDiv, intentConfig);
+            // 不显示模型名，等待后端返回真实信息
+            // this.updateIntentModelInfo(analyzingDiv, intentConfig);
             this.updateIntentStatus(analyzingDiv, '正在调用模型，生成结论中...', 'progress');
 
             const response = await fetch('/api/agent/analyze', {
@@ -744,9 +745,11 @@ export class LLMManager {
         const modelEl = containerDiv.querySelector('.intent-model');
         if (!modelEl) return;
         if (!intentConfig) {
-            modelEl.textContent = '调用模型：未指定';
+            // 没有配置时，隐藏模型信息
+            modelEl.style.display = 'none';
             return;
         }
+        modelEl.style.display = 'block';
         modelEl.textContent = `调用模型：${intentConfig.model_type}/${intentConfig.model_name}`;
     }
 

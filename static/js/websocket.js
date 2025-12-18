@@ -349,21 +349,23 @@ export class WebSocketManager {
                 const intentDiv = document.createElement('div');
                 intentDiv.className = ['intent-result-compact', statusClass].filter(Boolean).join(' ');
 
-                const safeModel = model || 'Unknown';
                 const statusText = statusMap[status] || 'ℹ️ 状态更新';
 
                 const metaRow = document.createElement('div');
                 metaRow.className = 'intent-meta-compact';
 
-                const labelEl = document.createElement('span');
-                labelEl.className = 'intent-label-compact';
-                labelEl.textContent = `调用模型: ${safeModel}`;
+                // 只有当模型名不为空时才显示模型信息
+                if (model && model.trim()) {
+                    const labelEl = document.createElement('span');
+                    labelEl.className = 'intent-label-compact';
+                    labelEl.textContent = `调用模型: ${model}`;
+                    metaRow.appendChild(labelEl);
+                }
 
                 const statusEl = document.createElement('span');
                 statusEl.className = 'intent-status-compact';
                 statusEl.textContent = statusText;
 
-                metaRow.appendChild(labelEl);
                 metaRow.appendChild(statusEl);
                 intentDiv.appendChild(metaRow);
 
@@ -386,11 +388,14 @@ export class WebSocketManager {
                 }
 
                 // 如果需要异步补全模型名，尝试获取后更新
-                if (needsModelUpdate) {
+                if (needsModelUpdate && model) {
                     this.fetchIntentModelName().then(fetched => {
                         if (fetched) {
                             this.intentModel = fetched;
-                            labelEl.textContent = `调用模型: ${fetched}`;
+                            const labelEl = metaRow.querySelector('.intent-label-compact');
+                            if (labelEl) {
+                                labelEl.textContent = `调用模型: ${fetched}`;
+                            }
                         }
                     });
                 }
@@ -399,23 +404,33 @@ export class WebSocketManager {
             };
 
             // 捕获/缓存模型，确保一开始就显示真实模型
-            const configModel = (window.intentRecognitionConfig && window.intentRecognitionConfig.model_name) || null;
-            const incomingModel = data.model || data.intent_model || (data.intent_info && data.intent_info.model);
-            if (incomingModel) {
+            // 优先从 intentRecognitionConfig 获取，这是页面加载时从后端获取的配置
+            const intentConfig = window.intentRecognitionConfig || {};
+            const configModel = intentConfig.model_name || null;
+            // 后端消息中可能包含的模型字段
+            const incomingModel = data.analysis_model || data.intent_model || data.model || (data.intent_info && data.intent_info.model);
+
+            // 更新缓存：优先使用后端返回的模型名，其次使用配置中的
+            if (incomingModel && incomingModel !== 'Unknown') {
                 this.intentModel = incomingModel;
             } else if (!this.intentModel && configModel) {
                 this.intentModel = configModel;
             }
-            const resolvedModel = incomingModel || this.intentModel || configModel || 'Unknown';
+
+            // 最终解析模型名：后端返回 > 缓存 > 配置 > Unknown
+            const resolvedModel = (incomingModel && incomingModel !== 'Unknown')
+                ? incomingModel
+                : (this.intentModel || configModel || 'Unknown');
             const needsModelUpdate = resolvedModel === 'Unknown';
 
-            // 显示意图识别进行中状态
+            // 显示意图识别进行中状态 - 不显示模型名，等待后端返回真实信息
             if (data.analysis_status === 'intent_started') {
+                // 只显示进度状态，不显示模型名
                 const intentDiv = buildIntentCard({
-                    model: resolvedModel,
+                    model: '',  // 不显示模型名
                     status: 'progress',
                     summary: '',
-                    needsModelUpdate
+                    needsModelUpdate: false  // 不需要异步更新
                 });
                 noteEl.appendChild(intentDiv);
                 noteEl.style.display = 'block';
@@ -429,22 +444,24 @@ export class WebSocketManager {
                 noteEl.appendChild(textDiv);
             }
 
-            // 显示意图识别结果
+            // 显示意图识别结果 - 只有在获得真实模型名时才显示
             if (data.intent_info) {
                 const { summary } = data.intent_info;
+                // 只有当模型名不是 "Unknown" 且不为空时才显示模型信息
+                const modelToShow = (resolvedModel && resolvedModel !== 'Unknown') ? resolvedModel : '';
                 const intentDiv = buildIntentCard({
-                    model: resolvedModel,
+                    model: modelToShow,
                     status: 'success',
                     summary,
-                    needsModelUpdate
+                    needsModelUpdate: false  // 已有真实数据，无需异步更新
                 });
                 noteEl.appendChild(intentDiv);
             } else if (data.analysis_status === 'intent_error' || data.analysis_status === 'error' || data.intent_error) {
                 const intentDiv = buildIntentCard({
-                    model: resolvedModel,
+                    model: '',
                     status: 'error',
                     summary: data.intent_error || '意图识别出现问题，请稍后重试。',
-                    needsModelUpdate
+                    needsModelUpdate: false
                 });
                 noteEl.appendChild(intentDiv);
             }

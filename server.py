@@ -2,9 +2,9 @@ import argparse
 import asyncio
 import base64
 import json
+import logging
 import os
 import re
-import logging
 import threading
 import time
 import wave
@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 # --- Logger Setup ---
 try:
-    from logger_config import setup_logger, set_global_log_level
+    from logger_config import set_global_log_level, setup_logger
     log_date = time.strftime("%Y%m%d")
     logger = setup_logger(__name__, log_file=f"logs/{log_date}_server.log")
 except ImportError:
@@ -50,11 +50,9 @@ except ImportError:
     RealTimeASR_SV = None
 
 from chat_manager import ChatManager
-from llm_client import LLMClient
-from chat_manager import ChatManager
+from job_manager import JobManager
 from llm_client import LLMClient
 from resume_manager import ResumeManager
-from job_manager import JobManager
 
 try:
     from intelligent_agent import agent_manager, format_intent_analysis
@@ -91,6 +89,10 @@ LEGACY_IDENTITY_MAP = {
     "精简辅助者": "concise_assistant",
     "资深求职着": "guide"
 }
+
+# 身份角色读写缓存与锁，避免并发读到半写状态
+THINK_TANK_ROLE_CACHE: list[dict] = []
+THINK_TANK_ROLE_LOCK = threading.Lock()
 
 
 def normalize_identity_identifier(value: str | None) -> str:
@@ -175,46 +177,66 @@ def select_identity_role(tags: list[str], lookup: dict[str, dict]) -> tuple[str 
 
 
 def load_think_tank_roles() -> list[dict]:
-    if not os.path.exists(AGENT_ROLE_FILE):
-        return []
-    try:
-        with open(AGENT_ROLE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as exc:
-        logger.error(f"[智囊团] 加载身份失败: {exc}")
-        return []
+    with THINK_TANK_ROLE_LOCK:
+        if not os.path.exists(AGENT_ROLE_FILE):
+            # 无文件时返回缓存（若有）以避免空角色导致身份缺失
+            if THINK_TANK_ROLE_CACHE:
+                logger.warning("[智囊团] 身份文件缺失，使用缓存角色定义")
+                return list(THINK_TANK_ROLE_CACHE)
+            return []
+        try:
+            with open(AGENT_ROLE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as exc:
+            logger.error(f"[智囊团] 加载身份失败: {exc}")
+            if THINK_TANK_ROLE_CACHE:
+                logger.warning("[智囊团] 使用上次成功的缓存角色定义")
+                return list(THINK_TANK_ROLE_CACHE)
+            return []
 
-    roles: list[dict] = []
-    needs_resave = False
-    for raw_role in data.get("think_tank_roles", []):
-        sanitized = sanitize_role_definition(raw_role)
-        if not sanitized:
-            continue
-        roles.append(sanitized)
-        if (
-            raw_role.get("tag_key") is not None
-            or normalize_identity_identifier(raw_role.get("id")) != sanitized["id"]
-            or (raw_role.get("name") or "").strip() != sanitized["name"]
-            or (raw_role.get("prompt") or "").strip() != sanitized["prompt"]
-        ):
-            needs_resave = True
+        roles: list[dict] = []
+        needs_resave = False
+        for raw_role in data.get("think_tank_roles", []):
+            sanitized = sanitize_role_definition(raw_role)
+            if not sanitized:
+                continue
+            roles.append(sanitized)
+            if (
+                raw_role.get("tag_key") is not None
+                or normalize_identity_identifier(raw_role.get("id")) != sanitized["id"]
+                or (raw_role.get("name") or "").strip() != sanitized["name"]
+                or (raw_role.get("prompt") or "").strip() != sanitized["prompt"]
+            ):
+                needs_resave = True
 
-    if needs_resave:
-        save_think_tank_roles(roles)
+        if needs_resave:
+            save_think_tank_roles(roles)
 
-    return roles
+        # 只有成功解析后才刷新缓存
+        THINK_TANK_ROLE_CACHE.clear()
+        THINK_TANK_ROLE_CACHE.extend(roles)
+        return roles
 
 
 def save_think_tank_roles(roles: list[dict]):
-    os.makedirs(os.path.dirname(AGENT_ROLE_FILE), exist_ok=True)
-    sanitized_roles = []
-    for role in roles:
-        sanitized = sanitize_role_definition(role)
-        if sanitized:
-            sanitized_roles.append(sanitized)
-    payload = {"think_tank_roles": sanitized_roles}
-    with open(AGENT_ROLE_FILE, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    with THINK_TANK_ROLE_LOCK:
+        os.makedirs(os.path.dirname(AGENT_ROLE_FILE), exist_ok=True)
+        sanitized_roles = []
+        for role in roles:
+            sanitized = sanitize_role_definition(role)
+            if sanitized:
+                sanitized_roles.append(sanitized)
+        payload = {"think_tank_roles": sanitized_roles}
+
+        # 原子写避免半写被读取
+        tmp_path = f"{AGENT_ROLE_FILE}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, AGENT_ROLE_FILE)
+
+        # 写成功后刷新缓存
+        THINK_TANK_ROLE_CACHE.clear()
+        THINK_TANK_ROLE_CACHE.extend(sanitized_roles)
 
 
 def normalize_config_tags(config: dict) -> dict:
@@ -353,6 +375,11 @@ async def agent_analysis_callback(result, messages, speaker_name):
     try:
         phase1_result = result.get('phase1', {})
         is_needed = phase1_result.get('is', False)
+        distribution_result = result.get('distribution', {}) or {}
+        # 如果意图识别判定为“无技术问题”等导致分发阶段中止，则直接阻断后续流程
+        if distribution_result.get('mode') == 'halt':
+            is_needed = False
+
         analysis_id = result.get('analysis_id')
         reason = phase1_result.get('reason', '')
         summary = result.get('analysis_summary')
@@ -416,7 +443,6 @@ async def agent_analysis_callback(result, messages, speaker_name):
                 logger.info(f"[智能分析] 准备发送 {len(recent_messages)} 条消息给AI")
 
                 # 获取分发配置
-                distribution_result = result.get('distribution', {})
                 distribution_mode = distribution_result.get('mode', 'single')
                 targets = distribution_result.get('targets', [])
                 intent_result = distribution_result.get('intent')
@@ -425,20 +451,37 @@ async def agent_analysis_callback(result, messages, speaker_name):
                 system_prompt = f"你是AI助手，帮助{speaker_name}提供技术支持。"
                 if intent_result and intent_result.get("summary_xml"):
                     intent_summary_xml = format_intent_analysis(intent_result)
-                    
+
                     # 提取摘要用于显示，避免在UI显示原始XML
                     import re
                     match = re.search(r'<summary>(.*?)</summary>', intent_summary_xml, re.DOTALL)
                     summary_text = match.group(1).strip() if match else intent_summary_xml
-                    
+
                     # 构造人类可读的提示
                     display_content = f"【意图识别分析】\n{summary_text}"
-                    
+
+                    history_lines = []
+                    for msg in recent_messages:
+                        speaker_label = msg.get('speaker') or ('助手' if msg.get('role') == 'assistant' else '用户')
+                        content = msg.get('content') or msg.get('text') or ''
+                        if not content:
+                            continue
+                        history_lines.append(f"{speaker_label}: {content}")
+
+                    history_block = "\n".join(history_lines).strip()
+
                     formatted_messages = [
-                        {"role": "system", "content": system_prompt + " 请根据意图识别分析结果直接给出建议。"},
+                        {"role": "system", "content": system_prompt + " 请结合意图识别分析结果与原始对话内容，提供直接可执行的建议。"},
                         {"role": "user", "content": display_content}
                     ]
-                    logger.info("[智能分析] 使用意图识别结果作为唯一上下文发送给下一阶段AI")
+
+                    if history_block:
+                        formatted_messages.append({
+                            "role": "user",
+                            "content": f"【原始对话记录】\n{history_block}"
+                        })
+
+                    logger.info("[智能分析] 使用意图识别结果并附带原始对话上下文发送给下一阶段AI")
                 else:
                     formatted_messages = [
                         {"role": "system", "content": f"你是AI助手，帮助{speaker_name}分析以下对话。{speaker_name}是主人公。"}
@@ -782,6 +825,14 @@ async def startup_event():
             logger.info("[配置] 已跳过智能分析初始化 (--no)")
         elif not AGENT_AVAILABLE:
             logger.info("[配置] 智能 Agent 模块不可用")
+
+    # 初始化完成后自动打开浏览器
+    import webbrowser
+    try:
+        webbrowser.open(f"http://127.0.0.1:{args.port}")
+        logger.info("[成功] 浏览器已自动打开")
+    except Exception as e:
+        logger.error(f"[错误] 无法打开浏览器: {e}")
 
 @app.get("/")
 async def get():
@@ -1731,6 +1782,8 @@ async def llm_websocket(websocket: WebSocket):
                     # 处理单模型模式
                     # 修复：处理当前配置的 System Prompt
                     current_messages = [m.copy() for m in messages]
+                    if not curr_conf:
+                        logger.warning("[智能分析] 当前配置为空，无法应用系统提示或身份标签")
                     config_prompt = (curr_conf.get("system_prompt", "") if curr_conf else "").strip()
 
                     # 检查是否选择了身份标签
@@ -1740,6 +1793,11 @@ async def llm_websocket(websocket: WebSocket):
                     role_lookup = build_identity_lookup(roles)
                     active_tag, active_role, disabled_candidates = select_identity_role(normalized_tags, role_lookup)
                     identity_applied = False
+                    if normalized_tags and not active_role:
+                        if disabled_candidates:
+                            logger.warning(f"[智能分析] 标签 {normalized_tags} 被禁用，跳过身份 Prompt")
+                        else:
+                            logger.warning(f"[智能分析] 标签 {normalized_tags} 未找到可用身份 Prompt，角色数={len(role_lookup)}")
 
                     # 应用 System Prompt
                     if active_role:
@@ -1953,9 +2011,7 @@ async def llm_websocket(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    import webbrowser
 
-    # Print startup banner
     # Print startup banner
     logger.info("=" * 60)
     logger.info("🚀 AST 实时语音转文本与大模型分析系统")
@@ -1965,12 +2021,6 @@ if __name__ == "__main__":
     logger.info(f"[配置] 服务地址: http://{args.host}:{args.port}")
     logger.info("=" * 60)
     logger.info("")
-
-    # Automatically open browser
-    try:
-        webbrowser.open(f"http://{args.host}:{args.port}")
-    except Exception as e:
-        logger.error(f"Failed to open browser: {e}")
 
     uvicorn.run(app, host=args.host, port=args.port)
 

@@ -774,11 +774,16 @@ class AgentManager:
         if use_intent and not should_halt:
             logger.info("[意图识别] 模块启用，即将运行 IntentRecognitionAgent")
             if status_callback:
-                intent_model = (
-                    self.intent_agent.config.get('model_name') 
-                    or self.intent_agent.config.get('model') 
-                    or getattr(self.intent_agent, 'model_name', 'Unknown')
-                ) if self.intent_agent else "Unknown"
+                # 获取意图识别使用的模型名称
+                intent_model = "Unknown"
+                if self.intent_agent:
+                    intent_model = (
+                        self.intent_agent.config.get('model_name')
+                        or self.intent_agent.config.get('model')
+                        or getattr(self.intent_agent, 'model_name', None)
+                        or "Unknown"
+                    )
+                logger.debug(f"[意图识别] 模型名称: {intent_model}, config: {self.intent_agent.config if self.intent_agent else 'None'}")
                 if asyncio.iscoroutinefunction(status_callback):
                     await status_callback("intent_started", {"model": intent_model})
                 else:
