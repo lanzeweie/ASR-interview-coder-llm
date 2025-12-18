@@ -1,4 +1,5 @@
 import os
+import os
 import time
 import wave
 import threading
@@ -28,6 +29,7 @@ class RealTimeASR_SV:
         self.VOICEPRINT_DIR = "./voiceprints"
         self.SV_THRESHOLD = 0.35  # 声纹识别阈值
         self.on_message_callback = on_message_callback
+        self.listening_event = threading.Event()
         
         # 初始化目录
         os.makedirs(self.OUTPUT_DIR, exist_ok=True)
@@ -307,6 +309,19 @@ class RealTimeASR_SV:
                 "text": text
             })
 
+    def start_listening(self):
+        """开启语音监听"""
+        self.listening_event.set()
+        logger.info("🎤 ASR 监听已开启")
+
+    def stop_listening(self):
+        """暂停语音监听"""
+        self.listening_event.clear()
+        logger.info("⏸️ ASR 监听已暂停")
+
+    def is_listening(self):
+        return self.listening_event.is_set()
+
     def run(self):
         """主循环：录音 + VAD 检测"""
         p = pyaudio.PyAudio()
@@ -316,7 +331,7 @@ class RealTimeASR_SV:
                         input=True,
                         frames_per_buffer=self.CHUNK)
 
-        logger.info("\n=== 系统已启动，正在监听... (按 Ctrl+C 停止) ===\n")
+        logger.info("\n=== 系统已启动，等待开启监听... (按 Ctrl+C 停止) ===\n")
         
         audio_buffer = []
         is_speaking = False
@@ -325,6 +340,13 @@ class RealTimeASR_SV:
 
         try:
             while self.running:
+                if not self.listening_event.is_set():
+                    audio_buffer = []
+                    is_speaking = False
+                    silence_counter = 0
+                    time.sleep(0.05)
+                    continue
+
                 data = stream.read(self.CHUNK, exception_on_overflow=False)
                 
                 is_active = self.check_vad(data)

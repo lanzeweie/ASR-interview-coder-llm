@@ -369,6 +369,31 @@ def asr_callback(message):
 # We need a reference to the main event loop to schedule tasks from the ASR thread
 main_event_loop = None
 
+
+def build_asr_status_payload(message: str | None = None):
+    initialized = asr_system is not None
+    listening = initialized and asr_system.is_listening()
+    status_message = message or (
+        "请使用正常模式启动服务器以启用实时语音转写功能"
+        if not initialized
+        else ("实时语音转写已暂停" if not listening else "实时语音转写功能已启用")
+    )
+
+    return {
+        "time": time.strftime("%H:%M:%S"),
+        "speaker": "系统",
+        "text": status_message,
+        "asr_status": {
+            "initialized": initialized,
+            "listening": listening,
+            "message": status_message
+        }
+    }
+
+
+async def broadcast_asr_status(message: str | None = None):
+    await manager.broadcast(build_asr_status_payload(message))
+
 # --- 智能分析回调处理 ---
 async def agent_analysis_callback(result, messages, speaker_name):
     """智能分析完成回调"""
@@ -844,15 +869,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
 
     # 立即发送 ASR 系统状态给前端
-    await websocket.send_json({
-        "time": "00:00:00",
-        "speaker": "系统",
-        "text": "ASR 系统未初始化" if not asr_system else "ASR 系统已就绪",
-        "asr_status": {
-            "initialized": asr_system is not None,
-            "message": "请使用正常模式启动服务器以启用实时语音转写功能" if not asr_system else "实时语音转写功能已启用"
-        }
-    })
+    await websocket.send_json(build_asr_status_payload())
 
     try:
         while True:
@@ -860,6 +877,25 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+@app.post("/api/asr/start")
+async def start_asr_listening():
+    if not asr_system:
+        raise HTTPException(status_code=503, detail="ASR 系统未初始化")
+
+    asr_system.start_listening()
+    await broadcast_asr_status("实时语音转写已启用")
+    return {"status": "success", "listening": asr_system.is_listening()}
+
+
+@app.post("/api/asr/stop")
+async def stop_asr_listening():
+    if not asr_system:
+        raise HTTPException(status_code=503, detail="ASR 系统未初始化")
+
+    asr_system.stop_listening()
+    await broadcast_asr_status("实时语音转写已暂停")
+    return {"status": "success", "listening": asr_system.is_listening()}
 
 # --- LLM Endpoints ---
 
@@ -1052,6 +1088,9 @@ async def get_agent_status():
 
     config_data = load_config()
     agent_config = config_data.get("agent_config", {})
+    if "intent_manual_history_limit" not in agent_config:
+        # 为前端提供默认值，避免未配置时缺少字段
+        agent_config["intent_manual_history_limit"] = 20
 
     return {
         "available": True,
@@ -1134,6 +1173,14 @@ async def update_agent_config(data: dict = Body(...)):
         
     if "intent_model_type" in data:
         agent_config["intent_model_type"] = data["intent_model_type"]
+
+    if "intent_manual_history_limit" in data:
+        try:
+            limit_value = int(data["intent_manual_history_limit"])
+            agent_config["intent_manual_history_limit"] = max(1, limit_value)
+        except (TypeError, ValueError):
+            # 保留已有值或回退默认值，避免写入非法数据
+            agent_config["intent_manual_history_limit"] = agent_config.get("intent_manual_history_limit", 20)
 
     # Update trigger manager thresholds if changed
     min_chars = agent_config.get("min_characters", 10)

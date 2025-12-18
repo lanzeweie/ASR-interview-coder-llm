@@ -95,8 +95,14 @@ export class ConfigManager {
 
             this.renderConfigList();
 
-            // Select current config by default if editingConfigName is not set
-            if (!this.editingConfigName && this.currentConfigName) {
+            // 按优先级选中：正在编辑的配置 -> 当前配置 -> 列表第一个
+            const preferredName = this.editingConfigName;
+            const hasPreferred = preferredName && this.configs.some(c => c.name === preferredName);
+            const hasCurrent = this.currentConfigName && this.configs.some(c => c.name === this.currentConfigName);
+
+            if (hasPreferred) {
+                this.selectConfigToEdit(preferredName);
+            } else if (hasCurrent) {
                 this.selectConfigToEdit(this.currentConfigName);
             } else if (this.configs.length > 0) {
                 this.selectConfigToEdit(this.configs[0].name);
@@ -1122,6 +1128,11 @@ export class ConfigManager {
                 }
             }
 
+            const manualHistoryLimitRaw = parseInt(dom.intentManualHistoryInput?.value, 10);
+            const intentManualHistoryLimit = Number.isFinite(manualHistoryLimitRaw) && manualHistoryLimitRaw > 0
+                ? manualHistoryLimitRaw
+                : 20;
+
             // 获取思考模式状态
             const agentThinkingEnabled = dom.agentEnableThinkingBtn ? dom.agentEnableThinkingBtn.classList.contains('active') : false;
             const intentThinkingEnabled = dom.intentRecognitionEnableThinkingBtn ? dom.intentRecognitionEnableThinkingBtn.classList.contains('active') : false;
@@ -1138,6 +1149,7 @@ export class ConfigManager {
                 intent_model_type: intentModelType,
                 intent_model_name: intentModelName,
                 intent_enable_thinking: intentThinkingEnabled,
+                intent_manual_history_limit: intentManualHistoryLimit,
                 // 保持当前的启用状态
                 intent_recognition_enabled: window.intentRecognitionEnabled
             };
@@ -1156,6 +1168,7 @@ export class ConfigManager {
                     model_type: intentModelType,
                     model_name: intentModelName
                 };
+                window.intentManualHistoryLimit = intentManualHistoryLimit;
                 return true;
             } else {
                 return false;
@@ -1427,6 +1440,16 @@ export class ConfigManager {
                 model_name: agentConfig.intent_model_name || 'Qwen3-0.6B',
                 enable_thinking: agentConfig.intent_enable_thinking === true
             };
+
+            // 语音厅手动发送使用的历史条数（仅手动发送时生效）
+            const manualHistoryLimit = Math.max(
+                1,
+                parseInt(agentConfig.intent_manual_history_limit, 10) || 20
+            );
+            window.intentManualHistoryLimit = manualHistoryLimit;
+            if (dom.intentManualHistoryInput) {
+                dom.intentManualHistoryInput.value = manualHistoryLimit;
+            }
 
             // 填充模型类型选择框
             const typeSelect = document.getElementById('intent-recognition-model-type-select');

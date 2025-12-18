@@ -532,6 +532,16 @@
                                     <div class="form-hint">选择用于意图识别的小模型（建议使用轻量级模型）</div>
                                 </div>
 
+                                <div class="form-group">
+                                    <label>语音厅手动发送历史条数</label>
+                                    <div class="input-group">
+                                        <input type="number" id="intent-manual-history-limit" min="1" max="200" value="20"
+                                            class="form-input">
+                                        <span class="input-suffix">条</span>
+                                    </div>
+                                    <div class="form-hint">仅在语音厅点击“发送全部到AI”且启用意图识别时生效，从最新消息向前取指定条数；若已开启智能分析则由智能分析自动管控。</div>
+                                </div>
+
                                 <div class="form-group" id="intent-recognition-enable-thinking-group"
                                     style="display: none;">
                                     <button type="button" id="intent-recognition-enable-thinking-btn"

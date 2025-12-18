@@ -366,11 +366,21 @@ export class ChatManager {
             return;
         }
 
+        const shouldLimitForIntent = window.intentRecognitionEnabled === true;
+        const manualHistoryLimit = Math.max(1, parseInt(window.intentManualHistoryLimit, 10) || 20);
+
         // 提取完整的消息信息（说话人、时间、内容）
-        const messageElements = dom.asrWindow.querySelectorAll('.message');
+        const messageElements = Array.from(dom.asrWindow.querySelectorAll('.message'));
+        let targetElements = messageElements;
+
+        // 仅在启用意图识别且手动发送时限制语音厅历史条数，按最新向前取
+        if (shouldLimitForIntent && messageElements.length > manualHistoryLimit) {
+            targetElements = messageElements.slice(-manualHistoryLimit);
+        }
+
         const formattedMessages = [];
 
-        messageElements.forEach(msgEl => {
+        targetElements.forEach(msgEl => {
             // 跳过系统消息（如果有特殊标识）
             if (msgEl.classList.contains('system-message') && !msgEl.classList.contains('agent-analysis')) {
                 return;

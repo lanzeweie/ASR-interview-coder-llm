@@ -1373,54 +1373,51 @@ export class UIManager {
     async toggleASRListening() {
         const toggleBtn = document.getElementById('asr-toggle-listening-btn');
         const visualizer = document.getElementById('asr-mic-visualizer');
-        const playIcon = toggleBtn.querySelector('.icon-play');
-        const stopIcon = toggleBtn.querySelector('.icon-stop');
+        if (!toggleBtn) return;
+        const isListening = this.managers.websocket.getASRListeningStatus();
+        const isInitialized = this.managers.websocket.getASRInitializedStatus();
 
-        // Check if currently connected
-        const isConnected = this.managers.websocket.getConnectionStatus().asr;
+        if (isListening) {
+            try {
+                const resp = await fetch('/api/asr/stop', { method: 'POST' });
+                if (!resp.ok) {
+                    const errorText = await resp.text();
+                    throw new Error(errorText || '后端响应异常');
+                }
+                this.managers.websocket.setASRListeningState(false);
+                this.managers.websocket.updateASRStatus(isInitialized);
+                showToast('已停止监听', 'info');
+            } catch (err) {
+                console.error("Failed to stop ASR listening:", err);
+                showToast('无法停止监听: ' + (err.message || '未知错误'), 'error');
+            }
+            return;
+        }
 
-        if (isConnected) {
-            // Stop
-            this.managers.websocket.disconnectASR();
+        try {
+            if (!this.managers.websocket.getConnectionStatus().asr) {
+                this.managers.websocket.connectASR();
+            }
+
+            const resp = await fetch('/api/asr/start', { method: 'POST' });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || data.listening !== true) {
+                throw new Error(data?.detail || '后端未就绪');
+            }
+
+            this.managers.websocket.setASRListeningState(true);
+            this.managers.websocket.updateASRStatus(true);
+            showToast('正在监听...', 'success');
+        } catch (err) {
+            console.error("Failed to start ASR:", err);
+            this.managers.websocket.setASRListeningState(false);
+            this.managers.websocket.updateASRStatus(isInitialized);
             this.stopASRVisualizer();
-
-            // UI Update
             if (visualizer) {
                 visualizer.style.display = 'none';
                 visualizer.classList.remove('active');
             }
-            if (playIcon) playIcon.style.display = 'block';
-            if (stopIcon) stopIcon.style.display = 'none';
-            toggleBtn.classList.remove('active');
-            toggleBtn.title = "开始监听";
-
-            showToast('已停止监听', 'info');
-        } else {
-            // Start
-            try {
-                this.managers.websocket.connectASR();
-                await this.startASRVisualizer();
-
-                // UI Update
-                if (visualizer) {
-                    visualizer.style.display = 'flex';
-                    // Trigger reflow/anim
-                    setTimeout(() => { visualizer.classList.add('active'); }, 10);
-                }
-
-                if (playIcon) playIcon.style.display = 'none';
-                if (stopIcon) stopIcon.style.display = 'block';
-                toggleBtn.classList.add('active');
-                toggleBtn.title = "停止监听";
-
-                showToast('正在监听...', 'success');
-            } catch (err) {
-                console.error("Failed to start ASR:", err);
-                showToast('无法启动监听: ' + (err.message || '未知错误'), 'error');
-                // Cleanup if failed
-                this.managers.websocket.disconnectASR();
-                this.stopASRVisualizer();
-            }
+            showToast('无法启动监听: ' + (err.message || '未知错误'), 'error');
         }
     }
 

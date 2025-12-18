@@ -13,6 +13,8 @@ export class WebSocketManager {
             asr: false,
             llm: false
         };
+        this.asrInitialized = false;
+        this.asrListening = false;
         this.agentStatusHandler = null;
         this.analysisFlags = new Map();
         this.intentModel = null;
@@ -59,6 +61,8 @@ export class WebSocketManager {
                 // 如果是初始状态消息，更新UI
                 if (data.asr_status) {
                     const asrInitialized = data.asr_status.initialized;
+                    this.asrInitialized = asrInitialized;
+                    this.asrListening = data.asr_status.listening === true;
                     this.updateASRStatus(asrInitialized);
                 } else {
                     // 正常的ASR消息
@@ -72,6 +76,8 @@ export class WebSocketManager {
         this.asrSocket.onclose = () => {
             console.log('[ASR] WebSocket 连接已断开');
             this.isConnected.asr = false;
+            this.asrInitialized = false;
+            this.asrListening = false;
             this.updateASRStatus(false);
             // 自动重连
             setTimeout(() => this.connectASR(), 3000);
@@ -80,6 +86,8 @@ export class WebSocketManager {
         this.asrSocket.onerror = () => {
             console.log('[ASR] WebSocket 连接错误');
             this.isConnected.asr = false;
+            this.asrInitialized = false;
+            this.asrListening = false;
             this.updateASRStatus(false);
         };
     }
@@ -92,6 +100,7 @@ export class WebSocketManager {
             this.asrSocket = null;
         }
         this.isConnected.asr = false;
+        this.asrListening = false;
         this.updateASRStatus(false);
         console.log('[ASR] WebSocket 连接已手动关闭');
     }
@@ -135,12 +144,15 @@ export class WebSocketManager {
 
         const dot = dom.asrStatusDiv.querySelector('.status-dot');
         const text = dom.asrStatusDiv.querySelector('.status-text');
+        const listening = Boolean(asrInitialized && this.asrListening);
+        this.asrInitialized = asrInitialized;
+        this.asrListening = listening;
 
         // ASR 系统是否真正初始化
         if (asrInitialized) {
             dom.asrStatusDiv.className = 'status connected';
-            if (text) text.textContent = '已连接';
-            console.log('[ASR] 实时语音转写功能已启用');
+            if (text) text.textContent = listening ? '已连接' : '已连接（未监听）';
+            console.log(`[ASR] 实时语音转写功能已${listening ? '启用' : '暂停监听'}`);
 
             // Sync Toggle Button
             const toggleBtn = document.getElementById('asr-toggle-listening-btn');
@@ -149,21 +161,31 @@ export class WebSocketManager {
                 const playIcon = toggleBtn.querySelector('.icon-play');
                 const stopIcon = toggleBtn.querySelector('.icon-stop');
 
-                toggleBtn.classList.add('active');
-                toggleBtn.title = "停止监听";
-                if (playIcon) playIcon.style.display = 'none';
-                if (stopIcon) stopIcon.style.display = 'block';
+                if (listening) {
+                    toggleBtn.classList.add('active');
+                    toggleBtn.title = "停止监听";
+                    if (playIcon) playIcon.style.display = 'none';
+                    if (stopIcon) stopIcon.style.display = 'block';
 
-                // Auto-start visualizer if connected (optional, but consistent with "Listening")
-                // We can't easily access UI manager here to start visualizer, 
-                // but usually "Connected" means backend is listening.
-                // For local visualizer, user might need to click or we rely on them clicking "Start" if not auto-started.
-                // However, finding `ASTManagers` or dispatching event is better.
-                if (window.ASTManagers && window.ASTManagers.ui && typeof window.ASTManagers.ui.startASRVisualizer === 'function') {
-                    window.ASTManagers.ui.startASRVisualizer().catch(e => console.log("Auto-start visualizer failed/skipped:", e));
-                    if (visualizer) {
-                        visualizer.style.display = 'flex';
-                        setTimeout(() => visualizer.classList.add('active'), 10);
+                    if (window.ASTManagers && window.ASTManagers.ui && typeof window.ASTManagers.ui.startASRVisualizer === 'function') {
+                        window.ASTManagers.ui.startASRVisualizer().catch(e => console.log("Auto-start visualizer failed/skipped:", e));
+                        if (visualizer) {
+                            visualizer.style.display = 'flex';
+                            setTimeout(() => visualizer.classList.add('active'), 10);
+                        }
+                    }
+                } else {
+                    toggleBtn.classList.remove('active');
+                    toggleBtn.title = "开始监听";
+                    if (playIcon) playIcon.style.display = 'block';
+                    if (stopIcon) stopIcon.style.display = 'none';
+
+                    if (window.ASTManagers && window.ASTManagers.ui && typeof window.ASTManagers.ui.stopASRVisualizer === 'function') {
+                        window.ASTManagers.ui.stopASRVisualizer();
+                        if (visualizer) {
+                            visualizer.style.display = 'none';
+                            visualizer.classList.remove('active');
+                        }
                     }
                 }
             }
@@ -172,6 +194,7 @@ export class WebSocketManager {
             dom.asrStatusDiv.className = 'status disconnected';
             if (text) text.textContent = 'ASR 未初始化';
             console.log('[ASR] 请使用正常模式启动服务器以启用实时语音转写功能');
+            this.asrListening = false;
 
             // Sync Toggle Button
             const toggleBtn = document.getElementById('asr-toggle-listening-btn');
@@ -253,6 +276,18 @@ export class WebSocketManager {
             asr: this.isConnected.asr,
             llm: this.isConnected.llm
         };
+    }
+
+    getASRInitializedStatus() {
+        return this.asrInitialized;
+    }
+
+    setASRListeningState(listening) {
+        this.asrListening = Boolean(listening);
+    }
+
+    getASRListeningStatus() {
+        return this.asrListening;
     }
 
     // LLM消息处理（需要与LLMManager配合）
