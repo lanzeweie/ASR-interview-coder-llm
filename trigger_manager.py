@@ -4,13 +4,14 @@
 负责监控字数积累和静音检测，触发智能分析
 """
 
-import time
 import asyncio
 import json
 import os
+import time
 import uuid
-from typing import List, Dict, Optional, Callable
 from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional
+
 from intelligent_agent import agent_manager
 from logger_config import setup_logger
 
@@ -39,6 +40,8 @@ class TriggerState:
     last_analysis_index: int = -1  # 记录上次分析的消息索引位置
     current_analysis_id: Optional[str] = None  # 当前分析批次ID
     last_analysis_meta: Optional[Dict] = None  # 最近一次分析的元数据
+    last_trigger_hash: Optional[str] = None  # 上次触发的去重哈希
+    last_trigger_time: float = 0.0  # 上次触发时间
 
 
 class TriggerManager:
@@ -64,8 +67,13 @@ class TriggerManager:
         # 启动后台监控任务
         self.monitor_task = None
         self._start_background_monitor()
-        logger.info("[触发机制] 管理器已初始化 (含后台轮询)")
-    
+
+        # --- 触发去重配置 ---
+        self.dedup_window = 5.0  # 去重时间窗口（秒）：同一内容在5秒内只允许触发一次
+        self.dedup_enabled = True  # 是否启用触发去重
+
+        logger.info("[触发机制] 管理器已初始化 (含后台轮询 + 触发去重)")
+
     def _start_background_monitor(self):
         """启动后台静音检测线程/任务"""
         import threading
@@ -84,10 +92,10 @@ class TriggerManager:
                         silence_duration = current_time - self.state.silence_start_time
                         if silence_duration >= self.silence_threshold:
                             logger.debug(f"[触发机制(后台)] 静音超时 {silence_duration:.1f}秒，自动触发分析")
-                            
+
                             # 需要在event loop中执行触发逻辑，确保线程安全（虽然这里主要是状态更新）
                             # 但最好保持一致性。如果直接调用 _trigger_analysis，它会通过 run_coroutine_threadsafe 提交任务，是安全的。
-                            self._trigger_analysis()
+                            self._trigger_analysis(trigger_type="background_monitor")
                             
                 except Exception as e:
                     logger.error(f"[触发机制] 后台监控出错: {e}")
@@ -116,6 +124,67 @@ class TriggerManager:
         """设置主人公姓名"""
         self.protagonist = name
         logger.info(f"[触发机制] 主人公已设置: {name}")
+
+    def _generate_trigger_hash(self, trigger_type: str, content: str, chat_id: str = "default") -> str:
+        """
+        生成触发去重哈希
+
+        Args:
+            trigger_type: 触发类型 ('length', 'silence', 'api_intent', 'api_analysis', 'manual')
+            content: 触发内容（累积文本或消息内容）
+            chat_id: 聊天会话ID（默认default）
+
+        Returns:
+            去重哈希字符串
+        """
+        import hashlib
+
+        # 使用触发类型、内容摘要和会话ID生成哈希
+        content_preview = content[:100] if content else ""  # 只取前100字符避免过长
+        hash_input = f"{chat_id}|{trigger_type}|{content_preview}"
+        return hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:16]
+
+    def _is_duplicate_trigger(self, trigger_hash: str, current_time: float) -> bool:
+        """
+        检查是否为重复触发
+
+        Args:
+            trigger_hash: 触发哈希
+            current_time: 当前时间戳
+
+        Returns:
+            True if 重复触发，False if 不是重复
+        """
+        if not self.dedup_enabled:
+            return False
+
+        # 检查是否为同一内容
+        if self.state.last_trigger_hash == trigger_hash:
+            # 检查时间窗口
+            time_diff = current_time - self.state.last_trigger_time
+            if time_diff < self.dedup_window:
+                logger.debug(f"[触发机制] 🚫 检测到重复触发: {trigger_hash[:8]}... (间隔 {time_diff:.1f}s < {self.dedup_window}s)")
+                # ✅ 关键修复：检测到重复触发时，清零累积文本避免再次触发
+                self.state.accumulated_text = ""
+                self.state.silence_start_time = None
+                return True
+
+        return False
+
+    def _record_trigger(self, trigger_hash: str, current_time: float):
+        """记录本次触发"""
+        self.state.last_trigger_hash = trigger_hash
+        self.state.last_trigger_time = current_time
+        logger.debug(f"[触发机制] ✅ 记录触发: {trigger_hash[:8]}... @ {current_time}")
+
+    def _reset_trigger_state(self):
+        """重置触发状态（用于禁用或出错时）"""
+        self.state.pending_analysis = False
+        self.state.silence_start_time = None
+        self.state.accumulated_text = ""
+        self.state.current_analysis_id = None
+        self.state.last_analysis_meta = None
+        logger.debug("[触发机制] 🔄 已重置触发状态")
 
     def add_message(self, message: Dict) -> bool:
         """
@@ -176,7 +245,7 @@ class TriggerManager:
             # 如果累积文本超过阈值的3倍，强制触发（避免累积过长）
             if len(self.state.accumulated_text) >= self.min_characters * 3:
                 logger.info(f"[触发机制] 累积文本过长（{len(self.state.accumulated_text)}字），强制触发分析")
-                self._trigger_analysis()
+                self._trigger_analysis(trigger_type="length_overflow")
 
         # 检查是否超时自动触发
         self._check_silence_timeout(current_time)
@@ -202,12 +271,12 @@ class TriggerManager:
             silence_duration = current_time - self.state.silence_start_time
             if silence_duration >= self.silence_threshold:
                 logger.info(f"[触发机制] 静音 {silence_duration:.1f}秒，触发智能分析")
-                self._trigger_analysis()
+                self._trigger_analysis(trigger_type="silence")
         else:
             # 没有启动静音检测，直接触发（如果字数足够）
             if len(self.state.accumulated_text) >= self.min_characters * 2:
                 logger.info("[触发机制] 字数充足，触发智能分析")
-                self._trigger_analysis()
+                self._trigger_analysis(trigger_type="length")
 
     def _check_silence_timeout(self, current_time: float):
         """检查静音超时"""
@@ -219,18 +288,36 @@ class TriggerManager:
             silence_duration = current_time - self.state.silence_start_time
             if silence_duration >= self.silence_threshold * 2:
                 logger.info(f"[触发机制] 静音超时 {silence_duration:.1f}秒，强制触发")
-                self._trigger_analysis()
+                self._trigger_analysis(trigger_type="timeout")
 
-    def _trigger_analysis(self):
-        """触发智能分析"""
+    def _trigger_analysis(self, trigger_type: str = "length"):
+        """
+        触发智能分析
+
+        Args:
+            trigger_type: 触发类型 ('length', 'silence', 'manual'等)
+        """
+        current_time = time.time()
+
         # 首先检查智能分析是否启用
         if not agent_manager.enabled:
             logger.info("[触发机制] ⚠️ 智能分析未启用，重置触发状态")
             # 重置所有状态
-            self.state.pending_analysis = False
-            self.state.silence_start_time = None
-            self.state.accumulated_text = ""
+            self._reset_trigger_state()
             return
+
+        # 检查去重机制
+        content_to_hash = self.state.accumulated_text or ""
+        trigger_hash = self._generate_trigger_hash(trigger_type, content_to_hash)
+
+        if self._is_duplicate_trigger(trigger_hash, current_time):
+            logger.info(f"[触发机制] 🚫 触发被去重: {trigger_type} 触发")
+            # 重置触发状态但保留累积文本
+            self.state.silence_start_time = None
+            return
+
+        # 记录本次触发
+        self._record_trigger(trigger_hash, current_time)
 
         self.state.pending_analysis = True
         self.state.silence_start_time = None
@@ -252,8 +339,9 @@ class TriggerManager:
             self.state.last_analysis_meta = analysis_meta
 
             if self.broadcast_callback:
-                import time
                 try:
+                    is_intent_only = False
+
                     self.broadcast_callback({
                         "time": time.strftime("%H:%M:%S"),
                         "speaker": "智能分析",
@@ -261,6 +349,7 @@ class TriggerManager:
                         "analysis_status": "in_progress",
                         "analysis_need_ai": False,
                         "analysis_id": analysis_id,
+                        "is_intent_only": is_intent_only,  # 标识是否为意图识别-only模式
                         **analysis_meta
                     })
                 except Exception as e:
@@ -297,18 +386,29 @@ class TriggerManager:
     ):
         """运行智能分析"""
         try:
-            logger.info(f"[触发机制] 🤖 开始调用本地模型分析...")
-
-            # 加载配置以检查是否启用意图识别
             config_data = load_config()
             agent_config = config_data.get("agent_config", {})
+            model_label = None
+            if hasattr(agent_manager, "get_active_model_name"):
+                try:
+                    model_label = agent_manager.get_active_model_name()
+                except Exception:
+                    logger.debug("[触发机制] 获取激活模型名称失败", exc_info=True)
+            if not model_label:
+                model_label = (
+                    config_data.get("current_config")
+                    or agent_config.get("model_display_name")
+                    or agent_config.get("model_name")
+                    or agent_config.get("model")
+                    or "未指定模型"
+                )
+            logger.info(f"[触发机制] 🤖 开始调用「{model_label}」进行分析...")
             intent_recognition_enabled = agent_config.get("intent_recognition_enabled", False)
             think_tank_enabled = agent_config.get("think_tank_enabled", False)
 
             # 定义进度回调
             async def progress_callback(stage: str, data: Dict):
                 if self.broadcast_callback:
-                    import time
                     cur_analysis_id = analysis_id or self.state.current_analysis_id
                     
                     if stage == "intent_started":
@@ -388,12 +488,11 @@ class TriggerManager:
                 self.state.last_analysis_index = start_index + len(messages) - 1
                 logger.debug(f"[触发机制] 📍 更新分析位置: {self.state.last_analysis_index} (下次从 {self.state.last_analysis_index + 1} 开始)")
 
-            # 重置累积文本
             self.state.accumulated_text = ""
             self.state.pending_analysis = False
             self.state.current_analysis_id = None
             self.state.last_analysis_meta = None
-            logger.debug(f"[触发机制] 🔄 已重置触发状态")
+            logger.debug(f"[触发机制] 🔄 已重置触发状态 (包括累积文本)")
 
     def add_callback(self, callback: Callable):
         """添加分析完成回调"""

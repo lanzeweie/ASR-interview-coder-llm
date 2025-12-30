@@ -45,9 +45,16 @@ except Exception as e:
 try:
     from main import RealTimeASR_SV
     ASR_AVAILABLE = True
-except ImportError:
+except Exception as e:
+    import traceback
+    tb = traceback.format_exc()
+    print(tb)
     ASR_AVAILABLE = False
     RealTimeASR_SV = None
+    _ASR_IMPORT_ERROR_INFO = {
+        "exc": e,
+        "traceback": tb,
+    }
 
 from chat_manager import ChatManager
 from job_manager import JobManager
@@ -58,17 +65,44 @@ try:
     from intelligent_agent import agent_manager, format_intent_analysis
     from trigger_manager import trigger_manager
     AGENT_AVAILABLE = True
-except ImportError:
+except Exception as e:
+    import traceback
+    tb = traceback.format_exc()
+    print(tb)
     AGENT_AVAILABLE = False
     agent_manager = None
     format_intent_analysis = None
-    # logger.warning("智能 Agent 模块不可用...")
+    trigger_manager = None
+    _AGENT_IMPORT_ERROR_INFO = {
+        "exc": e,
+        "traceback": tb,
+    }
 
-# Log initial warnings for ASR and Agent if they were not available
 if not ASR_AVAILABLE:
-    logger.warning("警告: ASR 模块不可用，必须使用 --no 参数启动，或安装 funasr 和 modelscope")
+    try:
+        info = _ASR_IMPORT_ERROR_INFO
+    except NameError:
+        info = None
+    if info and info.get("missing_modules"):
+        logger.warning(
+            f"警告: ASR 模块导入失败，缺失库: {', '.join(info['missing_modules'])}. 可尝试: pip install funasr modelscope"
+        )
+        logger.debug(f"ASR import traceback:\n{info.get('traceback')}")
+    else:
+        logger.warning("警告: ASR 模块不可用，必须使用 --no 参数启动，或安装 funasr 和 modelscope")
+
 if not AGENT_AVAILABLE:
-    logger.warning("警告: 智能 Agent 模块不可用。")
+    try:
+        info = _AGENT_IMPORT_ERROR_INFO
+    except NameError:
+        info = None
+    if info and info.get("missing_modules"):
+        logger.warning(
+            f"警告: 智能 Agent 模块导入失败，缺失库: {', '.join(info['missing_modules'])}."
+        )
+        logger.debug(f"Agent import traceback:\n{info.get('traceback')}")
+    else:
+        logger.warning("警告: 智能 Agent 模块不可用。")
 
 
 app = FastAPI()
@@ -76,7 +110,6 @@ app = FastAPI()
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- Config Management ---
 CONFIG_FILE = "api_config.json"
 AGENT_ROLE_FILE = "data/agent.json"
 UI_STATE_FILE = "data/ui_state.json"

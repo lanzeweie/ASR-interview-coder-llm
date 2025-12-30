@@ -12,6 +12,42 @@
     background: var(--bg-primary);
 }
 
+/* 文本选择浮动按钮 */
+.float-btn {
+    position: absolute;
+    z-index: 1200;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid rgba(79, 70, 229, 0.2);
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.25);
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.float-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.float-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(79, 70, 229, 0.3);
+}
+
+.float-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+}
+
 /* 消息样式 */
 .message {
     display: flex;

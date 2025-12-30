@@ -251,7 +251,7 @@ class BaseLLMAgent:
 
 
 class SmartAnalysisAgent(BaseLLMAgent):
-    """负责阶段1智能分析的Agent"""
+    """负责第1层智能分析的Agent"""
 
     def __init__(self, config: dict):
         super().__init__("智能分析", config)
@@ -450,7 +450,7 @@ class SmartAnalysisAgent(BaseLLMAgent):
 
 
 class IntentRecognitionAgent(BaseLLMAgent):
-    """负责阶段2意图识别的Agent"""
+    """负责第2层意图识别的Agent"""
 
     def __init__(self, config: dict):
         super().__init__("意图识别", config)
@@ -531,7 +531,7 @@ def format_intent_analysis(intent_result: Optional[Dict]) -> str:
 
 
 class ThinkTankAgent:
-    """负责阶段3智囊团分发逻辑的Agent"""
+    """负责第4层智囊团分发逻辑的Agent"""
 
     def __init__(self, agent_config_path: str = "api_config.json", role_config_path: str = "data/agent.json"):
         self.agent_config_path = agent_config_path
@@ -571,7 +571,7 @@ class ThinkTankAgent:
     ) -> Dict:
         phase1_is_positive = bool(phase1_result and phase1_result.get('is'))
         if not force and not phase1_is_positive:
-            logger.info(f"[智囊团] 阶段1判定无需AI，直接返回默认模式")
+            logger.info(f"[智囊团] 第1层判定无需AI，直接返回默认模式")
             return {
                 'mode': 'default',
                 'targets': [],
@@ -752,6 +752,8 @@ class AgentManager:
             f"analysis={use_analysis}, intent={use_intent}, resume={use_resume}, "
             f"think_tank={use_think_tank}, bypass={bypass_enabled}, force={force_modules}"
         )
+        manual_override = bool(force_modules)
+        intent_only = (not use_analysis and use_intent)
         if use_analysis:
             phase1_result = await self.analyze_conversation(
                 messages,
@@ -768,11 +770,21 @@ class AgentManager:
             }
 
         phase1_success = bool(phase1_result.get('is')) if isinstance(phase1_result, dict) else False
-        should_halt = use_analysis and not force_modules and not phase1_success
+        # 统一四层流程的入口逻辑：
+        # 1. 智能分析通过 -> 继续
+        # 2. 手动触发 -> 继续
+        # 3. 意图识别-only -> 继续
+        # 4. 其他情况 -> halt
+        pipeline_allowed = phase1_success or manual_override or intent_only
+        halt_reason = ""
+        if use_analysis and not phase1_success and not manual_override:
+            halt_reason = "智能分析判定无需AI介入"
+        elif not use_analysis and not use_intent and not manual_override:
+            halt_reason = "未启用分析/意图识别且未手动触发"
 
         intent_result = None
-        if use_intent and not should_halt:
-            logger.info("[意图识别] 模块启用，即将运行 IntentRecognitionAgent")
+        if use_intent and pipeline_allowed:
+            logger.info("[意图识别] 模块启用且允许执行，即将运行 IntentRecognitionAgent")
             if status_callback:
                 # 获取意图识别使用的模型名称
                 intent_model = "Unknown"
@@ -788,9 +800,9 @@ class AgentManager:
                     await status_callback("intent_started", {"model": intent_model})
                 else:
                     status_callback("intent_started", {"model": intent_model})
-            
+
             intent_result = await self.run_intent_recognition(messages, speaker_name)
-            
+
             # 检查意图识别结果，如果未检测到技术问题，则终止后续流程
             if intent_result and intent_result.get('success'):
                 summary_xml = intent_result.get('summary_xml', '') or ''
@@ -804,17 +816,28 @@ class AgentManager:
                 text_to_check = "\n".join(summary_texts) if summary_texts else summary_xml
                 if re.search(r"(无技术问题)", text_to_check):
                     logger.info("[智能分析] 意图识别结果判定为无技术问题，终止后续流程")
-                    should_halt = True
+                    pipeline_allowed = False
+                    halt_reason = "意图识别判定无技术问题"
+        elif use_intent and not pipeline_allowed:
+            logger.info("[意图识别] 模块启用但被 halt，不会执行 (use_analysis={}, phase1_success={}, intent-only={}, manual={})".format(
+                use_analysis, phase1_success, intent_only, manual_override
+            ))
+
+        personalization_state = self._build_personalization_state(
+            enabled=use_resume,
+            pipeline_allowed=pipeline_allowed,
+            halt_reason=halt_reason
+        )
 
         distribution_result = None
         if use_think_tank:
-            if should_halt:
+            if not pipeline_allowed:
                 distribution_result = {
                     'mode': 'halt', # 使用 'halt' 模式明确表示停止
                     'targets': [],
                     'intent': intent_result,
                     'system_prompt': '', # 停止时不不需要 system prompt
-                    'reason': 'Process halted by analysis/intent result'
+                    'reason': halt_reason or 'Process halted by analysis/intent result'
                 }
             else:
                 distribution_result = self.think_tank_agent.prepare_distribution(
@@ -836,7 +859,9 @@ class AgentManager:
         return {
             'phase1': phase1_result,
             'phase2': intent_result,
-            'distribution': distribution_result
+            'phase3': personalization_state,
+            'distribution': distribution_result,
+            'is_intent_only': not use_analysis and use_intent  # 标识是否为意图识别-only模式
         }
 
     async def run_intelligent_analysis(
@@ -848,7 +873,7 @@ class AgentManager:
         use_think_tank: bool = True,
         status_callback: Optional[Callable[[str, Dict], asyncio.Future]] = None
     ) -> Dict:
-        print(f"[智能分析] 开始三阶段分析，意图识别: {intent_recognition}, 简历个性化: {resume_personalization}, 智囊团: {use_think_tank}")
+        print(f"[智能分析] 开始四层分析，意图识别: {intent_recognition}, 简历个性化: {resume_personalization}, 智囊团: {use_think_tank}")
         result = await self.run_pipeline(
             messages,
             speaker_name,
@@ -862,9 +887,13 @@ class AgentManager:
         )
         phase2_result = result.get('phase2')
         if phase2_result is not None:
-            print(f"[智能分析] 阶段2完成: {phase2_result.get('success', False)}")
+            print(f"[智能分析] 第2层完成: {phase2_result.get('success', False)}")
+        personalization_state = result.get('phase3', {}) or {}
+        personalization_active = personalization_state.get('active', False)
+        if personalization_state:
+            print(f"[智能分析] 第3层完成: 个性化={'开启' if personalization_active else '跳过'}")
         distribution_result = result.get('distribution', {})
-        print(f"[智能分析] 阶段3完成: mode={distribution_result.get('mode')}")
+        print(f"[智能分析] 第4层完成: mode={distribution_result.get('mode')}")
         print(f"[智能分析] 使用的系统提示词模式: {distribution_result.get('system_prompt', '未设置')[:50]}...")
         return result
 
@@ -880,6 +909,33 @@ class AgentManager:
                 return {'success': False, 'error': '无可用的意图识别模型'}
 
         return await agent.analyze(messages, speaker_name)
+
+    @staticmethod
+    def _build_personalization_state(
+        enabled: bool,
+        pipeline_allowed: bool,
+        halt_reason: str
+    ) -> Dict:
+        if not enabled:
+            return {
+                'enabled': False,
+                'active': False,
+                'skipped': True,
+                'reason': '个性化模块未启用'
+            }
+        if not pipeline_allowed:
+            return {
+                'enabled': True,
+                'active': False,
+                'skipped': True,
+                'reason': halt_reason or '流程已终止'
+            }
+        return {
+            'enabled': True,
+            'active': True,
+            'skipped': False,
+            'reason': '个性化模块已启用'
+        }
 
     async def should_analyze(self, message: Dict, conversation_history: List[Dict]) -> Tuple[bool, Optional[str]]:
         if not self.enabled:

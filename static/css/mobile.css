@@ -70,6 +70,11 @@
         width: 8px;
         height: 8px;
     }
+
+    .float-btn {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
 }
 
 @media (max-width: 768px) {

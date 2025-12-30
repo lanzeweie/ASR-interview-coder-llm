@@ -415,8 +415,15 @@ export class LLMManager {
             console.log('[智能分析触发]:', data);
             const reason = data.reason || '检测到需要AI帮助分析';
 
-            // 显示触发通知
-            showToast(`智能分析已触发: ${reason}`, 'info');
+            // ✅ 优化：区分意图识别和智能分析的触发消息
+            // 如果是意图识别-only模式，显示不同的文案
+            if (data.is_intent_only) {
+                showToast(`🔍 意图识别完成: ${reason}`, 'info');
+                console.log('[意图识别] 这是意图识别-only的触发，不消耗token');
+            } else {
+                showToast(`🤖 智能分析已触发: ${reason}`, 'info');
+                console.log('[智能分析] 这是完整的智能分析，会消耗token');
+            }
 
             // 关键修复：将触发消息发送回服务器以启动 LLM 生成
             if (this.wsManager) {

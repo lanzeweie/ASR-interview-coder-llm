@@ -5,6 +5,8 @@
 
 ---
 
+
+
 ## 项目概览
 
 ASR实时转语音，支持录入声纹即说话人识别与多个不同的智能体共同协作。   
@@ -90,7 +92,9 @@ ASR实时转语音，支持录入声纹即说话人识别与多个不同的智�
 
 ```bash
 # 核心依赖
-pip install -r requirements.txt
+uv pip sync requirements.lock.txt
+或  
+pip install requirements.lock.txt
 
 # 可选：CUDA 支持（用于 GPU 加速）
 # 确保已安装 CUDA 和 PyTorch
@@ -101,6 +105,8 @@ pip install -r requirements.txt
 ```bash
 pip install -r requirements_notourch.txt
 ```
+
+
 
 ### 模型下载
 
@@ -170,4 +176,7 @@ pip install -r requirements_notourch.txt
 ![配置设置](README\PNG\配置设计.png)
 ![岗位分析](README\PNG\岗位分析.png)
 ![声纹管理](README\PNG\声纹管理.png)
-!(简历分析)[README\PNG\简历分析.png]
+![简历分析](README\PNG\简历分析.png)
+
+This project is licensed under the MIT License.
+See https://opensource.org/license/mit/ for details.
